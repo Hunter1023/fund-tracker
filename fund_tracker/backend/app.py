@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
 from data_fetcher import DataFetcher
 from models import Fund, FundHolding, Transaction, Watchlist, FundRealtimeData, HoldingProfitHistory, Platform, create_tables, get_db
 from sqlalchemy.orm import Session
@@ -8,6 +9,7 @@ import decimal
 import time
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 import threading
@@ -15,6 +17,11 @@ from sqlalchemy.exc import OperationalError
 import random
 
 app = Flask(__name__)
+# 从环境变量获取数据库路径，没有则用默认
+db_path = os.getenv('DATABASE_PATH', 'fund_tracker.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 CORS(app)
 
 # 配置日志
@@ -1875,8 +1882,14 @@ def update_platform_order():
         db.close()
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')
+    parser.add_argument('--port', type=int, default=5000, help='Port to bind to')
+    args = parser.parse_args()
+    
     try:
-        app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
+        app.run(debug=False, host=args.host, port=args.port, use_reloader=False)
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()
         print("定时任务调度器已关闭")
