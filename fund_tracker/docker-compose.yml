@@ -1,0 +1,44 @@
+services:
+  # 后端Flask服务
+  backend:
+    build: ./backend
+    restart: always  # 容器异常自动重启
+    volumes:
+      # 挂载本地data目录到后端，持久化SQLite数据库（关键：避免容器重启数据丢失）
+      - ./data:/app/data
+    environment:
+      # 配置数据库路径（指向挂载的data目录）
+      - DATABASE_PATH=/app/data/fund_tracker.db
+    networks:
+      - fund-network
+
+  # 前端Nginx服务
+  frontend:
+    build: ./frontend
+    restart: always
+    ports:
+      - "80:80"  # 本地80端口映射到容器80端口，本地访问http://localhost即可
+    depends_on:
+      - backend  # 先启动后端再启动前端
+    networks:
+      - fund-network
+
+  # Cloudflare Tunnel服务
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: always
+    network_mode: host
+    command: tunnel --protocol http2 --url http://localhost:80 run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+      - TUNNEL_METRICS=0.0.0.0:20241
+      - TUNNEL_LOGLEVEL=info
+
+# 自定义网络，保证前后端互通
+networks:
+  fund-network:
+    driver: bridge
+
+# 数据卷：持久化SQLite数据库
+volumes:
+  data:
