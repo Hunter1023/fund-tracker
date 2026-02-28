@@ -1,5 +1,6 @@
 # 自动处理换行符
-* text=auto
+# 强制所有文本文件使用 LF，确保跨平台一致性
+* text=auto eol=lf
 
 # Python 文件使用 LF 换行符
 *.py text eol=lf
