@@ -58,6 +58,35 @@ def retry_db_operation(max_retries=3, base_delay=0.1):
 # 创建数据库表
 create_tables()
 
+# 初始化默认平台
+def init_default_platform():
+    """
+    初始化默认平台，如果不存在则创建
+    """
+    db = next(get_db())
+    try:
+        # 检查是否已存在"默认"平台
+        existing_platform = db.query(Platform).filter(Platform.name == '默认').first()
+        if not existing_platform:
+            # 创建默认平台
+            default_platform = Platform(
+                name='默认',
+                order=0
+            )
+            db.add(default_platform)
+            db.commit()
+            print("已创建默认平台")
+        else:
+            print("默认平台已存在")
+    except Exception as e:
+        db.rollback()
+        print(f"初始化默认平台时出错: {e}")
+    finally:
+        db.close()
+
+# 执行初始化
+init_default_platform()
+
 # 创建定时任务调度器
 scheduler = BackgroundScheduler()
 scheduler.start()

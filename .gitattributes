@@ -1,0 +1,29 @@
+# 自动处理换行符
+# 强制所有文本文件使用 LF，确保跨平台一致性
+* text=auto eol=lf
+
+# Python 文件使用 LF 换行符
+*.py text eol=lf
+
+# 配置文件使用 LF
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.sql text eol=lf
+
+# Windows 批处理文件使用 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不处理换行符
+*.db binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
