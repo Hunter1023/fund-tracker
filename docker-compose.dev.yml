@@ -1,0 +1,43 @@
+services:
+  # 后端Flask服务（开发模式）
+  backend-dev:
+    build: ./backend
+    restart: always
+    volumes:
+      - ./data-dev:/app/data
+      - ./backend:/app  # 挂载本地后端代码，支持热更新
+    environment:
+      - DATABASE_PATH=/app/data/fund_tracker.db
+      - FLASK_ENV=development  # 开发模式
+      - FLASK_DEBUG=True  # 启用调试模式
+    ports:
+      - "5001:5000"  # 开发环境后端端口，避免与生产环境冲突
+    networks:
+      - fund-network-dev
+    command: python app.py --host 0.0.0.0 --port 5000
+
+  # 前端Vite开发服务器
+  frontend-dev:
+    image: node:18-alpine
+    restart: always
+    volumes:
+      - ./frontend:/app  # 挂载整个前端目录
+    working_dir: /app
+    environment:
+      - VITE_API_BASE_URL=http://backend-dev:5000  # 后端API地址（内部网络地址）
+    ports:
+      - "3000:5173"  # 开发环境端口，避免与生产环境冲突
+    depends_on:
+      - backend-dev
+    networks:
+      - fund-network-dev
+    command: sh -c "npm install --registry=https://registry.npmmirror.com && npm run dev -- --host 0.0.0.0"
+
+# 自定义网络
+networks:
+  fund-network-dev:
+    driver: bridge
+
+# 数据卷
+volumes:
+  data-dev:
