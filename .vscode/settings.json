@@ -1,0 +1,19 @@
+{
+  // 换行符设置：使用 LF (\n)
+  "files.eol": "\n",
+
+  // 文件末尾自动插入空行
+  "files.insertFinalNewline": true,
+
+  // 保存时自动去除行尾空格
+  "files.trimTrailingWhitespace": true,
+
+  // 保存时自动格式化
+  "editor.formatOnSave": true,
+
+  // 自动检测文件编码
+  "files.autoGuessEncoding": true,
+
+  // 默认编码 UTF-8
+  "files.encoding": "utf8"
+}
