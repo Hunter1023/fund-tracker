@@ -1,8 +1,10 @@
+name: fund-tracker-dev
+
 services:
   # 后端Flask服务（开发模式）
   backend-dev:
     build: ./backend
-    restart: always
+    restart: no
     volumes:
       - ./data-dev:/app/data
       - ./backend:/app  # 挂载本地后端代码，支持热更新
@@ -19,7 +21,7 @@ services:
   # 前端Vite开发服务器
   frontend-dev:
     image: node:18-alpine
-    restart: always
+    restart: no
     volumes:
       - ./frontend:/app  # 挂载整个前端目录
     working_dir: /app
