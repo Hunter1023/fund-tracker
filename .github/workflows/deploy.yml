@@ -1,0 +1,51 @@
+name: Deploy fund-tracker to WSL Production
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Create data directory if not exists
+        run: |
+          if [ ! -d "data" ]; then
+            mkdir -p data
+            echo "Created data directory"
+          fi
+          
+      - name: Stop existing containers
+        run: docker-compose down
+        
+      - name: Build and start containers
+        run: docker-compose up -d --build
+        env:
+          TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
+          
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to start..."
+          sleep 10
+          
+      - name: Check containers status
+        run: docker-compose ps
+        
+      - name: Show backend logs
+        run: docker-compose logs backend --tail=20
+        if: failure()
+        
+      - name: Show frontend logs
+        run: docker-compose logs frontend --tail=20
+        if: failure()
+        
+      - name: Deployment successful
+        run: |
+          echo "✅ Deployment completed successfully!"
+          echo "🌐 Frontend is available at: http://localhost:8080"
