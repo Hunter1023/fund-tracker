@@ -18,7 +18,9 @@ import random
 
 app = Flask(__name__)
 # 从环境变量获取数据库路径，没有则用默认
-db_path = os.getenv('DATABASE_PATH', 'fund_tracker.db')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+default_db_path = os.path.join(BASE_DIR, '..', 'data', 'fund_tracker.db')
+db_path = os.getenv('DATABASE_PATH', default_db_path)
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
