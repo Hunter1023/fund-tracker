@@ -131,7 +131,7 @@ class Platform(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50), unique=True, nullable=False)  # 平台名称，如：支付宝、理财通
-    order = Column(Integer, default=0)  # 排序顺序
+    order_num = Column(Integer, default=0)  # 排序顺序
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 # 创建表
