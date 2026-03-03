@@ -22,10 +22,10 @@ jobs:
           fi
           
       - name: Stop existing containers
-        run: docker-compose down
+        run: docker compose down
         
       - name: Build and start containers
-        run: docker-compose up -d --build
+        run: docker compose up -d --build
         env:
           TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
           
@@ -35,14 +35,14 @@ jobs:
           sleep 10
           
       - name: Check containers status
-        run: docker-compose ps
+        run: docker compose ps
         
       - name: Show backend logs
-        run: docker-compose logs backend --tail=20
+        run: docker compose logs backend --tail=20
         if: failure()
         
       - name: Show frontend logs
-        run: docker-compose logs frontend --tail=20
+        run: docker compose logs frontend --tail=20
         if: failure()
         
       - name: Deployment successful
