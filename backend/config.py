@@ -8,7 +8,9 @@ DATA_SOURCES = {
 }
 
 # 数据库配置
-DATABASE_URL = 'sqlite:///fund_tracker.db'
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATABASE_URL = f'sqlite:///{os.path.join(BASE_DIR, "..", "data", "fund_tracker.db")}'
 
 # SQLite 连接参数，用于改善并发性能
 SQLITE_CONNECT_ARGS = {

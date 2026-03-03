@@ -4,8 +4,8 @@ services:
     build: ./backend
     restart: always  # 容器异常自动重启
     volumes:
-      # 挂载本地data目录到后端，持久化SQLite数据库（关键：避免容器重启数据丢失）
-      - ./data:/app/data
+      # 使用Docker命名卷持久化SQLite数据库，与项目目录隔离
+      - db-data:/app/data
     environment:
       # 配置数据库路径（指向挂载的data目录）
       - DATABASE_PATH=/app/data/fund_tracker.db
@@ -41,4 +41,5 @@ networks:
 
 # 数据卷：持久化SQLite数据库
 volumes:
-  data:
+  db-data:
+    driver: local

@@ -1,7 +1,10 @@
 import sqlite3
+import os
 
 # 连接数据库
-conn = sqlite3.connect('fund_tracker.db')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(BASE_DIR, '..', 'data', 'fund_tracker.db')
+conn = sqlite3.connect(db_path)
 c = conn.cursor()
 
 print('开始检查数据库中的持仓记录...')
