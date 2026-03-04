@@ -204,16 +204,44 @@
             <div v-else-if="activeTab === 'tags'" class="form-section">
               <div class="form-group">
                 <label class="form-label">板块标签</label>
-                <input
-                  type="text"
-                  class="form-input"
-                  :class="{ 'is-invalid': validationErrors.tags }"
-                  v-model="tagsInput"
-                  placeholder="请输入板块标签（如：Ai, 新能源）"
-                >
+                <div class="tag-input-container">
+                  <input
+                    type="text"
+                    class="form-input"
+                    :class="{ 'is-invalid': validationErrors.tags }"
+                    v-model="tagsInput"
+                    placeholder="请输入板块标签（如：Ai, 新能源）"
+                    @input="filterTags"
+                    @focus="showDropdown = true"
+                    @blur="hideDropdown"
+                  >
+                  <div class="tag-dropdown" v-if="showDropdown && filteredTags.length > 0">
+                    <div
+                      v-for="tag in filteredTags"
+                      :key="tag"
+                      class="dropdown-item"
+                      @mousedown="selectTag(tag)"
+                    >
+                      {{ tag }}
+                    </div>
+                  </div>
+                </div>
                 <div class="form-hint">多个标签请用逗号分隔</div>
                 <div v-if="validationErrors.tags" class="invalid-feedback">
                   {{ validationErrors.tags }}
+                </div>
+              </div>
+              <div class="form-group" v-if="existingTags.length > 0">
+                <label class="form-label">已存在的标签</label>
+                <div class="common-tags">
+                  <span
+                    v-for="tag in existingTags"
+                    :key="tag"
+                    class="common-tag"
+                    @click="addTag(tag)"
+                  >
+                    {{ tag }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -247,16 +275,44 @@
             </div>
             <div class="form-group">
               <label class="form-label">板块标签</label>
-              <input
-                type="text"
-                class="form-input"
-                :class="{ 'is-invalid': validationErrors.addTags }"
-                v-model="addTags"
-                placeholder="请输入板块标签（如：Ai, 新能源）"
-              >
+              <div class="tag-input-container">
+                <input
+                  type="text"
+                  class="form-input"
+                  :class="{ 'is-invalid': validationErrors.addTags }"
+                  v-model="addTags"
+                  placeholder="请输入板块标签（如：Ai, 新能源）"
+                  @input="filterAddTags"
+                  @focus="showAddDropdown = true"
+                  @blur="hideAddDropdown"
+                >
+                <div class="tag-dropdown" v-if="showAddDropdown && filteredAddTags.length > 0">
+                  <div
+                    v-for="tag in filteredAddTags"
+                    :key="tag"
+                    class="dropdown-item"
+                    @mousedown="selectAddTag(tag)"
+                  >
+                    {{ tag }}
+                  </div>
+                </div>
+              </div>
               <div class="form-hint">多个标签请用逗号分隔</div>
               <div v-if="validationErrors.addTags" class="invalid-feedback">
                 {{ validationErrors.addTags }}
+              </div>
+            </div>
+            <div class="form-group" v-if="existingTags.length > 0">
+              <label class="form-label">已存在的标签</label>
+              <div class="common-tags">
+                <span
+                  v-for="tag in existingTags"
+                  :key="tag"
+                  class="common-tag"
+                  @click="addTagToAddForm(tag)"
+                >
+                  {{ tag }}
+                </span>
               </div>
             </div>
             <div class="form-group">
@@ -312,16 +368,44 @@
           <div class="form-section">
             <div class="form-group">
               <label class="form-label">板块标签</label>
-              <input
-                type="text"
-                class="form-input"
-                :class="{ 'is-invalid': validationErrors.tags }"
-                v-model="tagsInput"
-                placeholder="请输入板块标签（如：Ai, 新能源）"
-              >
+              <div class="tag-input-container">
+                <input
+                  type="text"
+                  class="form-input"
+                  :class="{ 'is-invalid': validationErrors.tags }"
+                  v-model="tagsInput"
+                  placeholder="请输入板块标签（如：Ai, 新能源）"
+                  @input="filterTags"
+                  @focus="showDropdown = true"
+                  @blur="hideDropdown"
+                >
+                <div class="tag-dropdown" v-if="showDropdown && filteredTags.length > 0">
+                  <div
+                    v-for="tag in filteredTags"
+                    :key="tag"
+                    class="dropdown-item"
+                    @mousedown="selectTag(tag)"
+                  >
+                    {{ tag }}
+                  </div>
+                </div>
+              </div>
               <div class="form-hint">多个标签请用逗号分隔</div>
               <div v-if="validationErrors.tags" class="invalid-feedback">
                 {{ validationErrors.tags }}
+              </div>
+            </div>
+            <div class="form-group" v-if="existingTags.length > 0">
+              <label class="form-label">已存在的标签</label>
+              <div class="common-tags">
+                <span
+                  v-for="tag in existingTags"
+                  :key="tag"
+                  class="common-tag"
+                  @click="addTag(tag)"
+                >
+                  {{ tag }}
+                </span>
               </div>
             </div>
             <div v-if="validationErrors.general" class="alert alert-danger mt-3">
@@ -402,6 +486,11 @@ const showAddHoldingForm = ref(false)
 const showTagModal = ref(false)
 const validationErrors = ref({})
 const fundTags = ref('')
+const existingTags = ref([])
+const showDropdown = ref(false)
+const filteredTags = ref([])
+const showAddDropdown = ref(false)
+const filteredAddTags = ref([])
 
 // 获取当前日期
 const today = computed(() => {
@@ -431,6 +520,7 @@ async function loadPlatforms() {
 watch(() => props.show, (newVal) => {
   if (newVal) {
     loadPlatforms()
+    loadExistingTags()
     activeTab.value = 'buy'
     buyAmount.value = ''
     buyDate.value = today.value  // 设置默认加仓日期为当天
@@ -445,16 +535,109 @@ watch(() => props.show, (newVal) => {
     showOperation.value = false
     showAddHoldingForm.value = false
     fundTags.value = props.fundData.tags || ''
-    
+
     // 如果是添加新持仓（holdingData为null），设置默认平台
     if (!props.holdingData && props.platform) {
       addPlatform.value = props.platform
     }
-    
+
     // 异步加载历史数据，不阻塞其他操作
     loadHistoryData()
   }
 })
+
+async function loadExistingTags() {
+  try {
+    const response = await tagsApi.get()
+    existingTags.value = response.data.tags
+  } catch (error) {
+    console.error('加载标签失败:', error)
+  }
+}
+
+function filterTags() {
+  const input = tagsInput.value.trim()
+  if (!input) {
+    filteredTags.value = existingTags.value
+    return
+  }
+
+  // 过滤出包含输入内容的标签
+  filteredTags.value = existingTags.value.filter(tag =>
+    tag.toLowerCase().includes(input.toLowerCase())
+  )
+  showDropdown.value = filteredTags.value.length > 0
+}
+
+function hideDropdown() {
+  // 延迟隐藏，以便可以点击下拉项
+  setTimeout(() => {
+    showDropdown.value = false
+  }, 200)
+}
+
+function selectTag(tag) {
+  const currentTags = tagsInput.value.trim()
+  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+
+  if (!tagsArray.includes(tag)) {
+    tagsArray.push(tag)
+    tagsInput.value = tagsArray.join(', ')
+  }
+  showDropdown.value = false
+}
+
+function addTag(tag) {
+  const currentTags = tagsInput.value.trim()
+  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+
+  if (!tagsArray.includes(tag)) {
+    tagsArray.push(tag)
+    tagsInput.value = tagsArray.join(', ')
+  }
+}
+
+function filterAddTags() {
+  const input = addTags.value.trim()
+  if (!input) {
+    filteredAddTags.value = existingTags.value
+    return
+  }
+
+  // 过滤出包含输入内容的标签
+  filteredAddTags.value = existingTags.value.filter(tag =>
+    tag.toLowerCase().includes(input.toLowerCase())
+  )
+  showAddDropdown.value = filteredAddTags.value.length > 0
+}
+
+function hideAddDropdown() {
+  // 延迟隐藏，以便可以点击下拉项
+  setTimeout(() => {
+    showAddDropdown.value = false
+  }, 200)
+}
+
+function selectAddTag(tag) {
+  const currentTags = addTags.value.trim()
+  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+
+  if (!tagsArray.includes(tag)) {
+    tagsArray.push(tag)
+    addTags.value = tagsArray.join(', ')
+  }
+  showAddDropdown.value = false
+}
+
+function addTagToAddForm(tag) {
+  const currentTags = addTags.value.trim()
+  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+
+  if (!tagsArray.includes(tag)) {
+    tagsArray.push(tag)
+    addTags.value = tagsArray.join(', ')
+  }
+}
 
 watch(selectedRange, async () => {
   await loadHistoryData()
@@ -469,15 +652,15 @@ async function loadHistoryData() {
       fundApi.getHistory(props.fundData.fund_code),
       holdingApi.getTransactions(props.fundData.fund_code)
     ])
-    
+
     const historyData = historyResponse.data
     const transactions = transactionResponse.data || []
-    
+
     const filteredData = filterDataByRange(historyData.net_values, selectedRange.value)
-    
+
     chartLoading.value = false
     await nextTick()
-    
+
     if (chartCanvas.value) {
       renderChart(filteredData, transactions)
     } else {
@@ -541,7 +724,7 @@ function renderChart(data, transactions) {
     const dateParts = item.date.split('-')
     return `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`
   })
-  
+
   const baseValue = parseFloat(reversedData[0].unit_net_value)
   const changeRates = reversedData.map(item => {
     const currentValue = parseFloat(item.unit_net_value)
@@ -550,12 +733,12 @@ function renderChart(data, transactions) {
 
   const transactionDates = new Set()
   const transactionMap = new Map()
-  
+
   if (transactions && transactions.length > 0) {
     transactions.forEach(transaction => {
       const transactionDate = transaction.date.split(' ')[0]
       transactionDates.add(transactionDate)
-      
+
       if (!transactionMap.has(transactionDate)) {
         transactionMap.set(transactionDate, transaction.type)
       }
@@ -565,7 +748,7 @@ function renderChart(data, transactions) {
   const pointRadius = reversedData.map(item => {
     return transactionDates.has(item.date) ? 5 : 0
   })
-  
+
   const pointBackgroundColor = reversedData.map(item => {
     const transactionType = transactionMap.get(item.date)
     return transactionType === 'buy' ? '#22c55e' : '#ef4444'
@@ -632,7 +815,7 @@ function renderChart(data, transactions) {
                 const value = context.raw
                 const item = reversedData[context.dataIndex]
                 const transactionType = transactionMap.get(item.date)
-                
+
                 let result = `${value}%`
                 if (transactionType) {
                   result += ` (${transactionType === 'buy' ? '加仓' : '减仓'})`
@@ -694,9 +877,9 @@ function showEditTagModal() {
 
 async function confirmTagUpdate() {
   validationErrors.value = {}
-  
+
   const tags = tagsInput.value.trim()
-  
+
   loading.value = true
   try {
     // 同时更新自选和持仓的板块标签
@@ -706,7 +889,7 @@ async function confirmTagUpdate() {
     } catch (error) {
       console.log('更新持仓标签失败（可能不在持仓列表中）:', error)
     }
-    
+
     // 再更新自选的板块标签
     try {
       const { watchlistApi } = await import('../services/api')
@@ -714,7 +897,7 @@ async function confirmTagUpdate() {
     } catch (error) {
       console.log('更新自选标签失败（可能不在自选列表中）:', error)
     }
-    
+
     fundTags.value = tags
     showTagModal.value = false
     emit('confirm')
@@ -729,7 +912,7 @@ async function confirmTagUpdate() {
 function showOperationArea(tab) {
   activeTab.value = tab
   showOperation.value = true
-  
+
   // 当选择修改持仓时，填充当前持仓数据
   if (tab === 'edit' && props.holdingData) {
     editAmount.value = (props.holdingData.current_value || props.holdingData.cost).toString()
@@ -775,18 +958,18 @@ function handleConfirm() {
 async function confirmAddHolding() {
   // 重置验证错误
   validationErrors.value = {}
-  
+
   const currentValue = parseFloat(addCurrentValue.value)
   const profit = parseFloat(addProfit.value)
   const tags = addTags.value.trim()
   const platform = addPlatform.value
-  
+
   // 验证持仓金额
   if (addCurrentValue.value === '' || isNaN(currentValue) || currentValue <= 0) {
     validationErrors.value.addCurrentValue = '请输入有效的持仓金额（大于0）'
     return
   }
-  
+
   // 验证持有收益
   if (addProfit.value === '' || isNaN(profit)) {
     validationErrors.value.addProfit = '请输入有效的持有收益'
@@ -806,7 +989,7 @@ async function confirmAddHolding() {
         tags: tags,
         platform: platform
       })
-    
+
     // 检查响应是否成功
     if (response && response.data) {
       if (response.data.error) {
@@ -835,7 +1018,7 @@ async function confirmAddHolding() {
 async function confirm() {
   // 重置验证错误
   validationErrors.value = {}
-  
+
   if (activeTab.value === 'buy') {
     const amount = parseFloat(buyAmount.value)
     if (buyAmount.value === '' || isNaN(amount) || amount <= 0) {
@@ -893,15 +1076,15 @@ async function confirm() {
     const currentValue = parseFloat(editAmount.value)
     const profit = parseFloat(editProfit.value)
     const platform = editPlatform.value
-    
+
     if (editAmount.value === '' || isNaN(currentValue) || currentValue <= 0) {
       validationErrors.value.editAmount = '请输入有效的持仓金额（大于0）'
     }
-    
+
     if (editProfit.value === '' || isNaN(profit)) {
       validationErrors.value.editProfit = '请输入有效的持有收益'
     }
-    
+
     // 如果有验证错误，返回
     if (Object.keys(validationErrors.value).length > 0) {
       return
@@ -1412,31 +1595,90 @@ onBeforeUnmount(() => {
   margin-top: 6px;
 }
 
+.tag-input-container {
+  position: relative;
+}
+
+.tag-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dropdown-item:hover {
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+.common-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.common-tag {
+  display: inline-block;
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 20px;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.common-tag:hover {
+  background-color: #e5e7eb;
+  color: #1f2937;
+  transform: translateY(-1px);
+}
+
+.common-tag:active {
+  transform: translateY(0);
+}
+
 @media (max-width: 768px) {
   .modal-container {
     max-width: 95%;
     max-height: 90vh;
   }
-  
+
   .chart-header {
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .time-range-selector {
     width: 100%;
     justify-content: space-between;
   }
-  
+
   .range-btn {
     flex: 1;
     text-align: center;
   }
-  
+
   .chart-wrapper {
     height: 250px;
   }
-  
+
   .chart-loading {
     height: 250px;
   }

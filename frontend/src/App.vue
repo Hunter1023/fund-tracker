@@ -111,14 +111,42 @@
           </div>
           <div class="form-group">
             <label class="form-label">板块标签</label>
-            <input
-              type="text"
-              class="form-input"
-              v-model="tagsInput"
-              placeholder="请输入板块标签（如：Ai, 新能源）"
-              @keyup.enter="confirmTags"
-            >
+            <div class="tag-input-container">
+              <input
+                type="text"
+                class="form-input"
+                v-model="tagsInput"
+                placeholder="请输入板块标签（如：Ai, 新能源）"
+                @keyup.enter="confirmTags"
+                @input="filterTags"
+                @focus="showDropdown = true"
+                @blur="hideDropdown"
+              >
+              <div class="tag-dropdown" v-if="showDropdown && filteredTags.length > 0">
+                <div
+                  v-for="tag in filteredTags"
+                  :key="tag"
+                  class="dropdown-item"
+                  @mousedown="selectTag(tag)"
+                >
+                  {{ tag }}
+                </div>
+              </div>
+            </div>
             <div class="form-hint">多个标签请用逗号分隔</div>
+          </div>
+          <div class="form-group" v-if="existingTags.length > 0">
+            <label class="form-label">已存在的标签</label>
+            <div class="common-tags">
+              <span
+                v-for="tag in existingTags"
+                :key="tag"
+                class="common-tag"
+                @click="addTag(tag)"
+              >
+                {{ tag }}
+              </span>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -166,6 +194,9 @@ const selectedFund = ref(null)
 const selectedAction = ref('')
 const tagsInput = ref('')
 const modalTitle = ref('')
+const existingTags = ref([])
+const showDropdown = ref(false)
+const filteredTags = ref([])
 
 let searchTimeout = null
 
@@ -182,7 +213,7 @@ let isLoadingData = false
 
 async function loadWatchlistAndHoldings() {
   if (isLoadingData) return
-  
+
   isLoadingData = true
   try {
     // 加载自选基金
@@ -224,7 +255,7 @@ async function handleSearch() {
     try {
       // 先加载自选和持仓数据，用于判断搜索结果是否已存在
       await loadWatchlistAndHoldings()
-      
+
       const response = await fundApi.search(keyword)
       searchResults.value = response.data
       showSearchDropdown.value = true
@@ -266,12 +297,14 @@ function openTagsModal(fund, action) {
   selectedFund.value = fund
   selectedAction.value = action
   tagsInput.value = ''
-  
+
   if (action === 'watchlist') {
     modalTitle.value = '加入自选 - 选择板块标签'
   }
-  
+
   showTagsModal.value = true
+  // 加载已存在的标签
+  loadExistingTags()
   // 清空搜索结果，避免模态框打开时搜索结果仍然显示
   showSearchDropdown.value = false
 }
@@ -284,21 +317,77 @@ function closeTagsModal() {
   tagsInput.value = ''
 }
 
+// 加载已存在的标签
+async function loadExistingTags() {
+  try {
+    const response = await tagsApi.get()
+    existingTags.value = response.data.tags
+  } catch (error) {
+    console.error('加载标签失败:', error)
+  }
+}
+
+// 过滤标签
+function filterTags() {
+  const input = tagsInput.value.trim()
+  if (!input) {
+    filteredTags.value = existingTags.value
+    return
+  }
+
+  // 过滤出包含输入内容的标签
+  filteredTags.value = existingTags.value.filter(tag =>
+    tag.toLowerCase().includes(input.toLowerCase())
+  )
+  showDropdown.value = filteredTags.value.length > 0
+}
+
+// 隐藏下拉菜单
+function hideDropdown() {
+  // 延迟隐藏，以便可以点击下拉项
+  setTimeout(() => {
+    showDropdown.value = false
+  }, 200)
+}
+
+// 选择标签
+function selectTag(tag) {
+  const currentTags = tagsInput.value.trim()
+  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+
+  if (!tagsArray.includes(tag)) {
+    tagsArray.push(tag)
+    tagsInput.value = tagsArray.join(', ')
+  }
+  showDropdown.value = false
+}
+
+// 添加标签
+function addTag(tag) {
+  const currentTags = tagsInput.value.trim()
+  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+
+  if (!tagsArray.includes(tag)) {
+    tagsArray.push(tag)
+    tagsInput.value = tagsArray.join(', ')
+  }
+}
+
 // 确认标签并执行操作
 async function confirmTags() {
   if (!selectedFund.value) return
-  
+
   showLoading()
   try {
     const tags = tagsInput.value.trim()
-    
+
     // 加入自选
     if (watchlistRef.value && watchlistRef.value.addToWatchlist) {
       await watchlistRef.value.addToWatchlist(selectedFund.value.fund_code, tags)
       // 更新本地自选基金列表
       await loadWatchlistAndHoldings()
     }
-    
+
     // 关闭模态框
     closeTagsModal()
   } catch (error) {
@@ -788,5 +877,65 @@ watch(activeTab, async (newTab) => {
 
 .btn:disabled:hover {
   background-color: #4f46e5;
+}
+
+.tag-input-container {
+  position: relative;
+}
+
+.tag-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 0;
+}
+
+.dropdown-item:hover {
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+.common-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.common-tag {
+  display: inline-block;
+  padding: 6px 14px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 20px;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.common-tag:hover {
+  background-color: #e5e7eb;
+  color: #1f2937;
+  transform: translateY(-1px);
+}
+
+.common-tag:active {
+  transform: translateY(0);
 }
 </style>

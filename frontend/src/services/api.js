@@ -40,4 +40,8 @@ export const platformApi = {
   updateOrder: (orderData) => api.put('/platform/order', { order: orderData })
 }
 
+export const tagsApi = {
+  get: () => api.get('/tags')
+}
+
 export default api
