@@ -1776,6 +1776,32 @@ def update_holding_tags():
     finally:
         db.close()
 
+@app.route('/api/tags', methods=['GET'])
+def get_all_tags():
+    """
+    获取所有已存在的标签
+    """
+    db = next(get_db())
+    try:
+        # 从自选基金表中获取所有标签
+        watchlist_items = db.query(Watchlist).all()
+        tags_set = set()
+
+        for item in watchlist_items:
+            if item.tags:
+                # 分割逗号分隔的标签
+                item_tags = [tag.strip() for tag in item.tags.split(',')]
+                tags_set.update(item_tags)
+
+        # 转换为列表并排序
+        tags = sorted(list(tags_set))
+        return jsonify({'tags': tags})
+    except Exception as e:
+        print(f"获取标签失败: {e}")
+        return jsonify({'tags': []})
+    finally:
+        db.close()
+
 @app.route('/api/platform', methods=['GET'])
 def get_platforms():
     """

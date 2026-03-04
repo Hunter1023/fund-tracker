@@ -10,19 +10,47 @@
       <div class="modal-body">
         <div class="form-group">
           <label for="tagsInput" class="form-label">标签（逗号分隔）</label>
-          <input
-            type="text"
-            class="form-input"
-            id="tagsInput"
-            v-model="tagsInput"
-            placeholder="例如：科技,成长"
-          >
+          <div class="tag-input-container">
+            <input
+              type="text"
+              class="form-input"
+              id="tagsInput"
+              v-model="tagsInput"
+              placeholder="例如：科技,成长"
+              @input="filterTags"
+              @focus="showDropdown = true"
+              @blur="hideDropdown"
+            >
+            <div class="tag-dropdown" v-if="showDropdown && filteredTags.length > 0">
+              <div
+                v-for="tag in filteredTags"
+                :key="tag"
+                class="dropdown-item"
+                @mousedown="selectTag(tag)"
+              >
+                {{ tag }}
+              </div>
+            </div>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">常用标签</label>
           <div class="common-tags">
             <span
               v-for="tag in commonTags"
+              :key="tag"
+              class="common-tag"
+              @click="addTag(tag)"
+            >
+              {{ tag }}
+            </span>
+          </div>
+        </div>
+        <div class="form-group" v-if="existingTags.length > 0">
+          <label class="form-label">已存在的标签</label>
+          <div class="common-tags">
+            <span
+              v-for="tag in existingTags"
               :key="tag"
               class="common-tag"
               @click="addTag(tag)"
@@ -41,7 +69,8 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { tagsApi } from '../services/api'
 
 const props = defineProps({
   show: Boolean,
@@ -53,10 +82,60 @@ const emit = defineEmits(['update:show', 'confirm'])
 
 const tagsInput = ref('')
 const commonTags = ['科技', '成长', '价值', '指数', '债券', '混合']
+const existingTags = ref([])
+const showDropdown = ref(false)
+const filteredTags = ref([])
 
 watch(() => props.currentTags, (newVal) => {
   tagsInput.value = newVal || ''
 }, { immediate: true })
+
+watch(() => props.show, (newVal) => {
+  if (newVal) {
+    loadExistingTags()
+  }
+})
+
+async function loadExistingTags() {
+  try {
+    const response = await tagsApi.get()
+    existingTags.value = response.data.tags
+  } catch (error) {
+    console.error('加载标签失败:', error)
+  }
+}
+
+function filterTags() {
+  const input = tagsInput.value.trim()
+  if (!input) {
+    filteredTags.value = existingTags.value
+    return
+  }
+
+  // 过滤出包含输入内容的标签
+  filteredTags.value = existingTags.value.filter(tag =>
+    tag.toLowerCase().includes(input.toLowerCase())
+  )
+  showDropdown.value = filteredTags.value.length > 0
+}
+
+function hideDropdown() {
+  // 延迟隐藏，以便可以点击下拉项
+  setTimeout(() => {
+    showDropdown.value = false
+  }, 200)
+}
+
+function selectTag(tag) {
+  const currentTags = tagsInput.value.trim()
+  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+
+  if (!tagsArray.includes(tag)) {
+    tagsArray.push(tag)
+    tagsInput.value = tagsArray.join(', ')
+  }
+  showDropdown.value = false
+}
 
 function addTag(tag) {
   const currentTags = tagsInput.value.trim()
@@ -71,6 +150,12 @@ function addTag(tag) {
 function confirm() {
   emit('confirm', tagsInput.value)
 }
+
+onMounted(() => {
+  if (props.show) {
+    loadExistingTags()
+  }
+})
 </script>
 
 <style scoped>
@@ -210,6 +295,36 @@ function confirm() {
 
 .common-tag:active {
   transform: translateY(0);
+}
+
+.tag-input-container {
+  position: relative;
+}
+
+.tag-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dropdown-item:hover {
+  background-color: #f3f4f6;
+  color: #1f2937;
 }
 
 .modal-footer {
