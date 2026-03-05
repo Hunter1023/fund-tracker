@@ -15,5 +15,40 @@
   "files.autoGuessEncoding": true,
 
   // 默认编码 UTF-8
-  "files.encoding": "utf8"
+  "files.encoding": "utf8",
+
+  // Code Runner 配置 - 使用WSL执行bash脚本
+  "code-runner.executorMap": {
+    "javascript": "node",
+    "typescript": "npx ts-node",
+    "python": "python",
+    "java": "cd $dir && javac $fileName && java $fileNameWithoutExt",
+    "c": "cd $dir && gcc $fileName -o $fileNameWithoutExt && $fileNameWithoutExt",
+    "cpp": "cd $dir && g++ $fileName -o $fileNameWithoutExt && $fileNameWithoutExt",
+    "csharp": "cd $dir && dotnet script $fileName",
+    "go": "go run",
+    "ruby": "ruby",
+    "php": "php",
+    "lua": "lua",
+    "powershell": "powershell -ExecutionPolicy Bypass -File",
+    "bat": "cmd /c",
+    "sh": "wsl bash",
+    "bash": "wsl bash",
+    "zsh": "wsl bash",
+    "shell": "wsl bash",
+    "shellscript": "wsl bash"
+  },
+  "code-runner.executorMapByFileExtension": {
+    ".sh": "wsl bash",
+    ".bash": "wsl bash",
+    ".zsh": "wsl bash"
+  },
+  "code-runner.runInTerminal": true,
+  "code-runner.saveFileBeforeRun": true,
+  "code-runner.ignoreSelection": true,
+  "code-runner.clearPreviousOutput": false,
+  "code-runner.fileDirectoryAsCwd": false,
+  "code-runner.showExecutionMessage": true,
+  "code-runner.respectShebang": false,
+  "code-runner.terminalRoot": "/mnt/"
 }
