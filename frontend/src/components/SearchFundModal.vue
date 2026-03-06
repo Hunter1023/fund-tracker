@@ -76,16 +76,20 @@ const searchLoading = ref(false)
 const searchInputRef = ref(null)
 let searchTimer = null
 
-watch(() => props.show, async (newVal) => {
+watch(() => props.show, async (newVal, oldVal) => {
+  console.log('SearchFundModal show changed:', { oldVal, newVal, currentKeyword: searchKeyword.value })
   if (newVal) {
+    console.log('Opening modal, clearing search keyword')
+    searchKeyword.value = ''
     searchResults.value = []
     await nextTick()
     if (searchInputRef.value && searchInputRef.value.focus) {
       searchInputRef.value.focus()
     }
-    if (searchKeyword.value && searchKeyword.value.trim().length >= 2) {
-      await doImmediateSearch()
-    }
+  } else {
+    console.log('Closing modal, clearing search keyword')
+    searchKeyword.value = ''
+    searchResults.value = []
   }
 })
 
@@ -142,24 +146,14 @@ async function doImmediateSearch() {
 
 function handleFocus() {
   console.log('handleFocus, keyword=', searchKeyword.value)
-  if (searchKeyword.value && searchKeyword.value.trim().length >= 2) {
-    doImmediateSearch()
-  }
 }
 
 function handleWrapperClick() {
   console.log('handleWrapperClick, keyword=', searchKeyword.value)
-  if (searchKeyword.value && searchKeyword.value.trim().length >= 2) {
-    doImmediateSearch()
-  }
 }
 
 function handleWrapperMouseDown(e) {
   console.log('handleWrapperMouseDown, keyword=', searchKeyword.value)
-  if (searchKeyword.value && searchKeyword.value.trim().length >= 2) {
-    // use setTimeout 0 to allow focus events to process if needed
-    setTimeout(() => doImmediateSearch(), 0)
-  }
 }
 
 function handleOverlayClick() {
