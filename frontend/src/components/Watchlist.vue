@@ -134,7 +134,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useHoldings } from '../composables/useHoldings'
 import { useWatchlist } from '../composables/useWatchlist'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -167,6 +167,7 @@ const {
 
 onMounted(() => {
   loadHoldings()
+  loadWatchlist()
 })
 
 const showDetailModal = ref(false)
@@ -176,6 +177,12 @@ const currentHolding = ref(null)
 const showConfirmDialog = ref(false)
 const confirmMessage = ref('')
 const fundToDelete = ref(null)
+
+// 监听holdings变化，确保持仓状态更新时重新计算
+watch(holdings, () => {
+  // 持仓数据变化时，强制刷新自选列表以更新持有标识
+  loadWatchlist()
+}, { deep: true })
 
 const columns = [
   { key: 'tags', label: '板块', sortable: true, minWidth: '80px', width: '120px' },
@@ -218,15 +225,15 @@ function isHolding(fundCode) {
 
 function openFundDetail(fund) {
   if (!fund) return
-  
+
   const holding = holdings.value.find(h => h.fund_code === fund.fund_code)
-  
+
   currentFund.value = {
     fund_code: fund.fund_code,
     fund_name: fund.fund_name,
     tags: fund.tags
   }
-  
+
   if (holding) {
     currentHolding.value = {
       current_value: holding.current_value || holding.cost,
@@ -238,7 +245,7 @@ function openFundDetail(fund) {
   } else {
     currentHolding.value = null
   }
-  
+
   showDetailModal.value = true
 }
 
@@ -256,9 +263,10 @@ function handleConfirmDelete() {
   }
 }
 
-function handleConfirm() {
-  loadWatchlist()
-  loadHoldings()
+async function handleConfirm() {
+  // 先刷新持仓数据，再刷新自选列表
+  await loadHoldings()
+  await loadWatchlist()
 }
 
 defineExpose({
