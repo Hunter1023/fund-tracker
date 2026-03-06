@@ -274,11 +274,75 @@ def update_holding_profit():
     finally:
         db.close()
 
+# 定时任务：更新所有基金的历史净值数据
+@retry_db_operation()
+def update_all_funds_history():
+    """
+    定时任务：每天更新所有自选基金和持仓基金的历史净值数据
+    """
+    print(f"[{datetime.now()}] 开始更新基金历史净值数据...")
+    db = next(get_db())
+    try:
+        # 获取所有需要更新的基金（自选基金 + 持仓基金）
+        watchlist_funds = db.query(Watchlist).all()
+        holding_funds = db.query(FundHolding).all()
+
+        fund_codes = set()
+        for item in watchlist_funds:
+            if item.fund:
+                fund_codes.add(item.fund.fund_code)
+        for holding in holding_funds:
+            if holding.fund:
+                fund_codes.add(holding.fund.fund_code)
+
+        print(f"需要更新 {len(fund_codes)} 个基金的历史净值数据")
+
+        # 更新每个基金的历史净值数据
+        for fund_code in fund_codes:
+            try:
+                # 强制刷新历史净值数据
+                # 使用天级时间戳确保获取最新数据
+                timestamp = int(time.time() / 86400)
+                history_data = DataFetcher.get_fund_history(fund_code, timestamp)
+                
+                # 获取基金对象
+                fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+                if fund:
+                    # 更新或创建实时数据记录
+                    realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
+                    if realtime_data:
+                        realtime_data.net_values = json.dumps(history_data.get('net_values', []))
+                        realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
+                        realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
+                        realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
+                        realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
+                        realtime_data.fsrq = history_data.get('fsrq', '')
+                    db.flush()
+                
+                print(f"成功更新基金 {fund_code} 的历史净值数据")
+            except Exception as e:
+                print(f"更新基金 {fund_code} 历史净值数据失败: {e}")
+
+        # 提交事务
+        db.commit()
+        print(f"[{datetime.now()}] 基金历史净值数据更新完成")
+    except Exception as e:
+        db.rollback()
+        print(f"定时任务执行失败: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        db.close()
+
 # 添加定时任务：每10分钟执行一次持仓收益更新检查
 scheduler.add_job(update_holding_profit, 'interval', minutes=10, id='update_holding_profit')
 
+# 添加定时任务：每天凌晨1点更新基金历史净值数据
+scheduler.add_job(update_all_funds_history, 'cron', hour=1, minute=0, id='update_funds_history')
+
 print("定时任务已启动：每10分钟更新一次基金数据")
 print("定时任务已启动：每10分钟检查一次持仓收益更新（交易日19:00-23:00）")
+print("定时任务已启动：每天凌晨1点更新基金历史净值数据")
 
 # 辅助函数：获取基金或创建
 

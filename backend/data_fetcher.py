@@ -9,11 +9,11 @@ import threading
 
 class DataFetcher:
     """数据获取类"""
-    
+
     # 线程池执行器，用于并发请求
     _executor = ThreadPoolExecutor(max_workers=10)
     _lock = threading.Lock()
-    
+
     @staticmethod
     @lru_cache(maxsize=512)
     def get_fund_valuation(fund_code, timestamp=None):
@@ -50,7 +50,7 @@ class DataFetcher:
         except Exception as e:
             print(f"获取基金估值失败: {e}")
             return None
-    
+
     @staticmethod
     def get_fund_holding(fund_code):
         """
@@ -63,12 +63,12 @@ class DataFetcher:
             response = requests.get(url)
             response.encoding = 'utf-8'
             soup = BeautifulSoup(response.text, 'html.parser')
-            
+
             # 查找重仓股表格
             table = soup.find('table', class_='w782 comm tzxq')
             if not table:
                 return []
-            
+
             holdings = []
             rows = table.find_all('tr')[1:]  # 跳过表头
             for row in rows:
@@ -86,7 +86,7 @@ class DataFetcher:
         except Exception as e:
             print(f"获取基金重仓股失败: {e}")
             return []
-    
+
     @staticmethod
     def get_stock_quote(stock_code):
         """
@@ -98,13 +98,13 @@ class DataFetcher:
         prefix = 'sh' if stock_code.startswith('6') else 'sz'
         tencent_code = f"{prefix}{stock_code}"
         url = f"{DATA_SOURCES['tencent_stock']}{tencent_code}"
-        
+
         try:
             response = requests.get(url)
             response.encoding = 'utf-8'
             data_str = response.text.split('=')[1].rstrip(';')
             data_list = data_str.split('~')
-            
+
             if len(data_list) >= 32:
                 return {
                     'stock_code': stock_code,
@@ -122,7 +122,7 @@ class DataFetcher:
         except Exception as e:
             print(f"获取股票行情失败: {e}")
             return None
-    
+
     @staticmethod
     def search_fund(fund_keyword):
         """
@@ -146,7 +146,7 @@ class DataFetcher:
         except Exception as e:
             print(f"搜索基金失败: {e}")
             return []
-    
+
     @staticmethod
     @lru_cache(maxsize=512)
     def get_fund_rates(fund_code, timestamp=None):
@@ -161,13 +161,13 @@ class DataFetcher:
         try:
             response = requests.get(url, timeout=5)  # 5秒超时
             data = response.json()
-            
+
             # 解析涨跌幅数据
             one_month_rate = 0
             three_month_rate = 0
             one_year_rate = 0
             daily_change_rate = 0
-            
+
             # 提取FSRQ（净值日期）
             fsrq = ''
             if data.get('Datas'):
@@ -194,7 +194,7 @@ class DataFetcher:
                     daily_change_rate = float(data['Datas'].get('RZDF', 0))
                 except (ValueError, TypeError):
                     daily_change_rate = 0
-            
+
             return {
                 'fund_code': fund_code,
                 'one_month_rate': one_month_rate,
@@ -213,7 +213,7 @@ class DataFetcher:
                 'daily_change_rate': 0,
                 'fsrq': ''
             }
-    
+
     @staticmethod
     @lru_cache(maxsize=256)
     def get_fund_history_simple(fund_code, timestamp=None):
@@ -228,14 +228,14 @@ class DataFetcher:
         try:
             response = requests.get(url, timeout=3)  # 3秒超时
             data = response.json()
-            
+
             # 解析涨跌幅数据
             one_month_rate = 0
             three_month_rate = 0
             one_year_rate = 0
             daily_change_rate = 0
             unit_net_value = 0
-            
+
             # 提取FSRQ（净值日期）
             fsrq = ''
             if data.get('Datas'):
@@ -261,7 +261,7 @@ class DataFetcher:
                     unit_net_value = float(data['Datas'].get('DWJZ', 0))
                 except (ValueError, TypeError):
                     unit_net_value = 0
-            
+
             return {
                 'fund_code': fund_code,
                 'net_values': [],  # 空数组，不返回历史数据
@@ -294,18 +294,23 @@ class DataFetcher:
         :param timestamp: 时间戳（用于缓存过期）
         :return: 历史净值数据和涨跌幅数据
         """
+        # 确保timestamp为天级时间戳，实现24小时缓存过期
+        if timestamp is None:
+            # 使用天级时间戳（86400秒）
+            timestamp = int(time.time() / 86400)
+
         # 使用东方财富的FundBaseTypeInformation API获取涨跌幅数据
         url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
         try:
             response = requests.get(url)
             data = response.json()
-            
+
             # 解析涨跌幅数据
             one_month_rate = 0
             three_month_rate = 0
             one_year_rate = 0
             daily_change_rate = 0
-            
+
             # 提取FSRQ（净值日期）
             fsrq = ''
             if data.get('Datas'):
@@ -332,12 +337,12 @@ class DataFetcher:
                     daily_change_rate = float(data['Datas'].get('RZDF', 0))
                 except (ValueError, TypeError):
                     daily_change_rate = 0
-            
+
             # 同时获取历史净值数据
             net_values = []
             page_index = 1
             page_size = 100
-            
+
             while True:
                 net_values_url = f"https://api.fund.eastmoney.com/f10/lsjz?fundCode={fund_code}&pageIndex={page_index}&pageSize={page_size}"
                 headers = {
@@ -346,7 +351,7 @@ class DataFetcher:
                 }
                 net_values_response = requests.get(net_values_url, headers=headers)
                 net_values_data = net_values_response.json()
-                
+
                 # 解析历史净值数据
                 if net_values_data.get('Data') and net_values_data['Data'].get('LSJZList'):
                     for item in net_values_data['Data']['LSJZList']:
@@ -358,7 +363,7 @@ class DataFetcher:
                                 'cumulative_net_value': item.get('LJJZ'),
                                 'change_rate': item.get('JZZZL')
                             })
-                    
+
                     # 检查是否还有更多数据
                     total_count = net_values_data.get('TotalCount', 0)
                     if len(net_values) >= total_count or len(net_values) >= 500:
@@ -366,7 +371,7 @@ class DataFetcher:
                     page_index += 1
                 else:
                     break
-            
+
             return {
                 'fund_code': fund_code,
                 'net_values': net_values,
@@ -387,7 +392,7 @@ class DataFetcher:
                 'daily_change_rate': 0,
                 'fsrq': ''  # 添加FSRQ字段
             }
-    
+
     @staticmethod
     @lru_cache(maxsize=512)
     def get_fund_history_by_date(fund_code, target_date):
@@ -401,7 +406,7 @@ class DataFetcher:
             # 获取基金历史净值数据
             history_data = DataFetcher.get_fund_history(fund_code)
             net_values = history_data.get('net_values', [])
-            
+
             # 遍历历史净值数据，找到目标日期的净值
             for item in net_values:
                 if item.get('date') == target_date:
@@ -412,13 +417,13 @@ class DataFetcher:
                         'cumulative_net_value': item.get('cumulative_net_value'),
                         'change_rate': item.get('change_rate')
                     }
-            
+
             # 如果没有找到目标日期的净值，返回 None
             return None
         except Exception as e:
             print(f"获取基金历史净值失败: {e}")
             return None
-    
+
     @staticmethod
     def get_fund_rates_batch(fund_codes, timestamp=None):
         """
@@ -429,17 +434,17 @@ class DataFetcher:
         """
         if not fund_codes:
             return {}
-        
+
         results = {}
-        
+
         # 使用线程池并发获取数据
         with ThreadPoolExecutor(max_workers=10) as executor:
             # 提交所有任务
             future_to_fund = {
-                executor.submit(DataFetcher.get_fund_rates, fund_code, timestamp): fund_code 
+                executor.submit(DataFetcher.get_fund_rates, fund_code, timestamp): fund_code
                 for fund_code in fund_codes
             }
-            
+
             # 等待所有任务完成
             for future in as_completed(future_to_fund):
                 fund_code = future_to_fund[future]
@@ -457,9 +462,9 @@ class DataFetcher:
                         'daily_change_rate': 0,
                         'fsrq': ''
                     }
-        
+
         return results
-    
+
     @staticmethod
     def get_fund_valuation_batch(fund_codes, timestamp=None):
         """
@@ -470,17 +475,17 @@ class DataFetcher:
         """
         if not fund_codes:
             return {}
-        
+
         results = {}
-        
+
         # 使用线程池并发获取数据
         with ThreadPoolExecutor(max_workers=10) as executor:
             # 提交所有任务
             future_to_fund = {
-                executor.submit(DataFetcher.get_fund_valuation, fund_code, timestamp): fund_code 
+                executor.submit(DataFetcher.get_fund_valuation, fund_code, timestamp): fund_code
                 for fund_code in fund_codes
             }
-            
+
             # 等待所有任务完成
             for future in as_completed(future_to_fund):
                 fund_code = future_to_fund[future]
@@ -490,5 +495,5 @@ class DataFetcher:
                 except Exception as e:
                     print(f"获取基金 {fund_code} 估值数据失败: {e}")
                     results[fund_code] = None
-        
+
         return results
