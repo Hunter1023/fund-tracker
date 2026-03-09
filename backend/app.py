@@ -304,7 +304,7 @@ def update_all_funds_history():
                 # 使用天级时间戳确保获取最新数据
                 timestamp = int(time.time() / 86400)
                 history_data = DataFetcher.get_fund_history(fund_code, timestamp)
-                
+
                 # 获取基金对象
                 fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
                 if fund:
@@ -318,7 +318,7 @@ def update_all_funds_history():
                         realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
                         realtime_data.fsrq = history_data.get('fsrq', '')
                     db.flush()
-                
+
                 print(f"成功更新基金 {fund_code} 的历史净值数据")
             except Exception as e:
                 print(f"更新基金 {fund_code} 历史净值数据失败: {e}")
@@ -1537,15 +1537,18 @@ def manage_holding():
                 # 计算卖出金额
                 amount = shares * current_price
 
-                # 更新持仓
-                fund_holding.cost -= amount
+                # 计算卖出份额占总份额的比例
+                sell_ratio = shares / fund_holding.shares
+
+                # 更新持仓：按比例减少持仓成本
+                fund_holding.cost = fund_holding.cost * (1 - sell_ratio)
                 fund_holding.shares -= shares
                 if fund_holding.shares <= 0:
                     # 清空持仓
                     db.delete(fund_holding)
                     fund_holding = None
                 else:
-                    # 重新计算平均成本
+                    # 重新计算平均成本（应该保持不变）
                     fund_holding.avg_cost = fund_holding.cost / fund_holding.shares
 
                 # 记录交易
