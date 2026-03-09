@@ -1359,12 +1359,14 @@ def manage_holding():
 
             # 获取平台参数
             platform = data.get('platform', '其他')
+            logger.info(f"收到的平台参数: {platform}")
 
             # 检查是否已有持仓（同时检查fund_id和platform）
             fund_holding = db.query(FundHolding).filter(
                 FundHolding.fund_id == fund.id,
                 FundHolding.platform == platform
             ).first()
+            logger.info(f"查询持仓: fund_id={fund.id}, platform={platform}, 结果: {fund_holding is not None}")
 
             # 获取当前价格（根据日期获取净值）
             current_price = None
@@ -1505,7 +1507,8 @@ def manage_holding():
                         fund_id=fund.id,
                         cost=cost,
                         shares=shares,
-                        avg_cost=current_price
+                        avg_cost=current_price,
+                        platform=platform
                     )
                     db.add(fund_holding)
 
