@@ -286,7 +286,6 @@ class DataFetcher:
             }
 
     @staticmethod
-    @lru_cache(maxsize=128)
     def get_fund_history(fund_code, timestamp=None):
         """
         获取基金历史净值数据
@@ -299,99 +298,105 @@ class DataFetcher:
             # 使用天级时间戳（86400秒）
             timestamp = int(time.time() / 86400)
 
-        # 使用东方财富的FundBaseTypeInformation API获取涨跌幅数据
-        url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
-        try:
-            response = requests.get(url)
-            data = response.json()
+        # 内部函数，用于缓存
+        @lru_cache(maxsize=128)
+        def _get_fund_history(fund_code, timestamp):
+            # 使用东方财富的FundBaseTypeInformation API获取涨跌幅数据
+            url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
+            try:
+                response = requests.get(url)
+                data = response.json()
 
-            # 解析涨跌幅数据
-            one_month_rate = 0
-            three_month_rate = 0
-            one_year_rate = 0
-            daily_change_rate = 0
+                # 解析涨跌幅数据
+                one_month_rate = 0
+                three_month_rate = 0
+                one_year_rate = 0
+                daily_change_rate = 0
 
-            # 提取FSRQ（净值日期）
-            fsrq = ''
-            if data.get('Datas'):
-                fsrq = data['Datas'].get('FSRQ', '')
-                # 使用实际API返回的字段名称
-                # 根据用户提供的信息：
-                # SYL_Y: 近1月收益率
-                # SYL_1N: 近1年收益率
-                # SYL_3Y: 近3年收益率
-                # RZDF: 昨天涨跌幅
-                try:
-                    one_month_rate = float(data['Datas'].get('SYL_Y', 0))
-                except (ValueError, TypeError):
-                    one_month_rate = 0
-                try:
-                    three_month_rate = float(data['Datas'].get('SYL_3Y', 0))
-                except (ValueError, TypeError):
-                    three_month_rate = 0
-                try:
-                    one_year_rate = float(data['Datas'].get('SYL_1N', 0))
-                except (ValueError, TypeError):
-                    one_year_rate = 0
-                try:
-                    daily_change_rate = float(data['Datas'].get('RZDF', 0))
-                except (ValueError, TypeError):
-                    daily_change_rate = 0
+                # 提取FSRQ（净值日期）
+                fsrq = ''
+                if data.get('Datas'):
+                    fsrq = data['Datas'].get('FSRQ', '')
+                    # 使用实际API返回的字段名称
+                    # 根据用户提供的信息：
+                    # SYL_Y: 近1月收益率
+                    # SYL_1N: 近1年收益率
+                    # SYL_3Y: 近3年收益率
+                    # RZDF: 昨天涨跌幅
+                    try:
+                        one_month_rate = float(data['Datas'].get('SYL_Y', 0))
+                    except (ValueError, TypeError):
+                        one_month_rate = 0
+                    try:
+                        three_month_rate = float(data['Datas'].get('SYL_3Y', 0))
+                    except (ValueError, TypeError):
+                        three_month_rate = 0
+                    try:
+                        one_year_rate = float(data['Datas'].get('SYL_1N', 0))
+                    except (ValueError, TypeError):
+                        one_year_rate = 0
+                    try:
+                        daily_change_rate = float(data['Datas'].get('RZDF', 0))
+                    except (ValueError, TypeError):
+                        daily_change_rate = 0
 
-            # 同时获取历史净值数据
-            net_values = []
-            page_index = 1
-            page_size = 100
+                # 同时获取历史净值数据
+                net_values = []
+                page_index = 1
+                page_size = 100
 
-            while True:
-                net_values_url = f"https://api.fund.eastmoney.com/f10/lsjz?fundCode={fund_code}&pageIndex={page_index}&pageSize={page_size}"
-                headers = {
-                    "Referer": f"https://fundf10.eastmoney.com/jjjz_{fund_code}.html",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-                }
-                net_values_response = requests.get(net_values_url, headers=headers)
-                net_values_data = net_values_response.json()
+                while True:
+                    net_values_url = f"https://api.fund.eastmoney.com/f10/lsjz?fundCode={fund_code}&pageIndex={page_index}&pageSize={page_size}"
+                    headers = {
+                        "Referer": f"https://fundf10.eastmoney.com/jjjz_{fund_code}.html",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                    }
+                    net_values_response = requests.get(net_values_url, headers=headers)
+                    net_values_data = net_values_response.json()
 
-                # 解析历史净值数据
-                if net_values_data.get('Data') and net_values_data['Data'].get('LSJZList'):
-                    for item in net_values_data['Data']['LSJZList']:
-                        # 跳过DWJZ为空的记录（如节假日）
-                        if item.get('DWJZ'):
-                            net_values.append({
-                                'date': item.get('FSRQ'),
-                                'unit_net_value': item.get('DWJZ'),
-                                'cumulative_net_value': item.get('LJJZ'),
-                                'change_rate': item.get('JZZZL')
-                            })
+                    # 解析历史净值数据
+                    if net_values_data.get('Data') and net_values_data['Data'].get('LSJZList'):
+                        for item in net_values_data['Data']['LSJZList']:
+                            # 跳过DWJZ为空的记录（如节假日）
+                            if item.get('DWJZ'):
+                                net_values.append({
+                                    'date': item.get('FSRQ'),
+                                    'unit_net_value': item.get('DWJZ'),
+                                    'cumulative_net_value': item.get('LJJZ'),
+                                    'change_rate': item.get('JZZZL')
+                                })
 
-                    # 检查是否还有更多数据
-                    total_count = net_values_data.get('TotalCount', 0)
-                    if len(net_values) >= total_count or len(net_values) >= 500:
+                        # 检查是否还有更多数据
+                        total_count = net_values_data.get('TotalCount', 0)
+                        if len(net_values) >= total_count or len(net_values) >= 500:
+                            break
+                        page_index += 1
+                    else:
                         break
-                    page_index += 1
-                else:
-                    break
 
-            return {
-                'fund_code': fund_code,
-                'net_values': net_values,
-                'one_month_rate': one_month_rate,
-                'three_month_rate': three_month_rate,
-                'one_year_rate': one_year_rate,
-                'daily_change_rate': daily_change_rate,
-                'fsrq': fsrq  # 添加FSRQ字段
-            }
-        except Exception as e:
-            print(f"获取基金历史净值失败: {e}")
-            return {
-                'fund_code': fund_code,
-                'net_values': [],
-                'one_month_rate': 0,
-                'three_month_rate': 0,
-                'one_year_rate': 0,
-                'daily_change_rate': 0,
-                'fsrq': ''  # 添加FSRQ字段
-            }
+                return {
+                    'fund_code': fund_code,
+                    'net_values': net_values,
+                    'one_month_rate': one_month_rate,
+                    'three_month_rate': three_month_rate,
+                    'one_year_rate': one_year_rate,
+                    'daily_change_rate': daily_change_rate,
+                    'fsrq': fsrq  # 添加FSRQ字段
+                }
+            except Exception as e:
+                print(f"获取基金历史净值失败: {e}")
+                return {
+                    'fund_code': fund_code,
+                    'net_values': [],
+                    'one_month_rate': 0,
+                    'three_month_rate': 0,
+                    'one_year_rate': 0,
+                    'daily_change_rate': 0,
+                    'fsrq': ''  # 添加FSRQ字段
+                }
+
+        # 调用内部函数
+        return _get_fund_history(fund_code, timestamp)
 
     @staticmethod
     @lru_cache(maxsize=512)
