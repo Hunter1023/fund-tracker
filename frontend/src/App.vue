@@ -171,7 +171,7 @@ import { nextTick, onMounted, ref, watch } from 'vue'
 import FundDetailModal from './components/FundDetailModal.vue'
 import Holdings from './components/Holdings.vue'
 import Watchlist from './components/Watchlist.vue'
-import { fundApi, holdingApi, watchlistApi } from './services/api'
+import { fundApi, holdingApi, watchlistApi, tagsApi } from './services/api'
 
 const activeTab = ref('holding')
 const loading = ref(false)

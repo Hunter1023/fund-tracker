@@ -67,11 +67,11 @@
           <i :class="showSectorDistribution ? 'bi bi-chevron-up' : 'bi bi-chevron-down'" class="toggle-icon"></i>
         </div>
         <div v-if="showSectorDistribution && sortedHoldings.length > 0" class="chart-container">
-          <div class="pie-chart-wrapper" style="display: flex; align-items: center; gap: 20px;">
+          <div class="pie-chart-wrapper" style="display: flex; align-items: flex-start; gap: 20px;">
             <div style="flex: 1;">
               <canvas ref="pieChart"></canvas>
             </div>
-            <div ref="legendContainer" class="custom-legend" style="width: 300px;"></div>
+            <div ref="legendContainer" class="custom-legend" style="flex: 0 0 400px;"></div>
           </div>
         </div>
       </div>
@@ -80,7 +80,7 @@
         <div class="empty-icon">💼</div>
         <p>暂无持仓</p>
         <div class="action-bar empty-action-bar">
-          <button 
+          <button
             class="sync-btn"
             @click="showSearchModal = true"
             :disabled="loading"
@@ -170,7 +170,7 @@
           </table>
         </div>
         <div class="action-bar">
-          <button 
+          <button
             class="sync-btn"
             @click="showSearchModal = true"
             :disabled="loading"
@@ -241,7 +241,7 @@ const showSectorDistribution = ref(false)
 
 function openFundDetail(holding) {
   if (!holding) return
-  
+
   currentFund.value = {
     fund_code: holding.fund_code,
     fund_name: holding.fund_name,
@@ -300,13 +300,13 @@ watch(showSectorDistribution, async (newValue) => {
 function getSectorSummary() {
   const sectorMap = new Map()
   const totalAmount = sortedHoldings.value.reduce((sum, holding) => sum + holding.cost, 0)
-  
+
   sortedHoldings.value.forEach(holding => {
     const sector = holding.tags || '未分类'
     const currentAmount = sectorMap.get(sector) || 0
     sectorMap.set(sector, currentAmount + holding.cost)
   })
-  
+
   const sectors = []
   sectorMap.forEach((amount, sector) => {
     sectors.push({
@@ -315,33 +315,33 @@ function getSectorSummary() {
       percentage: totalAmount > 0 ? (amount / totalAmount) * 100 : 0
     })
   })
-  
+
   return sectors.sort((a, b) => b.amount - a.amount)
 }
 
 // 更新饼图
 function updatePieChart() {
   if (!pieChart.value || !showSectorDistribution.value) return
-  
+
   const sectors = getSectorSummary()
   const labels = sectors.map(s => s.sector)
   const data = sectors.map(s => s.amount)
-  
+
   // 生成按成本占比渐变的彩虹颜色（清新明亮，相邻颜色有明显跨度）
   function generateGradientColors(sectors) {
     const colors = []
-    
+
     sectors.forEach((sector, index) => {
       // 计算色相：均匀分布在彩虹色谱上（0-360度）
       const hue = (index / sectors.length) * 360
-      
+
       // 饱和度：使用中等饱和度（50-60%），颜色更鲜艳
       const saturation = 55
-      
+
       // 亮度：根据占比调整，占比越大亮度越低（颜色越深）
       const maxPercentage = sectors[0].percentage
       const minPercentage = sectors[sectors.length - 1].percentage
-      
+
       let lightness
       if (maxPercentage === minPercentage) {
         lightness = 65
@@ -350,18 +350,18 @@ function updatePieChart() {
         const ratio = sector.percentage / maxPercentage
         lightness = 75 - ratio * 35
       }
-      
+
       colors.push(`hsl(${hue}, ${saturation}%, ${lightness}%)`)
     })
-    
+
     return colors
   }
-  
+
   // 销毁旧图表
   if (chartInstance) {
     chartInstance.destroy()
   }
-  
+
   // 创建新图表
   const backgroundColors = generateGradientColors(sectors)
   chartInstance = new Chart(pieChart.value, {
@@ -404,7 +404,7 @@ function updatePieChart() {
       }
     }
   })
-  
+
   // 生成自定义图例
   generateCustomLegend(sectors, backgroundColors)
 }
@@ -412,32 +412,34 @@ function updatePieChart() {
 // 生成自定义图例
 function generateCustomLegend(sectors, backgroundColors) {
   if (!legendContainer.value) return
-  
+
   // 清空容器
   legendContainer.value.innerHTML = ''
-  
+
   // 每列6个图示
   const itemsPerColumn = 6
   const columns = Math.ceil(sectors.length / itemsPerColumn)
-  
+
   // 创建容器
   const legendWrapper = document.createElement('div')
   legendWrapper.style.display = 'flex'
   legendWrapper.style.flexDirection = 'row'
-  legendWrapper.style.gap = '32px'
+  legendWrapper.style.gap = '20px'
   legendWrapper.style.alignItems = 'flex-start'
-  
+  legendWrapper.style.width = '100%'
+  legendWrapper.style.flexWrap = 'wrap'
+
   // 生成列
   for (let i = 0; i < columns; i++) {
     const column = document.createElement('div')
     column.style.display = 'flex'
     column.style.flexDirection = 'column'
     column.style.gap = '12px'
-    
+
     // 生成当前列的图例项
     const startIndex = i * itemsPerColumn
     const endIndex = Math.min(startIndex + itemsPerColumn, sectors.length)
-    
+
     for (let j = startIndex; j < endIndex; j++) {
       const sector = sectors[j]
       const item = document.createElement('div')
@@ -446,27 +448,27 @@ function generateCustomLegend(sectors, backgroundColors) {
       item.style.gap = '10px'
       item.style.fontSize = '12px'
       item.style.whiteSpace = 'nowrap'
-      
+
       // 颜色块
       const colorBox = document.createElement('div')
       colorBox.style.width = '16px'
       colorBox.style.height = '16px'
       colorBox.style.borderRadius = '6px'
       colorBox.style.backgroundColor = backgroundColors[j]
-      
+
       // 文本
       const text = document.createElement('span')
       const percentage = sector.percentage.toFixed(1)
       text.textContent = `${sector.sector} (${percentage}%)`
-      
+
       item.appendChild(colorBox)
       item.appendChild(text)
       column.appendChild(item)
     }
-    
+
     legendWrapper.appendChild(column)
   }
-  
+
   legendContainer.value.appendChild(legendWrapper)
 }
 
@@ -710,7 +712,7 @@ defineExpose({
   .skeleton-summary {
     grid-template-columns: 1fr;
   }
-  
+
   .skeleton-row {
     grid-template-columns: repeat(3, 1fr);
   }
@@ -1091,23 +1093,23 @@ defineExpose({
   .summary-card {
     grid-template-columns: 1fr;
   }
-  
+
   .summary-value {
     font-size: 1.25rem;
   }
-  
+
   .action-bar {
     padding: 0;
   }
-  
+
   .table-container {
     margin-bottom: 16px;
   }
-  
+
   .pie-chart-wrapper {
     height: 250px;
   }
-  
+
   .chart-container {
     padding: 16px;
   }
