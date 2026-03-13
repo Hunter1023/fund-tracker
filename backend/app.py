@@ -1942,8 +1942,17 @@ def update_platform(platform_id):
         if existing:
             return jsonify({'error': '平台名称已存在'}), 400
 
+        # 保存旧名称
+        old_name = platform.name
+
         # 更新平台
         platform.name = name
+
+        # 同步更新所有使用该平台名称的持仓记录
+        holdings = db.query(FundHolding).filter(FundHolding.platform == old_name).all()
+        for holding in holdings:
+            holding.platform = name
+
         db.commit()
 
         return jsonify({'success': True})
