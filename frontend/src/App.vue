@@ -171,7 +171,7 @@ import { nextTick, onMounted, ref, watch } from 'vue'
 import FundDetailModal from './components/FundDetailModal.vue'
 import Holdings from './components/Holdings.vue'
 import Watchlist from './components/Watchlist.vue'
-import { fundApi, holdingApi, watchlistApi, tagsApi } from './services/api'
+import { fundApi, holdingApi, tagsApi, watchlistApi } from './services/api'
 
 const activeTab = ref('holding')
 const loading = ref(false)
@@ -407,8 +407,12 @@ function handleClickOutside(event) {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
-  // 初始加载自选和持仓数据
-  loadWatchlistAndHoldings()
+  // 初始加载自选和持仓数据（只在页面加载时执行一次）
+  if (activeTab.value === 'watchlist' && watchlistRef.value && watchlistRef.value.loadWatchlist) {
+    watchlistRef.value.loadWatchlist()
+  } else if (activeTab.value === 'holding' && holdingsRef.value && holdingsRef.value.loadHoldings) {
+    holdingsRef.value.loadHoldings()
+  }
 })
 
 watch(activeTab, async (newTab) => {
@@ -416,16 +420,12 @@ watch(activeTab, async (newTab) => {
   if (newTab === 'watchlist' && watchlistRef.value && watchlistRef.value.loadWatchlist) {
     try {
       await watchlistRef.value.loadWatchlist()
-      // 更新本地自选基金列表
-      await loadWatchlistAndHoldings()
     } catch (error) {
       console.error('加载自选基金失败:', error)
     }
   } else if (newTab === 'holding' && holdingsRef.value && holdingsRef.value.loadHoldings) {
     try {
       await holdingsRef.value.loadHoldings()
-      // 更新本地持仓基金列表
-      await loadWatchlistAndHoldings()
     } catch (error) {
       console.error('加载持仓基金失败:', error)
     }
