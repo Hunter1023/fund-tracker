@@ -2,85 +2,13 @@
 
 一个实时基金估值和持仓管理工具，支持自选基金管理、持仓追踪、实时估值显示等功能。
 
-## 项目架构
+预览地址：https://fundtracker.cc.cd/
 
-```
-fund_tracker/
-├── backend/          # 后端服务 (Flask)
-│   ├── app.py        # 主应用文件，包含API路由和定时任务
-│   ├── models.py     # 数据库模型定义
-│   ├── data_fetcher.py  # 数据获取模块
-│   ├── config.py     # 配置文件
-│   ├── Dockerfile    # 后端容器配置
-│   └── requirements.txt  # Python依赖
-├── frontend/         # 前端应用 (Vue 3)
-│   ├── src/
-│   │   ├── components/  # Vue组件
-│   │   ├── composables/ # 组合式函数
-│   │   └── services/    # API服务
-│   ├── package.json     # Node依赖
-│   ├── vite.config.js   # Vite配置文件
-│   ├── Dockerfile        # 前端容器配置
-│   └── nginx.conf        # Nginx配置
-├── database_schema.sql   # 数据库表结构SQL
-├── database_init_data.sql  # 数据库初始化数据SQL
-├── docker-compose.yml   # Docker Compose配置
-├── .env                # 环境变量配置（本地配置，不提交到Git）
-├── .gitignore        # Git忽略文件配置
-└── README.md         # 项目说明文档
-```
 
-## 技术栈
 
-### 后端
-- **Flask** - Web框架
-- **SQLAlchemy** - ORM框架
-- **SQLite** - 数据库
-- **APScheduler** - 定时任务调度
-- **Flask-CORS** - 跨域支持
-- **requests** - HTTP请求
-- **BeautifulSoup4** - HTML解析
+![image-20260313204925393](https://files.seeusercontent.com/2026/03/13/bLn3/image-20260313204925393.png)
 
-### 前端
-- **Vue 3** - 前端框架
-- **Vite** - 构建工具
-- **Axios** - HTTP客户端
-- **Bootstrap 5** - UI框架
-- **Bootstrap Icons** - 图标库
-- **Chart.js** - 图表库
 
-## 主要功能
-
-### 1. 基金搜索
-- 支持按基金代码或名称搜索
-- 实时显示搜索结果
-- 显示基金是否已在自选或持仓中
-
-### 2. 自选基金管理
-- 添加基金到自选列表
-- 支持标签分类（如：AI、新能源等）
-- 实时显示基金估值和涨跌幅
-- 显示近1月、近3月、近1年收益率
-- 从自选中移除基金
-- 修改基金标签
-
-### 3. 持仓管理
-- 添加持仓基金（输入成本和份额）
-- 自动计算持仓盈亏
-- 实时更新持仓价值
-- 显示盈亏金额和收益率
-- 删除持仓
-- 查看交易记录
-
-### 4. 基金详情
-- 查看基金历史净值走势图
-- 显示近1月、近3月、近1年收益率
-- 显示昨日涨跌幅
-- 显示最新净值和估算净值
-
-### 5. 定时任务
-- 每10分钟自动更新所有基金数据
-- 交易日19:00-23:00期间，每10分钟检查并更新持仓收益
 
 ## 数据来源
 
@@ -88,9 +16,7 @@ fund_tracker/
 - **东方财富** - 基金历史净值和涨跌幅数据
 - **腾讯财经** - 股票行情数据
 
-## 快速开始
-
-### 部署
+## 快速部署
 
 
 使用 Docker Compose 可以快速部署整个应用，包括后端、前端和 Cloudflare Tunnel。
@@ -238,7 +164,3 @@ Cloudflare Tunnel 用于提供公网访问，无需开放端口。
 6. **数据持久化**: Docker Compose 部署时，数据库数据存储在 `./data` 目录，容器重启不会丢失数据
 7. **端口占用**: 确保 80 端口未被占用，否则需要修改 `docker-compose.yml` 中的端口映射
 8. **Cloudflare Tunnel**: Tunnel Token 是敏感信息，请妥善保管，不要泄露
-
-## 许可证
-
-MIT

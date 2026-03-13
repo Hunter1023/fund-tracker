@@ -49,6 +49,7 @@ yarn-error.log*
 # 前端构建产物
 dist/
 .cache/
+.vite/
 
 # 环境变量
 .env
