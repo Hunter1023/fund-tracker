@@ -407,12 +407,6 @@ function handleClickOutside(event) {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
-  // 初始加载自选和持仓数据（只在页面加载时执行一次）
-  if (activeTab.value === 'watchlist' && watchlistRef.value && watchlistRef.value.loadWatchlist) {
-    watchlistRef.value.loadWatchlist()
-  } else if (activeTab.value === 'holding' && holdingsRef.value && holdingsRef.value.loadHoldings) {
-    holdingsRef.value.loadHoldings()
-  }
 })
 
 watch(activeTab, async (newTab) => {
@@ -426,11 +420,12 @@ watch(activeTab, async (newTab) => {
   } else if (newTab === 'holding' && holdingsRef.value && holdingsRef.value.loadHoldings) {
     try {
       await holdingsRef.value.loadHoldings()
+      await holdingsRef.value.loadPlatforms()
     } catch (error) {
       console.error('加载持仓基金失败:', error)
     }
   }
-})
+}, { immediate: true })
 </script>
 
 <style scoped>

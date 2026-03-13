@@ -233,10 +233,6 @@ export function useWatchlist() {
     return numRate > 0 ? '#dc3545' : '#28a745'
   }
 
-  onMounted(() => {
-    loadWatchlist()
-  })
-
   return {
     funds,
     loading,

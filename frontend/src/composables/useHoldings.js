@@ -219,11 +219,6 @@ export function useHoldings() {
     return numRate > 0 ? '#dc3545' : '#28a745'
   }
 
-  onMounted(() => {
-    loadHoldings()
-    loadPlatforms()
-  })
-
   return {
     holdings,
     loading,
