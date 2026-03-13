@@ -315,8 +315,13 @@ class DataFetcher:
 
                 # 提取FSRQ（净值日期）
                 fsrq = ''
+                unit_net_value = 0
                 if data.get('Datas'):
                     fsrq = data['Datas'].get('FSRQ', '')
+                    try:
+                        unit_net_value = float(data['Datas'].get('DWJZ', 0))
+                    except (ValueError, TypeError):
+                        unit_net_value = 0
                     # 使用实际API返回的字段名称
                     # 根据用户提供的信息：
                     # SYL_Y: 近1月收益率
@@ -381,7 +386,8 @@ class DataFetcher:
                     'three_month_rate': three_month_rate,
                     'one_year_rate': one_year_rate,
                     'daily_change_rate': daily_change_rate,
-                    'fsrq': fsrq  # 添加FSRQ字段
+                    'fsrq': fsrq,
+                    'unit_net_value': unit_net_value
                 }
             except Exception as e:
                 print(f"获取基金历史净值失败: {e}")
@@ -392,7 +398,8 @@ class DataFetcher:
                     'three_month_rate': 0,
                     'one_year_rate': 0,
                     'daily_change_rate': 0,
-                    'fsrq': ''  # 添加FSRQ字段
+                    'fsrq': '',
+                    'unit_net_value': 0
                 }
 
         # 调用内部函数
