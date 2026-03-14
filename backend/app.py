@@ -86,8 +86,8 @@ def init_default_platform():
     finally:
         db.close()
 
-# 执行初始化
-init_default_platform()
+# 注释掉自动初始化默认平台的逻辑
+# init_default_platform()
 
 # 创建定时任务调度器
 scheduler = BackgroundScheduler()
