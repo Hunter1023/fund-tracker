@@ -36,23 +36,41 @@
       <div class="summary-card">
         <div class="summary-item">
           <div class="summary-label">今日收益</div>
-          <div class="summary-value" :class="summary.totalTodayProfit >= 0 ? 'profit-positive' : 'profit-negative'">
+          <div
+            class="summary-value"
+            :class="
+              summary.totalTodayProfit >= 0
+                ? 'profit-positive'
+                : 'profit-negative'
+            "
+          >
             ¥{{ formatAmount(summary.totalTodayProfit) }}
           </div>
         </div>
         <div class="summary-item">
           <div class="summary-label">持有收益</div>
-          <div class="summary-value" :class="summary.totalProfit >= 0 ? 'profit-positive' : 'profit-negative'">
-            ¥{{ formatAmount(summary.totalProfit) }} ({{ summary.totalProfitRate.toFixed(2) }}%)
+          <div
+            class="summary-value"
+            :class="
+              summary.totalProfit >= 0 ? 'profit-positive' : 'profit-negative'
+            "
+          >
+            ¥{{ formatAmount(summary.totalProfit) }} ({{
+              summary.totalProfitRate.toFixed(2)
+            }}%)
           </div>
         </div>
         <div class="summary-item">
           <div class="summary-label">总金额</div>
-          <div class="summary-value">¥{{ formatAmount(summary.totalValue) }}</div>
+          <div class="summary-value">
+            ¥{{ formatAmount(summary.totalValue) }}
+          </div>
         </div>
         <div class="summary-item">
           <div class="summary-label">总成本</div>
-          <div class="summary-value">¥{{ formatAmount(summary.totalAmount) }}</div>
+          <div class="summary-value">
+            ¥{{ formatAmount(summary.totalAmount) }}
+          </div>
         </div>
         <div class="summary-item">
           <div class="summary-label">基金数量</div>
@@ -62,16 +80,34 @@
 
       <!-- 板块分布 - 可展开/收起 -->
       <div class="sector-distribution-section">
-        <div class="sector-header" @click="showSectorDistribution = !showSectorDistribution">
+        <div
+          class="sector-header"
+          @click="showSectorDistribution = !showSectorDistribution"
+        >
           <h3 class="sector-title">板块分布</h3>
-          <i :class="showSectorDistribution ? 'bi bi-chevron-up' : 'bi bi-chevron-down'" class="toggle-icon"></i>
+          <i
+            :class="
+              showSectorDistribution ? 'bi bi-chevron-up' : 'bi bi-chevron-down'
+            "
+            class="toggle-icon"
+          ></i>
         </div>
-        <div v-if="showSectorDistribution && sortedHoldings.length > 0" class="chart-container">
-          <div class="pie-chart-wrapper" style="display: flex; align-items: flex-start; gap: 20px;">
-            <div style="flex: 1;">
+        <div
+          v-if="showSectorDistribution && sortedHoldings.length > 0"
+          class="chart-container"
+        >
+          <div
+            class="pie-chart-wrapper"
+            style="display: flex; align-items: flex-start; gap: 20px"
+          >
+            <div style="flex: 1">
               <canvas ref="pieChart"></canvas>
             </div>
-            <div ref="legendContainer" class="custom-legend" style="flex: 0 0 400px;"></div>
+            <div
+              ref="legendContainer"
+              class="custom-legend"
+              style="flex: 0 0 400px"
+            ></div>
           </div>
         </div>
       </div>
@@ -92,92 +128,159 @@
 
       <div v-else>
         <div class="table-container">
-        <div class="table-wrapper">
-          <table class="custom-table">
-            <thead>
-              <tr>
-                <th
-                  v-for="column in columns"
-                  :key="column.key"
-                  :class="['table-header', { sortable: column.sortable }]"
-                  @click="column.sortable && handleSort(column.key)"
+          <div class="table-wrapper">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th
+                    v-for="column in columns"
+                    :key="column.key"
+                    :class="['table-header', { sortable: column.sortable }]"
+                    @click="column.sortable && handleSort(column.key)"
+                  >
+                    <div class="header-content">
+                      <span>{{ column.label }}</span>
+                      <span v-if="column.sortable" class="sort-icon">
+                        <i
+                          v-if="sortField === column.key"
+                          :class="
+                            sortDirection === 'asc'
+                              ? 'bi bi-caret-up-fill'
+                              : 'bi bi-caret-down-fill'
+                          "
+                          class="sort-active"
+                        ></i>
+                        <i v-else class="bi bi-caret-up-down"></i>
+                      </span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="holding in sortedHoldings"
+                  :key="`${holding.fund_code}-${holding.platform || '其他'}`"
+                  class="table-row"
                 >
-                  <div class="header-content">
-                    <span>{{ column.label }}</span>
-                    <span v-if="column.sortable" class="sort-icon">
-                      <i v-if="sortField === column.key" :class="sortDirection === 'asc' ? 'bi bi-caret-up-fill' : 'bi bi-caret-down-fill'" class="sort-active"></i>
-                      <i v-else class="bi bi-caret-up-down"></i>
-                    </span>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="holding in sortedHoldings" :key="`${holding.fund_code}-${holding.platform || '其他'}`" class="table-row">
-                <td>
-                  <div v-for="tag in (holding.tags || '').split(',').filter(t => t.trim())" :key="tag" class="tag-item">
-                    <span class="tag-badge" :class="`tag-${getTagColorIndex(tag)}`">
-                      {{ tag.trim() }}
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <div class="fund-name-cell">
-                    <div class="fund-name clickable" @click="openFundDetail(holding)">{{ holding.fund_name }}</div>
-                    <div class="fund-info-row">
-                      <span v-if="isUpdatedToday(holding)" class="badge update-badge">已更新</span>
-                      <div class="fund-code">
-                        {{ holding.fund_code }}
+                  <td>
+                    <div
+                      v-for="tag in (holding.tags || '')
+                        .split(',')
+                        .filter((t) => t.trim())"
+                      :key="tag"
+                      class="tag-item"
+                    >
+                      <span
+                        class="tag-badge"
+                        :class="`tag-${getTagColorIndex(tag)}`"
+                      >
+                        {{ tag.trim() }}
+                      </span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="fund-name-cell">
+                      <div
+                        class="fund-name clickable"
+                        @click="openFundDetail(holding)"
+                      >
+                        {{ holding.fund_name }}
+                      </div>
+                      <div class="fund-info-row">
+                        <span
+                          v-if="isUpdatedToday(holding)"
+                          class="badge update-badge"
+                          >已更新</span
+                        >
+                        <div class="fund-code">
+                          {{ holding.fund_code }}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </td>
-                <td>
-                  <div class="rate-cell" :style="{ color: getChangeRateColor(holding.daily_change_rate) }">
-                    <div class="rate-value">{{ holding.daily_change_rate }}%</div>
-                    <div v-if="!isUpdatedToday(holding)" class="rate-date">{{ getMonthDay(holding.fsrq) }}</div>
-                  </div>
-                </td>
-                <td>
-                  <div class="rate-value" :style="{ color: getChangeRateColor(holding.estimate_change_rate) }">
-                    {{ holding.estimate_change_rate }}%
-                  </div>
-                </td>
-                <td>
-                  <div class="rate-value" :style="{ color: getChangeRateColor(holding.estimate_profit) }">
-                    ¥{{ formatAmount(holding.estimate_profit || 0) }}
-                  </div>
-                </td>
-                <td>
-                  <div class="rate-value" :style="{ color: getChangeRateColor(holding.one_month_rate) }">
-                    {{ (holding.one_month_rate || 0).toFixed(2) }}%
-                  </div>
-                </td>
-                <td>
-                  <div class="rate-cell" :style="{ color: getChangeRateColor(calculateProfit(holding)) }">
-                    <div class="rate-value">¥{{ formatAmount(calculateProfit(holding)) }}</div>
-                    <div class="rate-value">{{ calculateProfitRate(holding).toFixed(2) }}%</div>
-                  </div>
-                </td>
-                <td>
-                  <div class="rate-value">¥{{ formatAmount(holding.current_value) }}</div>
-                </td>
-                <td>
-                  <div class="rate-value">¥{{ formatAmount(holding.cost) }}</div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="action-bar">
-          <button
-            class="sync-btn"
-            @click="showSearchModal = true"
-            :disabled="loading"
-          >
-            <i class="bi bi-plus-circle me-2"></i>添加持仓
-          </button>
-        </div>
+                  </td>
+                  <td>
+                    <div
+                      class="rate-cell"
+                      :style="{
+                        color: getChangeRateColor(holding.daily_change_rate),
+                      }"
+                    >
+                      <div class="rate-value">
+                        {{ holding.daily_change_rate }}%
+                      </div>
+                      <div v-if="!isUpdatedToday(holding)" class="rate-date">
+                        {{ getMonthDay(holding.fsrq) }}
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div
+                      class="rate-value"
+                      :style="{
+                        color: getChangeRateColor(holding.estimate_change_rate),
+                      }"
+                    >
+                      {{ holding.estimate_change_rate }}%
+                    </div>
+                  </td>
+                  <td>
+                    <div
+                      class="rate-value"
+                      :style="{
+                        color: getChangeRateColor(holding.estimate_profit),
+                      }"
+                    >
+                      ¥{{ formatAmount(holding.estimate_profit || 0) }}
+                    </div>
+                  </td>
+                  <td>
+                    <div
+                      class="rate-value"
+                      :style="{
+                        color: getChangeRateColor(holding.one_month_rate),
+                      }"
+                    >
+                      {{ (holding.one_month_rate || 0).toFixed(2) }}%
+                    </div>
+                  </td>
+                  <td>
+                    <div
+                      class="rate-cell"
+                      :style="{
+                        color: getChangeRateColor(calculateProfit(holding)),
+                      }"
+                    >
+                      <div class="rate-value">
+                        ¥{{ formatAmount(calculateProfit(holding)) }}
+                      </div>
+                      <div class="rate-value">
+                        {{ calculateProfitRate(holding).toFixed(2) }}%
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="rate-value">
+                      ¥{{ formatAmount(holding.current_value) }}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="rate-value">
+                      ¥{{ formatAmount(holding.cost) }}
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="action-bar">
+            <button
+              class="sync-btn"
+              @click="showSearchModal = true"
+              :disabled="loading"
+            >
+              <i class="bi bi-plus-circle me-2"></i>添加持仓
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -204,12 +307,12 @@
 </template>
 
 <script setup>
-import Chart from 'chart.js/auto'
-import { nextTick, onMounted, ref, watch } from 'vue'
-import { useHoldings } from '../composables/useHoldings'
-import FundDetailModal from './FundDetailModal.vue'
-import PlatformManager from './PlatformManager.vue'
-import SearchFundModal from './SearchFundModal.vue'
+import Chart from "chart.js/auto";
+import { nextTick, onMounted, ref, watch } from "vue";
+import { useHoldings } from "../composables/useHoldings";
+import FundDetailModal from "./FundDetailModal.vue";
+import PlatformManager from "./PlatformManager.vue";
+import SearchFundModal from "./SearchFundModal.vue";
 
 const {
   holdings,
@@ -225,314 +328,324 @@ const {
   loadPlatforms,
   handleSort,
   getCurrentDate,
-  getChangeRateColor
-} = useHoldings()
+  getChangeRateColor,
+} = useHoldings();
 
-const pieChart = ref(null)
-const legendContainer = ref(null)
-let chartInstance = null
+const pieChart = ref(null);
+const legendContainer = ref(null);
+let chartInstance = null;
 
-const showDetailModal = ref(false)
-const currentFund = ref(null)
-const currentHolding = ref(null)
-const showSearchModal = ref(false)
-const showPlatformManager = ref(false)
-const showSectorDistribution = ref(false)
+const showDetailModal = ref(false);
+const currentFund = ref(null);
+const currentHolding = ref(null);
+const showSearchModal = ref(false);
+const showPlatformManager = ref(false);
+const showSectorDistribution = ref(false);
 
 function openFundDetail(holding) {
-  if (!holding) return
+  if (!holding) return;
 
   currentFund.value = {
     fund_code: holding.fund_code,
     fund_name: holding.fund_name,
-    tags: holding.tags || ''
-  }
+    tags: holding.tags || "",
+  };
   currentHolding.value = {
     current_value: holding.current_value || holding.cost,
     cost: holding.cost,
     shares: holding.shares,
     avg_cost: holding.avg_cost,
     profit_loss: holding.profit_loss || 0,
-    platform: holding.platform
-  }
-  showDetailModal.value = true
+    platform: holding.platform,
+  };
+  showDetailModal.value = true;
 }
 
 async function handleDetailConfirm() {
-  await loadHoldings()
+  await loadHoldings();
 }
 
 function handleSelectFund(fund) {
   currentFund.value = {
     fund_code: fund.fund_code,
-    fund_name: fund.fund_name
-  }
-  currentHolding.value = null
-  showDetailModal.value = true
+    fund_name: fund.fund_name,
+  };
+  currentHolding.value = null;
+  showDetailModal.value = true;
 }
 
 function openAddHolding() {
-  showSearchModal.value = true
+  showSearchModal.value = true;
 }
 
 async function handlePlatformUpdate() {
-  await loadPlatforms()
-  await loadHoldings()
+  await loadPlatforms();
+  await loadHoldings();
 }
 
 // 组件挂载时自动加载数据
+// 数据加载已移至App.vue的watch(activeTab)中，避免重复请求
+// 但仍需要初始化图表相关逻辑
 onMounted(async () => {
-  await loadHoldings()
-  await loadPlatforms()
-  await nextTick()
-  updatePieChart()
-})
+  await nextTick();
+  updatePieChart();
+});
 
 // 监听持仓数据变化，更新饼图
-watch(sortedHoldings, async () => {
-  await nextTick()
-  updatePieChart()
-}, { deep: true })
+watch(
+  sortedHoldings,
+  async () => {
+    await nextTick();
+    updatePieChart();
+  },
+  { deep: true },
+);
 
 // 监听展开状态变化，当展开时更新饼图
 watch(showSectorDistribution, async (newValue) => {
   if (newValue) {
-    await nextTick()
-    updatePieChart()
+    await nextTick();
+    updatePieChart();
   }
-})
+});
 
 // 按板块汇总持仓
 function getSectorSummary() {
-  const sectorMap = new Map()
-  const totalAmount = sortedHoldings.value.reduce((sum, holding) => sum + holding.cost, 0)
+  const sectorMap = new Map();
+  const totalAmount = sortedHoldings.value.reduce(
+    (sum, holding) => sum + holding.cost,
+    0,
+  );
 
-  sortedHoldings.value.forEach(holding => {
-    const sector = holding.tags || '未分类'
-    const currentAmount = sectorMap.get(sector) || 0
-    sectorMap.set(sector, currentAmount + holding.cost)
-  })
+  sortedHoldings.value.forEach((holding) => {
+    const sector = holding.tags || "未分类";
+    const currentAmount = sectorMap.get(sector) || 0;
+    sectorMap.set(sector, currentAmount + holding.cost);
+  });
 
-  const sectors = []
+  const sectors = [];
   sectorMap.forEach((amount, sector) => {
     sectors.push({
       sector,
       amount,
-      percentage: totalAmount > 0 ? (amount / totalAmount) * 100 : 0
-    })
-  })
+      percentage: totalAmount > 0 ? (amount / totalAmount) * 100 : 0,
+    });
+  });
 
-  return sectors.sort((a, b) => b.amount - a.amount)
+  return sectors.sort((a, b) => b.amount - a.amount);
 }
 
 // 更新饼图
 function updatePieChart() {
-  if (!pieChart.value || !showSectorDistribution.value) return
+  if (!pieChart.value || !showSectorDistribution.value) return;
 
-  const sectors = getSectorSummary()
-  const labels = sectors.map(s => s.sector)
-  const data = sectors.map(s => s.amount)
+  const sectors = getSectorSummary();
+  const labels = sectors.map((s) => s.sector);
+  const data = sectors.map((s) => s.amount);
 
   // 生成按成本占比渐变的彩虹颜色（清新明亮，相邻颜色有明显跨度）
   function generateGradientColors(sectors) {
-    const colors = []
+    const colors = [];
 
     sectors.forEach((sector, index) => {
       // 计算色相：均匀分布在彩虹色谱上（0-360度）
-      const hue = (index / sectors.length) * 360
+      const hue = (index / sectors.length) * 360;
 
       // 饱和度：使用中等饱和度（50-60%），颜色更鲜艳
-      const saturation = 55
+      const saturation = 55;
 
       // 亮度：根据占比调整，占比越大亮度越低（颜色越深）
-      const maxPercentage = sectors[0].percentage
-      const minPercentage = sectors[sectors.length - 1].percentage
+      const maxPercentage = sectors[0].percentage;
+      const minPercentage = sectors[sectors.length - 1].percentage;
 
-      let lightness
+      let lightness;
       if (maxPercentage === minPercentage) {
-        lightness = 65
+        lightness = 65;
       } else {
         // 占比越大亮度越低（40-75%之间）
-        const ratio = sector.percentage / maxPercentage
-        lightness = 75 - ratio * 35
+        const ratio = sector.percentage / maxPercentage;
+        lightness = 75 - ratio * 35;
       }
 
-      colors.push(`hsl(${hue}, ${saturation}%, ${lightness}%)`)
-    })
+      colors.push(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+    });
 
-    return colors
+    return colors;
   }
 
   // 销毁旧图表
   if (chartInstance) {
-    chartInstance.destroy()
+    chartInstance.destroy();
   }
 
   // 创建新图表
-  const backgroundColors = generateGradientColors(sectors)
+  const backgroundColors = generateGradientColors(sectors);
   chartInstance = new Chart(pieChart.value, {
-    type: 'doughnut',
+    type: "doughnut",
     data: {
       labels: labels,
-      datasets: [{
-        data: data,
-        backgroundColor: backgroundColors,
-        borderColor: '#fff',
-        borderWidth: 3,
-        hoverOffset: 15
-      }]
+      datasets: [
+        {
+          data: data,
+          backgroundColor: backgroundColors,
+          borderColor: "#fff",
+          borderWidth: 3,
+          hoverOffset: 15,
+        },
+      ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: '50%',
+      cutout: "50%",
       plugins: {
         legend: {
-          display: false
+          display: false,
         },
         tooltip: {
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          backgroundColor: "rgba(0, 0, 0, 0.8)",
           padding: 12,
           cornerRadius: 8,
           callbacks: {
-            label: function(context) {
-              const label = context.label || ''
-              const value = context.raw || 0
-              const percentage = sectors[context.dataIndex].percentage.toFixed(2)
-              return `${label}: ¥${value.toFixed(2)} (${percentage}%)`
-            }
-          }
-        }
+            label: function (context) {
+              const label = context.label || "";
+              const value = context.raw || 0;
+              const percentage =
+                sectors[context.dataIndex].percentage.toFixed(2);
+              return `${label}: ¥${value.toFixed(2)} (${percentage}%)`;
+            },
+          },
+        },
       },
       animation: {
         animateRotate: true,
-        animateScale: true
-      }
-    }
-  })
+        animateScale: true,
+      },
+    },
+  });
 
   // 生成自定义图例
-  generateCustomLegend(sectors, backgroundColors)
+  generateCustomLegend(sectors, backgroundColors);
 }
 
 // 生成自定义图例
 function generateCustomLegend(sectors, backgroundColors) {
-  if (!legendContainer.value) return
+  if (!legendContainer.value) return;
 
   // 清空容器
-  legendContainer.value.innerHTML = ''
+  legendContainer.value.innerHTML = "";
 
   // 每列6个图示
-  const itemsPerColumn = 6
-  const columns = Math.ceil(sectors.length / itemsPerColumn)
+  const itemsPerColumn = 6;
+  const columns = Math.ceil(sectors.length / itemsPerColumn);
 
   // 创建容器
-  const legendWrapper = document.createElement('div')
-  legendWrapper.style.display = 'flex'
-  legendWrapper.style.flexDirection = 'row'
-  legendWrapper.style.gap = '20px'
-  legendWrapper.style.alignItems = 'flex-start'
-  legendWrapper.style.width = '100%'
-  legendWrapper.style.flexWrap = 'wrap'
+  const legendWrapper = document.createElement("div");
+  legendWrapper.style.display = "flex";
+  legendWrapper.style.flexDirection = "row";
+  legendWrapper.style.gap = "20px";
+  legendWrapper.style.alignItems = "flex-start";
+  legendWrapper.style.width = "100%";
+  legendWrapper.style.flexWrap = "wrap";
 
   // 生成列
   for (let i = 0; i < columns; i++) {
-    const column = document.createElement('div')
-    column.style.display = 'flex'
-    column.style.flexDirection = 'column'
-    column.style.gap = '12px'
+    const column = document.createElement("div");
+    column.style.display = "flex";
+    column.style.flexDirection = "column";
+    column.style.gap = "12px";
 
     // 生成当前列的图例项
-    const startIndex = i * itemsPerColumn
-    const endIndex = Math.min(startIndex + itemsPerColumn, sectors.length)
+    const startIndex = i * itemsPerColumn;
+    const endIndex = Math.min(startIndex + itemsPerColumn, sectors.length);
 
     for (let j = startIndex; j < endIndex; j++) {
-      const sector = sectors[j]
-      const item = document.createElement('div')
-      item.style.display = 'flex'
-      item.style.alignItems = 'center'
-      item.style.gap = '10px'
-      item.style.fontSize = '12px'
-      item.style.whiteSpace = 'nowrap'
+      const sector = sectors[j];
+      const item = document.createElement("div");
+      item.style.display = "flex";
+      item.style.alignItems = "center";
+      item.style.gap = "10px";
+      item.style.fontSize = "12px";
+      item.style.whiteSpace = "nowrap";
 
       // 颜色块
-      const colorBox = document.createElement('div')
-      colorBox.style.width = '16px'
-      colorBox.style.height = '16px'
-      colorBox.style.borderRadius = '6px'
-      colorBox.style.backgroundColor = backgroundColors[j]
+      const colorBox = document.createElement("div");
+      colorBox.style.width = "16px";
+      colorBox.style.height = "16px";
+      colorBox.style.borderRadius = "6px";
+      colorBox.style.backgroundColor = backgroundColors[j];
 
       // 文本
-      const text = document.createElement('span')
-      const percentage = sector.percentage.toFixed(1)
-      text.textContent = `${sector.sector} (${percentage}%)`
+      const text = document.createElement("span");
+      const percentage = sector.percentage.toFixed(1);
+      text.textContent = `${sector.sector} (${percentage}%)`;
 
-      item.appendChild(colorBox)
-      item.appendChild(text)
-      column.appendChild(item)
+      item.appendChild(colorBox);
+      item.appendChild(text);
+      column.appendChild(item);
     }
 
-    legendWrapper.appendChild(column)
+    legendWrapper.appendChild(column);
   }
 
-  legendContainer.value.appendChild(legendWrapper)
+  legendContainer.value.appendChild(legendWrapper);
 }
 
 const columns = [
-  { key: 'tags', label: '板块', sortable: true },
-  { key: 'name', label: '名称', sortable: true },
-  { key: 'daily_change_rate', label: '最新涨幅', sortable: true },
-  { key: 'estimate_change_rate', label: '估算涨幅', sortable: true },
-  { key: 'estimate_profit', label: '今日收益', sortable: true },
-  { key: 'one_month_rate', label: '近1月收益率', sortable: true },
-  { key: 'profit', label: '持有收益', sortable: true },
-  { key: 'current_value', label: '持仓金额', sortable: true },
-  { key: 'cost', label: '持仓成本', sortable: true }
-]
+  { key: "tags", label: "板块", sortable: true },
+  { key: "name", label: "名称", sortable: true },
+  { key: "daily_change_rate", label: "最新涨幅", sortable: true },
+  { key: "estimate_change_rate", label: "估算涨幅", sortable: true },
+  { key: "estimate_profit", label: "今日收益", sortable: true },
+  { key: "one_month_rate", label: "近1月收益率", sortable: true },
+  { key: "profit", label: "持有收益", sortable: true },
+  { key: "current_value", label: "持仓金额", sortable: true },
+  { key: "cost", label: "持仓成本", sortable: true },
+];
 
 function isUpdatedToday(holding) {
-  const fsrq = holding.fsrq || ''
-  if (!fsrq) return false
-  return fsrq === getCurrentDate()
+  const fsrq = holding.fsrq || "";
+  if (!fsrq) return false;
+  return fsrq === getCurrentDate();
 }
 
 function getMonthDay(dateStr) {
-  if (!dateStr) return ''
-  const dateParts = dateStr.split('-')
+  if (!dateStr) return "";
+  const dateParts = dateStr.split("-");
   if (dateParts.length >= 3) {
-    return `${dateParts[1]}-${dateParts[2]}`
+    return `${dateParts[1]}-${dateParts[2]}`;
   }
-  return ''
+  return "";
 }
 
 function calculateProfit(holding) {
-  return parseFloat(holding.profit_loss) || 0
+  return parseFloat(holding.profit_loss) || 0;
 }
 
 function calculateProfitRate(holding) {
-  return parseFloat(holding.profit_loss_rate) || 0
+  return parseFloat(holding.profit_loss_rate) || 0;
 }
 
 function getTagColorIndex(tag) {
-  const colors = ['blue', 'green', 'orange', 'purple', 'teal', 'pink']
-  let hash = 0
+  const colors = ["blue", "green", "orange", "purple", "teal", "pink"];
+  let hash = 0;
   for (let i = 0; i < tag.length; i++) {
-    hash = tag.charCodeAt(i) + ((hash << 5) - hash)
+    hash = tag.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return colors[Math.abs(hash) % colors.length]
+  return colors[Math.abs(hash) % colors.length];
 }
 
 function formatAmount(amount) {
-  return parseFloat(amount).toLocaleString('zh-CN', {
+  return parseFloat(amount).toLocaleString("zh-CN", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })
+    maximumFractionDigits: 2,
+  });
 }
 
 defineExpose({
   loadHoldings,
-  loadPlatforms
-})
+  loadPlatforms,
+});
 </script>
 
 <style scoped>
@@ -1006,8 +1119,6 @@ defineExpose({
   color: #be185d;
   border-color: #fbcfe8;
 }
-
-
 
 .pie-chart-wrapper {
   position: relative;

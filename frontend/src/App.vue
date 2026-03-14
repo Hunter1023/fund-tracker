@@ -18,8 +18,17 @@
     <div class="search-section">
       <div class="search-container">
         <span class="search-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
-            <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            fill="currentColor"
+            class="bi bi-search"
+            viewBox="0 0 16 16"
+          >
+            <path
+              d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"
+            />
           </svg>
         </span>
         <input
@@ -47,8 +56,16 @@
                 <div class="fund-code">{{ fund.fund_code }}</div>
               </div>
               <div class="fund-badges">
-                <span v-if="isInWatchlist(fund.fund_code)" class="badge badge-watchlist">已在自选</span>
-                <span v-if="isInHoldings(fund.fund_code)" class="badge badge-holding">已在持仓</span>
+                <span
+                  v-if="isInWatchlist(fund.fund_code)"
+                  class="badge badge-watchlist"
+                  >已在自选</span
+                >
+                <span
+                  v-if="isInHoldings(fund.fund_code)"
+                  class="badge badge-holding"
+                  >已在持仓</span
+                >
               </div>
             </div>
             <div class="dropdown-item-actions">
@@ -121,8 +138,11 @@
                 @input="filterTags"
                 @focus="showDropdown = true"
                 @blur="hideDropdown"
+              />
+              <div
+                class="tag-dropdown"
+                v-if="showDropdown && filteredTags.length > 0"
               >
-              <div class="tag-dropdown" v-if="showDropdown && filteredTags.length > 0">
                 <div
                   v-for="tag in filteredTags"
                   :key="tag"
@@ -150,8 +170,16 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeTagsModal">取消</button>
-          <button class="btn btn-primary" @click="confirmTags" :disabled="!selectedFund">确认</button>
+          <button class="btn btn-secondary" @click="closeTagsModal">
+            取消
+          </button>
+          <button
+            class="btn btn-primary"
+            @click="confirmTags"
+            :disabled="!selectedFund"
+          >
+            确认
+          </button>
         </div>
       </div>
     </div>
@@ -167,265 +195,292 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, watch } from 'vue'
-import FundDetailModal from './components/FundDetailModal.vue'
-import Holdings from './components/Holdings.vue'
-import Watchlist from './components/Watchlist.vue'
-import { fundApi, holdingApi, tagsApi, watchlistApi } from './services/api'
+import { nextTick, onMounted, ref, watch } from "vue";
+import FundDetailModal from "./components/FundDetailModal.vue";
+import Holdings from "./components/Holdings.vue";
+import Watchlist from "./components/Watchlist.vue";
+import { fundApi, holdingApi, tagsApi, watchlistApi } from "./services/api";
 
-const activeTab = ref('holding')
-const loading = ref(false)
-const searchKeyword = ref('')
-const searchResults = ref([])
-const showSearchDropdown = ref(false)
-const watchlistRef = ref(null)
-const holdingsRef = ref(null)
-const watchlistFunds = ref([])
-const holdingsFunds = ref([])
+const activeTab = ref("holding");
+const loading = ref(false);
+const searchKeyword = ref("");
+const searchResults = ref([]);
+const showSearchDropdown = ref(false);
+const watchlistRef = ref(null);
+const holdingsRef = ref(null);
+const watchlistFunds = ref([]);
+const holdingsFunds = ref([]);
 
 // 基金详情模态框
-const showFundDetailModal = ref(false)
-const currentFund = ref(null)
-const currentHolding = ref(null)
+const showFundDetailModal = ref(false);
+const currentFund = ref(null);
+const currentHolding = ref(null);
 
 // 标签输入模态框
-const showTagsModal = ref(false)
-const selectedFund = ref(null)
-const selectedAction = ref('')
-const tagsInput = ref('')
-const modalTitle = ref('')
-const existingTags = ref([])
-const showDropdown = ref(false)
-const filteredTags = ref([])
+const showTagsModal = ref(false);
+const selectedFund = ref(null);
+const selectedAction = ref("");
+const tagsInput = ref("");
+const modalTitle = ref("");
+const existingTags = ref([]);
+const showDropdown = ref(false);
+const filteredTags = ref([]);
 
-let searchTimeout = null
+let searchTimeout = null;
 
 function showLoading() {
-  loading.value = true
+  loading.value = true;
 }
 
 function hideLoading() {
-  loading.value = false
+  loading.value = false;
 }
 
 // 避免重复请求的标志
-let isLoadingData = false
+let isLoadingData = false;
 
 async function loadWatchlistAndHoldings() {
-  if (isLoadingData) return
+  if (isLoadingData) return;
 
-  isLoadingData = true
+  isLoadingData = true;
   try {
     // 加载自选基金
     if (watchlistRef.value && watchlistRef.value.funds) {
-      watchlistFunds.value = watchlistRef.value.funds
+      watchlistFunds.value = watchlistRef.value.funds;
     } else {
-      const watchlistResponse = await watchlistApi.get()
-      watchlistFunds.value = watchlistResponse.data || []
+      const watchlistResponse = await watchlistApi.get();
+      watchlistFunds.value = watchlistResponse.data || [];
     }
 
     // 加载持仓基金
     if (holdingsRef.value && holdingsRef.value.holdings) {
-      holdingsFunds.value = holdingsRef.value.holdings
+      holdingsFunds.value = holdingsRef.value.holdings;
     } else {
-      const holdingsResponse = await holdingApi.get()
-      holdingsFunds.value = holdingsResponse.data || []
+      const holdingsResponse = await holdingApi.get();
+      holdingsFunds.value = holdingsResponse.data || [];
     }
   } catch (error) {
-    console.error('加载自选和持仓失败:', error)
+    console.error("加载自选和持仓失败:", error);
   } finally {
-    isLoadingData = false
+    isLoadingData = false;
   }
 }
 
 async function handleSearch() {
-  const keyword = searchKeyword.value.trim()
+  const keyword = searchKeyword.value.trim();
 
   if (searchTimeout) {
-    clearTimeout(searchTimeout)
+    clearTimeout(searchTimeout);
   }
 
   if (!keyword) {
-    searchResults.value = []
-    showSearchDropdown.value = false
-    return
+    searchResults.value = [];
+    showSearchDropdown.value = false;
+    return;
   }
 
   searchTimeout = setTimeout(async () => {
     try {
       // 先加载自选和持仓数据，用于判断搜索结果是否已存在
-      await loadWatchlistAndHoldings()
+      await loadWatchlistAndHoldings();
 
-      const response = await fundApi.search(keyword)
-      searchResults.value = response.data
-      showSearchDropdown.value = true
+      const response = await fundApi.search(keyword);
+      searchResults.value = response.data;
+      showSearchDropdown.value = true;
     } catch (error) {
-      console.error('搜索失败:', error)
+      console.error("搜索失败:", error);
     }
-  }, 150)
+  }, 150);
 }
 
 function isInWatchlist(fundCode) {
-  return watchlistFunds.value.some(fund => fund.fund_code === fundCode)
+  return watchlistFunds.value.some((fund) => fund.fund_code === fundCode);
 }
 
 function isInHoldings(fundCode) {
-  return holdingsFunds.value.some(fund => fund.fund_code === fundCode)
+  return holdingsFunds.value.some((fund) => fund.fund_code === fundCode);
 }
 
 // 打开基金详情模态框用于添加持仓
 function openFundDetailForHolding(fund) {
   currentFund.value = {
     fund_code: fund.fund_code,
-    fund_name: fund.fund_name
-  }
-  currentHolding.value = null
-  showFundDetailModal.value = true
-  showSearchDropdown.value = false
+    fund_name: fund.fund_name,
+  };
+  currentHolding.value = null;
+  showFundDetailModal.value = true;
+  showSearchDropdown.value = false;
 }
 
 // 处理基金详情模态框确认
 async function handleDetailConfirm() {
-  await loadWatchlistAndHoldings()
+  await loadWatchlistAndHoldings();
   if (holdingsRef.value && holdingsRef.value.loadHoldings) {
-    await holdingsRef.value.loadHoldings()
+    await holdingsRef.value.loadHoldings();
   }
 }
 
 // 打开标签输入模态框
 function openTagsModal(fund, action) {
-  selectedFund.value = fund
-  selectedAction.value = action
-  tagsInput.value = ''
+  selectedFund.value = fund;
+  selectedAction.value = action;
+  tagsInput.value = "";
 
-  if (action === 'watchlist') {
-    modalTitle.value = '加入自选 - 选择板块标签'
+  if (action === "watchlist") {
+    modalTitle.value = "加入自选 - 选择板块标签";
   }
 
-  showTagsModal.value = true
+  showTagsModal.value = true;
   // 加载已存在的标签
-  loadExistingTags()
+  loadExistingTags();
   // 清空搜索结果，避免模态框打开时搜索结果仍然显示
-  showSearchDropdown.value = false
+  showSearchDropdown.value = false;
 }
 
 // 关闭标签输入模态框
 function closeTagsModal() {
-  showTagsModal.value = false
-  selectedFund.value = null
-  selectedAction.value = ''
-  tagsInput.value = ''
+  showTagsModal.value = false;
+  selectedFund.value = null;
+  selectedAction.value = "";
+  tagsInput.value = "";
 }
 
 // 加载已存在的标签
 async function loadExistingTags() {
   try {
-    const response = await tagsApi.get()
-    existingTags.value = response.data.tags
+    const response = await tagsApi.get();
+    existingTags.value = response.data.tags;
   } catch (error) {
-    console.error('加载标签失败:', error)
+    console.error("加载标签失败:", error);
   }
 }
 
 // 过滤标签
 function filterTags() {
-  const input = tagsInput.value.trim()
+  const input = tagsInput.value.trim();
   if (!input) {
-    filteredTags.value = existingTags.value
-    return
+    filteredTags.value = existingTags.value;
+    return;
   }
 
   // 过滤出包含输入内容的标签
-  filteredTags.value = existingTags.value.filter(tag =>
-    tag.toLowerCase().includes(input.toLowerCase())
-  )
-  showDropdown.value = filteredTags.value.length > 0
+  filteredTags.value = existingTags.value.filter((tag) =>
+    tag.toLowerCase().includes(input.toLowerCase()),
+  );
+  showDropdown.value = filteredTags.value.length > 0;
 }
 
 // 隐藏下拉菜单
 function hideDropdown() {
   // 延迟隐藏，以便可以点击下拉项
   setTimeout(() => {
-    showDropdown.value = false
-  }, 200)
+    showDropdown.value = false;
+  }, 200);
 }
 
 // 选择标签
 function selectTag(tag) {
-  const currentTags = tagsInput.value.trim()
-  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+  const currentTags = tagsInput.value.trim();
+  const tagsArray = currentTags
+    ? currentTags.split(",").map((t) => t.trim())
+    : [];
 
   if (!tagsArray.includes(tag)) {
-    tagsArray.push(tag)
-    tagsInput.value = tagsArray.join(', ')
+    tagsArray.push(tag);
+    tagsInput.value = tagsArray.join(", ");
   }
-  showDropdown.value = false
+  showDropdown.value = false;
 }
 
 // 添加标签
 function addTag(tag) {
-  const currentTags = tagsInput.value.trim()
-  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+  const currentTags = tagsInput.value.trim();
+  const tagsArray = currentTags
+    ? currentTags.split(",").map((t) => t.trim())
+    : [];
 
   if (!tagsArray.includes(tag)) {
-    tagsArray.push(tag)
-    tagsInput.value = tagsArray.join(', ')
+    tagsArray.push(tag);
+    tagsInput.value = tagsArray.join(", ");
   }
 }
 
 // 确认标签并执行操作
 async function confirmTags() {
-  if (!selectedFund.value) return
+  if (!selectedFund.value) return;
 
-  showLoading()
+  showLoading();
   try {
-    const tags = tagsInput.value.trim()
+    const tags = tagsInput.value.trim();
 
     // 加入自选
     if (watchlistRef.value && watchlistRef.value.addToWatchlist) {
-      await watchlistRef.value.addToWatchlist(selectedFund.value.fund_code, tags)
+      await watchlistRef.value.addToWatchlist(
+        selectedFund.value.fund_code,
+        tags,
+      );
       // 更新本地自选基金列表
-      await loadWatchlistAndHoldings()
+      await loadWatchlistAndHoldings();
     }
 
     // 关闭模态框
-    closeTagsModal()
+    closeTagsModal();
   } catch (error) {
-    console.error('操作失败:', error)
+    console.error("操作失败:", error);
   } finally {
-    hideLoading()
+    hideLoading();
   }
 }
 
 function handleClickOutside(event) {
-  const searchContainer = event.target.closest('.input-group')
+  const searchContainer = event.target.closest(".input-group");
   if (!searchContainer) {
-    searchResults.value = []
-    showSearchDropdown.value = false
+    searchResults.value = [];
+    showSearchDropdown.value = false;
   }
 }
 
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-})
-
-watch(activeTab, async (newTab) => {
-  await nextTick()
-  if (newTab === 'watchlist' && watchlistRef.value && watchlistRef.value.loadWatchlist) {
+// 初始化加载默认标签的数据
+onMounted(async () => {
+  await nextTick();
+  // 加载默认标签（holding）的数据
+  if (holdingsRef.value && holdingsRef.value.loadHoldings) {
     try {
-      await watchlistRef.value.loadWatchlist()
+      await holdingsRef.value.loadHoldings();
+      await holdingsRef.value.loadPlatforms();
     } catch (error) {
-      console.error('加载自选基金失败:', error)
-    }
-  } else if (newTab === 'holding' && holdingsRef.value && holdingsRef.value.loadHoldings) {
-    try {
-      await holdingsRef.value.loadHoldings()
-      await holdingsRef.value.loadPlatforms()
-    } catch (error) {
-      console.error('加载持仓基金失败:', error)
+      console.error("加载持仓基金失败:", error);
     }
   }
-}, { immediate: true })
+  document.addEventListener("click", handleClickOutside);
+});
+
+// 监听标签切换，只在切换时加载数据
+watch(activeTab, async (newTab) => {
+  await nextTick();
+  if (
+    newTab === "watchlist" &&
+    watchlistRef.value &&
+    watchlistRef.value.loadWatchlist
+  ) {
+    try {
+      await watchlistRef.value.loadWatchlist();
+    } catch (error) {
+      console.error("加载自选基金失败:", error);
+    }
+  } else if (
+    newTab === "holding" &&
+    holdingsRef.value &&
+    holdingsRef.value.loadHoldings
+  ) {
+    try {
+      await holdingsRef.value.loadHoldings();
+      await holdingsRef.value.loadPlatforms();
+    } catch (error) {
+      console.error("加载持仓基金失败:", error);
+    }
+  }
+});
 </script>
 
 <style scoped>
@@ -433,7 +488,9 @@ watch(activeTab, async (newTab) => {
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
 }
 
 .header-section {
