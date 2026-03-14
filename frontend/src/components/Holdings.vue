@@ -278,6 +278,7 @@ function openAddHolding() {
 // 组件挂载时自动加载数据
 onMounted(async () => {
   await loadHoldings()
+  await loadPlatforms()
   await nextTick()
   updatePieChart()
 })
