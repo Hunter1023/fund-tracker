@@ -1170,10 +1170,13 @@ def get_fund_complete_info(fund_code):
             """获取基金基本信息"""
             fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
             if fund:
+                # 从Watchlist表中获取标签信息
+                watchlist = db.query(Watchlist).filter(Watchlist.fund_id == fund.id).first()
+                tags = watchlist.tags if watchlist else ''
                 return {
                     'fund_code': fund.fund_code,
                     'fund_name': fund.fund_name,
-                    'tags': fund.tags
+                    'tags': tags
                 }
             return None
 
