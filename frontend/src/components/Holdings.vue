@@ -198,7 +198,7 @@
 
     <PlatformManager
       v-model:show="showPlatformManager"
-      @update="loadPlatforms"
+      @update="handlePlatformUpdate"
     />
   </div>
 </template>
@@ -273,6 +273,11 @@ function handleSelectFund(fund) {
 
 function openAddHolding() {
   showSearchModal.value = true
+}
+
+async function handlePlatformUpdate() {
+  await loadPlatforms()
+  await loadHoldings()
 }
 
 // 组件挂载时自动加载数据
