@@ -1154,6 +1154,116 @@ def trigger_preload_history():
         logger.error(f"启动预加载任务失败: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/fund/<fund_code>/complete', methods=['GET'])
+def get_fund_complete_info(fund_code):
+    """
+    获取基金完整信息，包括基本信息、历史净值和交易记录
+    :param fund_code: 基金代码
+    :return: 基金完整信息
+    """
+    db = next(get_db())
+    try:
+        # 并行获取数据
+        from concurrent.futures import ThreadPoolExecutor
+
+        def get_basic_info():
+            """获取基金基本信息"""
+            fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+            if fund:
+                return {
+                    'fund_code': fund.fund_code,
+                    'fund_name': fund.fund_name,
+                    'tags': fund.tags
+                }
+            return None
+
+        def get_history_data():
+            """获取基金历史净值"""
+            # 先尝试从数据库获取
+            fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+            if fund and fund.realtime_data and fund.realtime_data.net_values:
+                # 检查数据是否过期（超过1天）
+                updated_at = fund.realtime_data.updated_at
+                if updated_at and (datetime.now() - updated_at) < timedelta(days=1):
+                    # 数据未过期，直接返回数据库中的数据
+                    net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
+                    return {
+                        'fund_code': fund_code,
+                        'net_values': net_values,
+                        'one_month_rate': fund.realtime_data.one_month_rate or 0,
+                        'three_month_rate': fund.realtime_data.three_month_rate or 0,
+                        'one_year_rate': fund.realtime_data.one_year_rate or 0,
+                        'daily_change_rate': fund.realtime_data.daily_change_rate or 0,
+                        'fsrq': fund.realtime_data.fsrq or '',
+                        'unit_net_value': fund.realtime_data.unit_net_value or 0
+                    }
+
+            # 数据不存在或已过期，从第三方接口获取
+            history_data = DataFetcher.get_fund_history(fund_code)
+
+            # 保存到数据库
+            if fund:
+                if not fund.realtime_data:
+                    fund.realtime_data = FundRealtimeData(fund_id=fund.id)
+                fund.realtime_data.net_values = json.dumps(history_data.get('net_values', []))
+                fund.realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
+                fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
+                fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
+                fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
+                fund.realtime_data.fsrq = history_data.get('fsrq', '')
+                fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+                fund.realtime_data.updated_at = datetime.now()
+                db.commit()
+
+            return history_data
+
+        def get_transactions():
+            """获取基金交易记录"""
+            # 先获取基金ID
+            fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+            if not fund:
+                return []
+
+            # 通过fund_id查询交易记录
+            transactions = db.query(Transaction).filter(
+                Transaction.fund_id == fund.id
+            ).order_by(Transaction.transaction_date.desc()).all()
+
+            return [{
+                'id': t.id,
+                'fund_code': fund_code,
+                'type': t.transaction_type,
+                'amount': t.amount,
+                'shares': t.shares,
+                'price': t.price,
+                'date': t.transaction_date.strftime('%Y-%m-%d %H:%M:%S'),
+                'platform': '其他'  # Transaction表中没有platform字段，默认为其他
+            } for t in transactions]
+
+        # 并行执行
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_basic = executor.submit(get_basic_info)
+            future_history = executor.submit(get_history_data)
+            future_transactions = executor.submit(get_transactions)
+
+            basic_info = future_basic.result()
+            history_data = future_history.result()
+            transactions = future_transactions.result()
+
+        # 构建响应
+        response = {
+            'fund_info': basic_info,
+            'history_data': history_data,
+            'transactions': transactions
+        }
+
+        return jsonify(response)
+    except Exception as e:
+        logger.error(f"获取基金完整信息失败: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        db.close()
+
 @app.route('/api/fund/add', methods=['POST'])
 def add_fund():
     """
