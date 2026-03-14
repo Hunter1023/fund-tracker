@@ -136,6 +136,76 @@ def update_all_funds_data():
 # 添加定时任务：每10分钟更新一次
 scheduler.add_job(update_all_funds_data, 'interval', minutes=10, id='update_funds_data')
 
+# 定时任务：预加载所有基金的历史净值数据
+@retry_db_operation()
+def preload_all_funds_history():
+    """
+    定时任务：预加载所有自选基金和持仓基金的历史净值数据到数据库
+    每天执行一次，确保历史净值数据已缓存
+    """
+    print(f"[{datetime.now()}] 开始预加载基金历史净值数据...")
+    db = next(get_db())
+    try:
+        # 获取所有需要预加载的基金（自选基金 + 持仓基金）
+        watchlist_funds = db.query(Watchlist).all()
+        holding_funds = db.query(FundHolding).all()
+
+        fund_codes = set()
+        for item in watchlist_funds:
+            if item.fund:
+                fund_codes.add(item.fund.fund_code)
+        for holding in holding_funds:
+            if holding.fund:
+                fund_codes.add(holding.fund.fund_code)
+
+        print(f"需要预加载 {len(fund_codes)} 个基金的历史净值数据")
+
+        # 预加载每个基金的历史净值数据
+        for fund_code in fund_codes:
+            try:
+                fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+                if not fund:
+                    continue
+
+                # 检查是否已有未过期的数据
+                if fund.realtime_data and fund.realtime_data.net_values:
+                    updated_at = fund.realtime_data.updated_at
+                    if updated_at and (datetime.now() - updated_at) < timedelta(days=1):
+                        print(f"基金 {fund_code} 的历史净值数据已是最新，跳过")
+                        continue
+
+                # 从第三方接口获取历史净值数据
+                history_data = DataFetcher.get_fund_history(fund_code)
+
+                # 保存到数据库
+                if not fund.realtime_data:
+                    fund.realtime_data = FundRealtimeData(fund_id=fund.id)
+                fund.realtime_data.net_values = json.dumps(history_data.get('net_values', []))
+                fund.realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
+                fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
+                fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
+                fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
+                fund.realtime_data.fsrq = history_data.get('fsrq', '')
+                fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+                fund.realtime_data.updated_at = datetime.now()
+                db.commit()
+
+                print(f"成功预加载基金 {fund_code} 的历史净值数据")
+            except Exception as e:
+                print(f"预加载基金 {fund_code} 历史净值数据失败: {e}")
+                db.rollback()
+
+        print(f"[{datetime.now()}] 基金历史净值数据预加载完成")
+    except Exception as e:
+        print(f"预加载任务执行失败: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        db.close()
+
+# 添加定时任务：每天凌晨2点预加载历史净值数据
+scheduler.add_job(preload_all_funds_history, 'cron', hour=2, minute=0, id='preload_funds_history')
+
 # 辅助函数：判断是否为交易日
 def is_trading_day(fsrq: str) -> bool:
     """
@@ -999,11 +1069,90 @@ def get_fund_detail(fund_code):
 def get_fund_history(fund_code):
     """
     获取基金历史净值数据
+    优先从数据库读取，如果没有或数据过期则从第三方接口获取
     :param fund_code: 基金代码
     :return: 历史净值数据和近1个月涨幅
     """
-    history_data = DataFetcher.get_fund_history(fund_code)
-    return jsonify(history_data)
+    db = next(get_db())
+    try:
+        # 先尝试从数据库获取
+        fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+        if fund and fund.realtime_data and fund.realtime_data.net_values:
+            # 检查数据是否过期（超过1天）
+            updated_at = fund.realtime_data.updated_at
+            if updated_at and (datetime.now() - updated_at) < timedelta(days=1):
+                # 数据未过期，直接返回数据库中的数据
+                net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
+                return jsonify({
+                    'fund_code': fund_code,
+                    'net_values': net_values,
+                    'one_month_rate': fund.realtime_data.one_month_rate or 0,
+                    'three_month_rate': fund.realtime_data.three_month_rate or 0,
+                    'one_year_rate': fund.realtime_data.one_year_rate or 0,
+                    'daily_change_rate': fund.realtime_data.daily_change_rate or 0,
+                    'fsrq': fund.realtime_data.fsrq or '',
+                    'unit_net_value': fund.realtime_data.unit_net_value or 0
+                })
+
+        # 数据不存在或已过期，从第三方接口获取
+        history_data = DataFetcher.get_fund_history(fund_code)
+
+        # 保存到数据库
+        if fund:
+            if not fund.realtime_data:
+                fund.realtime_data = FundRealtimeData(fund_id=fund.id)
+            fund.realtime_data.net_values = json.dumps(history_data.get('net_values', []))
+            fund.realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
+            fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
+            fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
+            fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
+            fund.realtime_data.fsrq = history_data.get('fsrq', '')
+            fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+            fund.realtime_data.updated_at = datetime.now()
+            db.commit()
+
+        return jsonify(history_data)
+    except Exception as e:
+        logger.error(f"获取基金历史净值失败: {e}")
+        # 如果出错，尝试返回数据库中的旧数据（如果有）
+        if fund and fund.realtime_data and fund.realtime_data.net_values:
+            net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
+            return jsonify({
+                'fund_code': fund_code,
+                'net_values': net_values,
+                'one_month_rate': fund.realtime_data.one_month_rate or 0,
+                'three_month_rate': fund.realtime_data.three_month_rate or 0,
+                'one_year_rate': fund.realtime_data.one_year_rate or 0,
+                'daily_change_rate': fund.realtime_data.daily_change_rate or 0,
+                'fsrq': fund.realtime_data.fsrq or '',
+                'unit_net_value': fund.realtime_data.unit_net_value or 0
+            })
+        return jsonify({'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/fund/preload-history', methods=['POST'])
+def trigger_preload_history():
+    """
+    手动触发预加载所有基金的历史净值数据
+    :return: 预加载结果
+    """
+    try:
+        # 在后台线程中执行预加载，避免阻塞请求
+        def run_preload():
+            preload_all_funds_history()
+
+        thread = threading.Thread(target=run_preload)
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({
+            'success': True,
+            'message': '历史净值预加载任务已启动，请在后台查看进度'
+        })
+    except Exception as e:
+        logger.error(f"启动预加载任务失败: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/fund/add', methods=['POST'])
 def add_fund():
