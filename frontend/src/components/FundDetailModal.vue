@@ -1,9 +1,17 @@
 <template>
-  <div class="modal-overlay" :class="{ show: show }" :style="{ display: show ? 'flex' : 'none' }">
+  <div
+    class="modal-overlay"
+    :class="{ show: show }"
+    :style="{ display: show ? 'flex' : 'none' }"
+  >
     <div class="modal-container">
       <div class="modal-header">
         <h3 class="modal-title">基金详情</h3>
-        <button type="button" class="close-btn" @click="$emit('update:show', false)">
+        <button
+          type="button"
+          class="close-btn"
+          @click="$emit('update:show', false)"
+        >
           <i class="bi bi-x-lg"></i>
         </button>
       </div>
@@ -14,7 +22,12 @@
             <div class="fund-tags" :class="{ 'no-tags': !fundTags }">
               <span class="tag-item" v-if="fundTags">{{ fundTags }}</span>
               <span class="tag-item no-tag" v-else>未分类</span>
-              <button type="button" class="edit-tag-btn" @click="showEditTagModal" title="修改板块">
+              <button
+                type="button"
+                class="edit-tag-btn"
+                @click="showEditTagModal"
+                title="修改板块"
+              >
                 <i class="bi bi-pencil-square"></i>
               </button>
             </div>
@@ -25,7 +38,11 @@
         <div class="holding-info" v-if="holdingData">
           <div class="info-row">
             <span class="info-label">持仓金额</span>
-            <span class="info-value">¥{{ formatAmount(holdingData.current_value || holdingData.cost) }}</span>
+            <span class="info-value"
+              >¥{{
+                formatAmount(holdingData.current_value || holdingData.cost)
+              }}</span
+            >
           </div>
           <div class="info-row">
             <span class="info-label">持有份额</span>
@@ -33,7 +50,9 @@
           </div>
           <div class="info-row">
             <span class="info-label">平均成本</span>
-            <span class="info-value">¥{{ formatAmount4(holdingData.avg_cost) }}</span>
+            <span class="info-value"
+              >¥{{ formatAmount4(holdingData.avg_cost) }}</span
+            >
           </div>
         </div>
 
@@ -106,7 +125,7 @@
                   placeholder="请输入加仓金额"
                   min="0"
                   step="0.01"
-                >
+                />
                 <div v-if="validationErrors.buyAmount" class="invalid-feedback">
                   {{ validationErrors.buyAmount }}
                 </div>
@@ -118,7 +137,7 @@
                   class="form-input"
                   v-model="buyDate"
                   :max="today"
-                >
+                />
               </div>
             </div>
             <div v-else-if="activeTab === 'sell'">
@@ -132,11 +151,14 @@
                   placeholder="请输入减仓份额"
                   min="0"
                   step="0.01"
-                >
+                />
                 <div v-if="holdingData" class="hint-text">
                   可用份额：{{ holdingData.shares.toFixed(2) }}
                 </div>
-                <div v-if="validationErrors.sellShares" class="invalid-feedback">
+                <div
+                  v-if="validationErrors.sellShares"
+                  class="invalid-feedback"
+                >
                   {{ validationErrors.sellShares }}
                 </div>
               </div>
@@ -147,17 +169,18 @@
                   class="form-input"
                   v-model="sellDate"
                   :max="today"
-                >
+                />
               </div>
             </div>
             <div v-else-if="activeTab === 'edit'" class="form-section">
               <div class="form-group">
                 <label class="form-label">平台</label>
-                <select
-                  class="form-input"
-                  v-model="editPlatform"
-                >
-                  <option v-for="platform in platforms" :key="platform" :value="platform">
+                <select class="form-input" v-model="editPlatform">
+                  <option
+                    v-for="platform in platforms"
+                    :key="platform"
+                    :value="platform"
+                  >
                     {{ platform }}
                   </option>
                 </select>
@@ -172,8 +195,11 @@
                   placeholder="请输入持仓金额"
                   min="0"
                   step="0.01"
+                />
+                <div
+                  v-if="validationErrors.editAmount"
+                  class="invalid-feedback"
                 >
-                <div v-if="validationErrors.editAmount" class="invalid-feedback">
                   {{ validationErrors.editAmount }}
                 </div>
               </div>
@@ -186,16 +212,24 @@
                   v-model="editProfit"
                   placeholder="请输入持有收益"
                   step="0.01"
+                />
+                <div
+                  v-if="validationErrors.editProfit"
+                  class="invalid-feedback"
                 >
-                <div v-if="validationErrors.editProfit" class="invalid-feedback">
                   {{ validationErrors.editProfit }}
                 </div>
               </div>
               <div class="hint-text">
-                当前持仓金额：¥{{ formatAmount(holdingData.current_value || holdingData.cost) }}，持有收益：¥{{ formatAmount(holdingData.profit_loss) }}
+                当前持仓金额：¥{{
+                  formatAmount(holdingData.current_value || holdingData.cost)
+                }}，持有收益：¥{{ formatAmount(holdingData.profit_loss) }}
               </div>
             </div>
-            <div v-else-if="activeTab === 'delete'" class="delete-confirm-section">
+            <div
+              v-else-if="activeTab === 'delete'"
+              class="delete-confirm-section"
+            >
               <div class="delete-warning">
                 <i class="bi bi-exclamation-triangle"></i>
                 <span>确定要删除该基金的持仓吗？此操作不可恢复。</span>
@@ -214,8 +248,11 @@
                     @input="filterTags"
                     @focus="showDropdown = true"
                     @blur="hideDropdown"
+                  />
+                  <div
+                    class="tag-dropdown"
+                    v-if="showDropdown && filteredTags.length > 0"
                   >
-                  <div class="tag-dropdown" v-if="showDropdown && filteredTags.length > 0">
                     <div
                       v-for="tag in filteredTags"
                       :key="tag"
@@ -245,7 +282,10 @@
                 </div>
               </div>
             </div>
-            <div v-if="validationErrors.general" class="alert alert-danger mt-3">
+            <div
+              v-if="validationErrors.general"
+              class="alert alert-danger mt-3"
+            >
               {{ validationErrors.general }}
             </div>
           </div>
@@ -264,11 +304,12 @@
           <div v-else class="add-holding-form">
             <div class="form-group">
               <label class="form-label">平台</label>
-              <select
-                class="form-input"
-                v-model="addPlatform"
-              >
-                <option v-for="platform in platforms" :key="platform" :value="platform">
+              <select class="form-input" v-model="addPlatform">
+                <option
+                  v-for="platform in platforms"
+                  :key="platform"
+                  :value="platform"
+                >
                   {{ platform }}
                 </option>
               </select>
@@ -285,8 +326,11 @@
                   @input="filterAddTags"
                   @focus="showAddDropdown = true"
                   @blur="hideAddDropdown"
+                />
+                <div
+                  class="tag-dropdown"
+                  v-if="showAddDropdown && filteredAddTags.length > 0"
                 >
-                <div class="tag-dropdown" v-if="showAddDropdown && filteredAddTags.length > 0">
                   <div
                     v-for="tag in filteredAddTags"
                     :key="tag"
@@ -325,8 +369,11 @@
                 placeholder="请输入持仓金额"
                 min="0"
                 step="0.01"
+              />
+              <div
+                v-if="validationErrors.addCurrentValue"
+                class="invalid-feedback"
               >
-              <div v-if="validationErrors.addCurrentValue" class="invalid-feedback">
                 {{ validationErrors.addCurrentValue }}
               </div>
             </div>
@@ -339,7 +386,7 @@
                 v-model="addProfit"
                 placeholder="请输入持有收益"
                 step="0.01"
-              >
+              />
               <div v-if="validationErrors.addProfit" class="invalid-feedback">
                 {{ validationErrors.addProfit }}
               </div>
@@ -347,16 +394,30 @@
           </div>
         </div>
       </div>
-      <div class="modal-footer" v-if="showOperation || showAddHoldingForm || showTagModal">
-        <button type="button" class="btn btn-secondary" @click="handleCancel">取消</button>
-        <button type="button" class="btn btn-primary" @click="handleConfirm" :disabled="loading">
-          {{ loading ? '处理中...' : '确认' }}
+      <div
+        class="modal-footer"
+        v-if="showOperation || showAddHoldingForm || showTagModal"
+      >
+        <button type="button" class="btn btn-secondary" @click="handleCancel">
+          取消
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          @click="handleConfirm"
+          :disabled="loading"
+        >
+          {{ loading ? "处理中..." : "确认" }}
         </button>
       </div>
     </div>
 
     <!-- 板块修改弹窗 -->
-    <div class="modal-overlay" :class="{ show: showTagModal }" :style="{ display: showTagModal ? 'flex' : 'none' }">
+    <div
+      class="modal-overlay"
+      :class="{ show: showTagModal }"
+      :style="{ display: showTagModal ? 'flex' : 'none' }"
+    >
       <div class="modal-container tag-modal">
         <div class="modal-header">
           <h3 class="modal-title">修改板块</h3>
@@ -378,8 +439,11 @@
                   @input="filterTags"
                   @focus="showDropdown = true"
                   @blur="hideDropdown"
+                />
+                <div
+                  class="tag-dropdown"
+                  v-if="showDropdown && filteredTags.length > 0"
                 >
-                <div class="tag-dropdown" v-if="showDropdown && filteredTags.length > 0">
                   <div
                     v-for="tag in filteredTags"
                     :key="tag"
@@ -408,15 +472,29 @@
                 </span>
               </div>
             </div>
-            <div v-if="validationErrors.general" class="alert alert-danger mt-3">
+            <div
+              v-if="validationErrors.general"
+              class="alert alert-danger mt-3"
+            >
               {{ validationErrors.general }}
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" @click="showTagModal = false">取消</button>
-          <button type="button" class="btn btn-primary" @click="confirmTagUpdate" :disabled="loading">
-            {{ loading ? '处理中...' : '确认' }}
+          <button
+            type="button"
+            class="btn btn-secondary"
+            @click="showTagModal = false"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            @click="confirmTagUpdate"
+            :disabled="loading"
+          >
+            {{ loading ? "处理中..." : "确认" }}
           </button>
         </div>
       </div>
@@ -425,710 +503,788 @@
 </template>
 
 <script setup>
-import Chart from 'chart.js/auto'
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { fundApi, holdingApi, platformApi } from '../services/api'
+import Chart from "chart.js/auto";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { fundApi, holdingApi, platformApi } from "../services/api";
 
 function formatAmount(amount) {
-  return parseFloat(amount).toLocaleString('zh-CN', {
+  return parseFloat(amount).toLocaleString("zh-CN", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })
+    maximumFractionDigits: 2,
+  });
 }
 
 function formatAmount4(amount) {
-  return parseFloat(amount).toLocaleString('zh-CN', {
+  return parseFloat(amount).toLocaleString("zh-CN", {
     minimumFractionDigits: 4,
-    maximumFractionDigits: 4
-  })
+    maximumFractionDigits: 4,
+  });
 }
 
 const props = defineProps({
   show: Boolean,
   fundData: {
     type: Object,
-    default: () => ({})
+    default: () => ({}),
   },
   holdingData: {
     type: Object,
-    default: null
+    default: null,
   },
   platform: {
     type: String,
-    default: ''
-  }
-})
+    default: "",
+  },
+});
 
-const emit = defineEmits(['update:show', 'confirm'])
+const emit = defineEmits(["update:show", "confirm"]);
 
-const activeTab = ref('buy')
-const buyAmount = ref('')
-const buyDate = ref('')
-const sellShares = ref('')
-const sellDate = ref('')
-const editAmount = ref('')
-const editProfit = ref('')
-const editPlatform = ref('其他')
-const addCurrentValue = ref('')
-const addProfit = ref('')
-const addTags = ref('')
-const addPlatform = ref('其他')
-const tagsInput = ref('')
-const loading = ref(false)
-const chartLoading = ref(false)
-const selectedRange = ref('1month')
-const chartCanvas = ref(null)
-const platforms = ref(['其他'])
-let chartInstance = null
+const activeTab = ref("buy");
+const buyAmount = ref("");
+const buyDate = ref("");
+const sellShares = ref("");
+const sellDate = ref("");
+const editAmount = ref("");
+const editProfit = ref("");
+const editPlatform = ref("其他");
+const addCurrentValue = ref("");
+const addProfit = ref("");
+const addTags = ref("");
+const addPlatform = ref("其他");
+const tagsInput = ref("");
+const loading = ref(false);
+const chartLoading = ref(false);
+const selectedRange = ref("1month");
+const chartCanvas = ref(null);
+const platforms = ref(["其他"]);
+let chartInstance = null;
 
-const showOperation = ref(false)
-const showAddHoldingForm = ref(false)
-const showTagModal = ref(false)
-const validationErrors = ref({})
-const fundTags = ref('')
-const existingTags = ref([])
-const showDropdown = ref(false)
-const filteredTags = ref([])
-const showAddDropdown = ref(false)
-const filteredAddTags = ref([])
+const showOperation = ref(false);
+const showAddHoldingForm = ref(false);
+const showTagModal = ref(false);
+const validationErrors = ref({});
+const fundTags = ref("");
+const existingTags = ref([]);
+const showDropdown = ref(false);
+const filteredTags = ref([]);
+const showAddDropdown = ref(false);
+const filteredAddTags = ref([]);
 
 // 获取当前日期
 const today = computed(() => {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-})
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+});
 
 const timeRanges = [
-  { label: '近1周', value: '1week' },
-  { label: '近1月', value: '1month' },
-  { label: '近3月', value: '3month' },
-  { label: '近1年', value: '1year' }
-]
+  { label: "近1周", value: "1week" },
+  { label: "近1月", value: "1month" },
+  { label: "近3月", value: "3month" },
+  { label: "近1年", value: "1year" },
+];
 
 async function loadPlatforms() {
   try {
-    const response = await platformApi.get()
-    platforms.value = response.data.map(p => p.name)
+    const response = await platformApi.get();
+    platforms.value = response.data.map((p) => p.name);
   } catch (error) {
-    console.error('加载平台列表失败:', error)
+    console.error("加载平台列表失败:", error);
   }
 }
 
-watch(() => props.show, (newVal) => {
-  if (newVal) {
-    loadPlatforms()
-    loadExistingTags()
-    activeTab.value = 'buy'
-    buyAmount.value = ''
-    buyDate.value = today.value  // 设置默认加仓日期为当天
-    sellShares.value = ''
-    sellDate.value = today.value  // 设置默认减仓日期为当天
-    editAmount.value = ''
-    editProfit.value = ''
-    addCurrentValue.value = ''
-    addProfit.value = ''
-    addTags.value = ''
-    tagsInput.value = ''
-    showOperation.value = false
-    showAddHoldingForm.value = false
-    fundTags.value = props.fundData.tags || ''
+watch(
+  () => props.show,
+  (newVal) => {
+    if (newVal) {
+      loadPlatforms();
+      loadExistingTags();
+      activeTab.value = "buy";
+      buyAmount.value = "";
+      buyDate.value = today.value; // 设置默认加仓日期为当天
+      sellShares.value = "";
+      sellDate.value = today.value; // 设置默认减仓日期为当天
+      editAmount.value = "";
+      editProfit.value = "";
+      addCurrentValue.value = "";
+      addProfit.value = "";
+      addTags.value = "";
+      tagsInput.value = "";
+      showOperation.value = false;
+      showAddHoldingForm.value = false;
+      fundTags.value = props.fundData.tags || "";
 
-    // 如果是添加新持仓（holdingData为null），设置默认平台
-    if (!props.holdingData && props.platform) {
-      addPlatform.value = props.platform
+      // 如果是添加新持仓（holdingData为null），设置默认平台
+      if (!props.holdingData && props.platform) {
+        addPlatform.value = props.platform;
+      }
+
+      // 异步加载历史数据，不阻塞其他操作
+      loadHistoryData();
     }
-
-    // 异步加载历史数据，不阻塞其他操作
-    loadHistoryData()
-  }
-})
+  },
+);
 
 async function loadExistingTags() {
   try {
-    const response = await tagsApi.get()
-    existingTags.value = response.data.tags
+    const response = await tagsApi.get();
+    existingTags.value = response.data.tags;
   } catch (error) {
-    console.error('加载标签失败:', error)
+    console.error("加载标签失败:", error);
   }
 }
 
 function filterTags() {
-  const input = tagsInput.value.trim()
+  const input = tagsInput.value.trim();
   if (!input) {
-    filteredTags.value = existingTags.value
-    return
+    filteredTags.value = existingTags.value;
+    return;
   }
 
   // 过滤出包含输入内容的标签
-  filteredTags.value = existingTags.value.filter(tag =>
-    tag.toLowerCase().includes(input.toLowerCase())
-  )
-  showDropdown.value = filteredTags.value.length > 0
+  filteredTags.value = existingTags.value.filter((tag) =>
+    tag.toLowerCase().includes(input.toLowerCase()),
+  );
+  showDropdown.value = filteredTags.value.length > 0;
 }
 
 function hideDropdown() {
   // 延迟隐藏，以便可以点击下拉项
   setTimeout(() => {
-    showDropdown.value = false
-  }, 200)
+    showDropdown.value = false;
+  }, 200);
 }
 
 function selectTag(tag) {
-  const currentTags = tagsInput.value.trim()
-  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+  const currentTags = tagsInput.value.trim();
+  const tagsArray = currentTags
+    ? currentTags.split(",").map((t) => t.trim())
+    : [];
 
   if (!tagsArray.includes(tag)) {
-    tagsArray.push(tag)
-    tagsInput.value = tagsArray.join(', ')
+    tagsArray.push(tag);
+    tagsInput.value = tagsArray.join(", ");
   }
-  showDropdown.value = false
+  showDropdown.value = false;
 }
 
 function addTag(tag) {
-  const currentTags = tagsInput.value.trim()
-  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+  const currentTags = tagsInput.value.trim();
+  const tagsArray = currentTags
+    ? currentTags.split(",").map((t) => t.trim())
+    : [];
 
   if (!tagsArray.includes(tag)) {
-    tagsArray.push(tag)
-    tagsInput.value = tagsArray.join(', ')
+    tagsArray.push(tag);
+    tagsInput.value = tagsArray.join(", ");
   }
 }
 
 function filterAddTags() {
-  const input = addTags.value.trim()
+  const input = addTags.value.trim();
   if (!input) {
-    filteredAddTags.value = existingTags.value
-    return
+    filteredAddTags.value = existingTags.value;
+    return;
   }
 
   // 过滤出包含输入内容的标签
-  filteredAddTags.value = existingTags.value.filter(tag =>
-    tag.toLowerCase().includes(input.toLowerCase())
-  )
-  showAddDropdown.value = filteredAddTags.value.length > 0
+  filteredAddTags.value = existingTags.value.filter((tag) =>
+    tag.toLowerCase().includes(input.toLowerCase()),
+  );
+  showAddDropdown.value = filteredAddTags.value.length > 0;
 }
 
 function hideAddDropdown() {
   // 延迟隐藏，以便可以点击下拉项
   setTimeout(() => {
-    showAddDropdown.value = false
-  }, 200)
+    showAddDropdown.value = false;
+  }, 200);
 }
 
 function selectAddTag(tag) {
-  const currentTags = addTags.value.trim()
-  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+  const currentTags = addTags.value.trim();
+  const tagsArray = currentTags
+    ? currentTags.split(",").map((t) => t.trim())
+    : [];
 
   if (!tagsArray.includes(tag)) {
-    tagsArray.push(tag)
-    addTags.value = tagsArray.join(', ')
+    tagsArray.push(tag);
+    addTags.value = tagsArray.join(", ");
   }
-  showAddDropdown.value = false
+  showAddDropdown.value = false;
 }
 
 function addTagToAddForm(tag) {
-  const currentTags = addTags.value.trim()
-  const tagsArray = currentTags ? currentTags.split(',').map(t => t.trim()) : []
+  const currentTags = addTags.value.trim();
+  const tagsArray = currentTags
+    ? currentTags.split(",").map((t) => t.trim())
+    : [];
 
   if (!tagsArray.includes(tag)) {
-    tagsArray.push(tag)
-    addTags.value = tagsArray.join(', ')
+    tagsArray.push(tag);
+    addTags.value = tagsArray.join(", ");
   }
 }
 
 watch(selectedRange, async () => {
-  await loadHistoryData()
-})
+  await loadHistoryData();
+});
+
+// 缓存历史数据和交易记录
+const cachedFundData = ref({});
 
 async function loadHistoryData() {
-  if (!props.fundData || !props.fundData.fund_code) return
+  if (!props.fundData || !props.fundData.fund_code) return;
 
-  chartLoading.value = true
+  const fundCode = props.fundData.fund_code;
+
+  // 检查是否已有缓存数据
+  if (
+    cachedFundData.value[fundCode] &&
+    cachedFundData.value[fundCode].historyData
+  ) {
+    // 使用缓存数据，只需要过滤时间范围
+    const filteredData = filterDataByRange(
+      cachedFundData.value[fundCode].historyData.net_values,
+      selectedRange.value,
+    );
+    chartLoading.value = false;
+    await nextTick();
+    if (chartCanvas.value) {
+      renderChart(filteredData, cachedFundData.value[fundCode].transactions);
+    }
+    return;
+  }
+
+  chartLoading.value = true;
   try {
-    const [historyResponse, transactionResponse] = await Promise.all([
-      fundApi.getHistory(props.fundData.fund_code),
-      holdingApi.getTransactions(props.fundData.fund_code)
-    ])
+    // 使用新的综合接口获取数据
+    const completeResponse = await fundApi.getCompleteInfo(fundCode);
+    const completeData = completeResponse.data;
 
-    const historyData = historyResponse.data
-    const transactions = transactionResponse.data || []
+    const historyData = completeData.history_data;
+    const transactions = completeData.transactions || [];
 
-    const filteredData = filterDataByRange(historyData.net_values, selectedRange.value)
+    // 缓存数据
+    cachedFundData.value[fundCode] = {
+      historyData,
+      transactions,
+    };
 
-    chartLoading.value = false
-    await nextTick()
+    const filteredData = filterDataByRange(
+      historyData.net_values,
+      selectedRange.value,
+    );
+
+    chartLoading.value = false;
+    await nextTick();
 
     if (chartCanvas.value) {
-      renderChart(filteredData, transactions)
+      renderChart(filteredData, transactions);
     } else {
-      console.error('chartCanvas.value 不存在，无法渲染图表')
+      console.error("chartCanvas.value 不存在，无法渲染图表");
     }
   } catch (error) {
-    console.error('加载历史数据失败:', error)
-    chartLoading.value = false
+    console.error("加载历史数据失败:", error);
+    // 降级到原来的方式
+    try {
+      const [historyResponse, transactionResponse] = await Promise.all([
+        fundApi.getHistory(fundCode),
+        holdingApi.getTransactions(fundCode),
+      ]);
+
+      const historyData = historyResponse.data;
+      const transactions = transactionResponse.data || [];
+
+      // 缓存数据
+      cachedFundData.value[fundCode] = {
+        historyData,
+        transactions,
+      };
+
+      const filteredData = filterDataByRange(
+        historyData.net_values,
+        selectedRange.value,
+      );
+
+      chartLoading.value = false;
+      await nextTick();
+
+      if (chartCanvas.value) {
+        renderChart(filteredData, transactions);
+      }
+    } catch (fallbackError) {
+      console.error("降级加载也失败:", fallbackError);
+      chartLoading.value = false;
+    }
   }
 }
 
 function filterDataByRange(data, range) {
-  if (!data || data.length === 0) return []
+  if (!data || data.length === 0) return [];
 
-  const latestDate = new Date(data[0].date)
-  let startDate
+  const latestDate = new Date(data[0].date);
+  let startDate;
 
   switch (range) {
-    case '1week':
-      startDate = new Date(latestDate.getTime() - 7 * 24 * 60 * 60 * 1000)
-      break
-    case '1month':
-      startDate = new Date(latestDate.getTime() - 30 * 24 * 60 * 60 * 1000)
-      break
-    case '3month':
-      startDate = new Date(latestDate.getTime() - 90 * 24 * 60 * 60 * 1000)
-      break
-    case '1year':
-      startDate = new Date(latestDate.getTime() - 365 * 24 * 60 * 60 * 1000)
-      break
+    case "1week":
+      startDate = new Date(latestDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case "1month":
+      startDate = new Date(latestDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    case "3month":
+      startDate = new Date(latestDate.getTime() - 90 * 24 * 60 * 60 * 1000);
+      break;
+    case "1year":
+      startDate = new Date(latestDate.getTime() - 365 * 24 * 60 * 60 * 1000);
+      break;
     default:
-      return data
+      return data;
   }
 
-  const filtered = data.filter(item => {
-    const itemDate = new Date(item.date)
-    return itemDate >= startDate
-  })
+  const filtered = data.filter((item) => {
+    const itemDate = new Date(item.date);
+    return itemDate >= startDate;
+  });
 
-  return filtered
+  return filtered;
 }
 
 function renderChart(data, transactions) {
   if (!chartCanvas.value) {
-    console.error('chartCanvas.value 不存在')
-    return
+    console.error("chartCanvas.value 不存在");
+    return;
   }
 
   if (!data || data.length === 0) {
-    console.error('数据为空，无法渲染图表')
-    return
+    console.error("数据为空，无法渲染图表");
+    return;
   }
 
   if (chartInstance) {
-    chartInstance.destroy()
+    chartInstance.destroy();
   }
 
-  const ctx = chartCanvas.value.getContext('2d')
-  const reversedData = [...data].reverse()
-  const labels = reversedData.map(item => {
-    const dateParts = item.date.split('-')
-    return `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`
-  })
+  const ctx = chartCanvas.value.getContext("2d");
+  const reversedData = [...data].reverse();
+  const labels = reversedData.map((item) => {
+    const dateParts = item.date.split("-");
+    return `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`;
+  });
 
-  const baseValue = parseFloat(reversedData[0].unit_net_value)
-  const changeRates = reversedData.map(item => {
-    const currentValue = parseFloat(item.unit_net_value)
-    return ((currentValue - baseValue) / baseValue * 100).toFixed(2)
-  })
+  const baseValue = parseFloat(reversedData[0].unit_net_value);
+  const changeRates = reversedData.map((item) => {
+    const currentValue = parseFloat(item.unit_net_value);
+    return (((currentValue - baseValue) / baseValue) * 100).toFixed(2);
+  });
 
-  const transactionDates = new Set()
-  const transactionMap = new Map()
+  const transactionDates = new Set();
+  const transactionMap = new Map();
 
   if (transactions && transactions.length > 0) {
-    transactions.forEach(transaction => {
-      const transactionDate = transaction.date.split(' ')[0]
-      transactionDates.add(transactionDate)
+    transactions.forEach((transaction) => {
+      const transactionDate = transaction.date.split(" ")[0];
+      transactionDates.add(transactionDate);
 
       if (!transactionMap.has(transactionDate)) {
-        transactionMap.set(transactionDate, transaction.type)
+        transactionMap.set(transactionDate, transaction.type);
       }
-    })
+    });
   }
 
-  const pointRadius = reversedData.map(item => {
-    return transactionDates.has(item.date) ? 5 : 0
-  })
+  const pointRadius = reversedData.map((item) => {
+    return transactionDates.has(item.date) ? 5 : 0;
+  });
 
-  const pointBackgroundColor = reversedData.map(item => {
-    const transactionType = transactionMap.get(item.date)
-    return transactionType === 'buy' ? '#22c55e' : '#ef4444'
-  })
+  const pointBackgroundColor = reversedData.map((item) => {
+    const transactionType = transactionMap.get(item.date);
+    return transactionType === "buy" ? "#22c55e" : "#ef4444";
+  });
 
-  const displayLabelIndices = []
+  const displayLabelIndices = [];
   if (labels.length > 0) {
-    displayLabelIndices.push(0)
+    displayLabelIndices.push(0);
     if (labels.length > 1) {
-      displayLabelIndices.push(Math.floor(labels.length / 2))
+      displayLabelIndices.push(Math.floor(labels.length / 2));
     }
     if (labels.length > 2) {
-      displayLabelIndices.push(labels.length - 1)
+      displayLabelIndices.push(labels.length - 1);
     }
   }
 
-  const labelCallback = function(value, index, values) {
-    const dataIndex = index
+  const labelCallback = function (value, index, values) {
+    const dataIndex = index;
     if (displayLabelIndices.includes(dataIndex)) {
-      return labels[dataIndex]
+      return labels[dataIndex];
     }
-    return ''
-  }
+    return "";
+  };
 
   try {
     chartInstance = new Chart(ctx, {
-      type: 'line',
+      type: "line",
       data: {
         labels: labels,
         datasets: [
           {
-            label: '',
+            label: "",
             data: changeRates,
-            borderColor: '#667eea',
-            backgroundColor: 'transparent',
+            borderColor: "#667eea",
+            backgroundColor: "transparent",
             fill: false,
             tension: 0,
             pointRadius: pointRadius,
             pointBackgroundColor: pointBackgroundColor,
-            pointBorderColor: '#fff',
+            pointBorderColor: "#fff",
             pointBorderWidth: 2,
-            pointHoverRadius: 7
-          }
-        ]
+            pointHoverRadius: 7,
+          },
+        ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         interaction: {
-          mode: 'index',
-          intersect: false
+          mode: "index",
+          intersect: false,
         },
         plugins: {
           legend: {
-            display: false
+            display: false,
           },
           tooltip: {
             callbacks: {
-              title: function(context) {
-                const item = reversedData[context[0].dataIndex]
-                return item.date
+              title: function (context) {
+                const item = reversedData[context[0].dataIndex];
+                return item.date;
               },
-              label: function(context) {
-                const value = context.raw
-                const item = reversedData[context.dataIndex]
-                const transactionType = transactionMap.get(item.date)
+              label: function (context) {
+                const value = context.raw;
+                const item = reversedData[context.dataIndex];
+                const transactionType = transactionMap.get(item.date);
 
-                let result = `${value}%`
+                let result = `${value}%`;
                 if (transactionType) {
-                  result += ` (${transactionType === 'buy' ? '加仓' : '减仓'})`
+                  result += ` (${transactionType === "buy" ? "加仓" : "减仓"})`;
                 }
-                return result
-              }
-            }
-          }
+                return result;
+              },
+            },
+          },
         },
         scales: {
           x: {
             grid: {
-              display: false
+              display: false,
             },
             ticks: {
-              callback: function(value, index, values) {
+              callback: function (value, index, values) {
                 if (displayLabelIndices.includes(index)) {
-                  return labels[index]
+                  return labels[index];
                 }
-                return ''
+                return "";
               },
               autoSkip: false,
               maxRotation: 0,
               minRotation: 0,
               font: {
-                size: 10
-              }
-            }
+                size: 10,
+              },
+            },
           },
           y: {
-            type: 'linear',
+            type: "linear",
             display: true,
-            position: 'left',
+            position: "left",
             title: {
               display: true,
-              text: '涨幅(%)'
+              text: "涨幅(%)",
             },
             grid: {
-              color: 'rgba(0, 0, 0, 0.05)'
-            }
-          }
-        }
-      }
-    })
+              color: "rgba(0, 0, 0, 0.05)",
+            },
+          },
+        },
+      },
+    });
   } catch (error) {
-    console.error('创建图表时出错:', error)
+    console.error("创建图表时出错:", error);
   }
 }
 
 async function changeTimeRange(range) {
-  selectedRange.value = range
+  selectedRange.value = range;
 }
 
 function showEditTagModal() {
-  tagsInput.value = fundTags.value || ''
-  validationErrors.value = {}
-  showTagModal.value = true
+  tagsInput.value = fundTags.value || "";
+  validationErrors.value = {};
+  showTagModal.value = true;
 }
 
 async function confirmTagUpdate() {
-  validationErrors.value = {}
+  validationErrors.value = {};
 
-  const tags = tagsInput.value.trim()
+  const tags = tagsInput.value.trim();
 
-  loading.value = true
+  loading.value = true;
   try {
     // 同时更新自选和持仓的板块标签
     // 先更新持仓的板块标签
     try {
-      await holdingApi.updateTags(props.fundData.fund_code, tags)
+      await holdingApi.updateTags(props.fundData.fund_code, tags);
     } catch (error) {
-      console.log('更新持仓标签失败（可能不在持仓列表中）:', error)
+      console.log("更新持仓标签失败（可能不在持仓列表中）:", error);
     }
 
     // 再更新自选的板块标签
     try {
-      const { watchlistApi } = await import('../services/api')
-      await watchlistApi.updateTags(props.fundData.fund_code, tags)
+      const { watchlistApi } = await import("../services/api");
+      await watchlistApi.updateTags(props.fundData.fund_code, tags);
     } catch (error) {
-      console.log('更新自选标签失败（可能不在自选列表中）:', error)
+      console.log("更新自选标签失败（可能不在自选列表中）:", error);
     }
 
-    fundTags.value = tags
-    showTagModal.value = false
-    emit('confirm')
+    fundTags.value = tags;
+    showTagModal.value = false;
+    emit("confirm");
   } catch (error) {
-    console.error('修改板块失败:', error)
-    validationErrors.value.general = '修改板块失败，请重试'
+    console.error("修改板块失败:", error);
+    validationErrors.value.general = "修改板块失败，请重试";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function showOperationArea(tab) {
-  activeTab.value = tab
-  showOperation.value = true
+  activeTab.value = tab;
+  showOperation.value = true;
 
   // 当选择修改持仓时，填充当前持仓数据
-  if (tab === 'edit' && props.holdingData) {
-    editAmount.value = (props.holdingData.current_value || props.holdingData.cost).toString()
-    editProfit.value = (props.holdingData.profit_loss || 0).toString()
-    editPlatform.value = props.holdingData.platform || '其他'
-  } else if (tab === 'buy') {
-    buyAmount.value = ''
-  } else if (tab === 'sell') {
-    sellShares.value = ''
-  } else if (tab === 'tags') {
-    tagsInput.value = fundTags.value || ''
+  if (tab === "edit" && props.holdingData) {
+    editAmount.value = (
+      props.holdingData.current_value || props.holdingData.cost
+    ).toString();
+    editProfit.value = (props.holdingData.profit_loss || 0).toString();
+    editPlatform.value = props.holdingData.platform || "其他";
+  } else if (tab === "buy") {
+    buyAmount.value = "";
+  } else if (tab === "sell") {
+    sellShares.value = "";
+  } else if (tab === "tags") {
+    tagsInput.value = fundTags.value || "";
   }
 }
 
 function cancelAddHolding() {
-  addCurrentValue.value = ''
-  addProfit.value = ''
-  showAddHoldingForm.value = false
+  addCurrentValue.value = "";
+  addProfit.value = "";
+  showAddHoldingForm.value = false;
 }
 
 function handleCancel() {
   if (showAddHoldingForm.value) {
-    cancelAddHolding()
+    cancelAddHolding();
   } else if (showOperation.value) {
-    showOperation.value = false
+    showOperation.value = false;
     // 重置相关表单数据
-    buyAmount.value = ''
-    sellShares.value = ''
-    editAmount.value = ''
-    editProfit.value = ''
-    validationErrors.value = {}
+    buyAmount.value = "";
+    sellShares.value = "";
+    editAmount.value = "";
+    editProfit.value = "";
+    validationErrors.value = {};
   }
 }
 
 function handleConfirm() {
   if (showAddHoldingForm.value) {
-    confirmAddHolding()
+    confirmAddHolding();
   } else if (showOperation.value) {
-    confirm()
+    confirm();
   }
 }
 
 async function confirmAddHolding() {
   // 重置验证错误
-  validationErrors.value = {}
+  validationErrors.value = {};
 
-  const currentValue = parseFloat(addCurrentValue.value)
-  const profit = parseFloat(addProfit.value)
-  const tags = addTags.value.trim()
-  const platform = addPlatform.value
+  const currentValue = parseFloat(addCurrentValue.value);
+  const profit = parseFloat(addProfit.value);
+  const tags = addTags.value.trim();
+  const platform = addPlatform.value;
 
   // 验证持仓金额
-  if (addCurrentValue.value === '' || isNaN(currentValue) || currentValue <= 0) {
-    validationErrors.value.addCurrentValue = '请输入有效的持仓金额（大于0）'
-    return
+  if (
+    addCurrentValue.value === "" ||
+    isNaN(currentValue) ||
+    currentValue <= 0
+  ) {
+    validationErrors.value.addCurrentValue = "请输入有效的持仓金额（大于0）";
+    return;
   }
 
   // 验证持有收益
-  if (addProfit.value === '' || isNaN(profit)) {
-    validationErrors.value.addProfit = '请输入有效的持有收益'
-    return
+  if (addProfit.value === "" || isNaN(profit)) {
+    validationErrors.value.addProfit = "请输入有效的持有收益";
+    return;
   }
 
   // 计算持仓成本：当前价值 - 持有收益
-  const cost = currentValue - profit
+  const cost = currentValue - profit;
 
-  loading.value = true
+  loading.value = true;
   try {
     const response = await holdingApi.add({
-        fund_code: props.fundData.fund_code,
-        type: 'sync',
-        current_value: currentValue,
-        profit: profit,
-        tags: tags,
-        platform: platform
-      })
+      fund_code: props.fundData.fund_code,
+      type: "sync",
+      current_value: currentValue,
+      profit: profit,
+      tags: tags,
+      platform: platform,
+    });
 
     // 检查响应是否成功
     if (response && response.data) {
       if (response.data.error) {
-        validationErrors.value.general = response.data.error
+        validationErrors.value.general = response.data.error;
       } else {
-        emit('confirm')
-        emit('update:show', false)
+        emit("confirm");
+        emit("update:show", false);
       }
     } else {
-      emit('confirm')
-      emit('update:show', false)
+      emit("confirm");
+      emit("update:show", false);
     }
   } catch (error) {
-    console.error('添加持仓失败:', error)
+    console.error("添加持仓失败:", error);
     // 显示错误提示，但不使用alert
     if (error.response && error.response.data && error.response.data.error) {
-      validationErrors.value.general = error.response.data.error
+      validationErrors.value.general = error.response.data.error;
     } else {
-      validationErrors.value.general = '添加持仓失败，请重试'
+      validationErrors.value.general = "添加持仓失败，请重试";
     }
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function confirm() {
   // 重置验证错误
-  validationErrors.value = {}
+  validationErrors.value = {};
 
-  if (activeTab.value === 'buy') {
-    const amount = parseFloat(buyAmount.value)
-    if (buyAmount.value === '' || isNaN(amount) || amount <= 0) {
-      validationErrors.value.buyAmount = '请输入有效的加仓金额（大于0）'
-      return
+  if (activeTab.value === "buy") {
+    const amount = parseFloat(buyAmount.value);
+    if (buyAmount.value === "" || isNaN(amount) || amount <= 0) {
+      validationErrors.value.buyAmount = "请输入有效的加仓金额（大于0）";
+      return;
     }
 
-    loading.value = true
+    loading.value = true;
     try {
       await holdingApi.add({
         fund_code: props.fundData.fund_code,
-        type: 'buy',
+        type: "buy",
         cost: amount,
         buy_date: buyDate.value,
-        platform: props.holdingData?.platform || props.platform || '其他'  // 传递平台参数
-      })
-      emit('confirm')
-      emit('update:show', false)
+        platform: props.holdingData?.platform || props.platform || "其他", // 传递平台参数
+      });
+      emit("confirm");
+      emit("update:show", false);
     } catch (error) {
-      console.error('加仓失败:', error)
-      validationErrors.value.general = '加仓失败，请重试'
+      console.error("加仓失败:", error);
+      validationErrors.value.general = "加仓失败，请重试";
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  } else if (activeTab.value === 'sell') {
-    const shares = parseFloat(sellShares.value)
-    if (sellShares.value === '' || isNaN(shares) || shares <= 0) {
-      validationErrors.value.sellShares = '请输入有效的减仓份额（大于0）'
-      return
+  } else if (activeTab.value === "sell") {
+    const shares = parseFloat(sellShares.value);
+    if (sellShares.value === "" || isNaN(shares) || shares <= 0) {
+      validationErrors.value.sellShares = "请输入有效的减仓份额（大于0）";
+      return;
     }
 
     if (props.holdingData && shares > props.holdingData.shares) {
-      validationErrors.value.sellShares = '减仓份额不能超过可用份额'
-      return
+      validationErrors.value.sellShares = "减仓份额不能超过可用份额";
+      return;
     }
 
-    loading.value = true
+    loading.value = true;
     try {
       await holdingApi.add({
         fund_code: props.fundData.fund_code,
-        type: 'sell',
+        type: "sell",
         shares: shares,
         sell_date: sellDate.value,
-        platform: props.holdingData?.platform || props.platform || '其他'  // 传递平台参数
-      })
-      emit('confirm')
-      emit('update:show', false)
+        platform: props.holdingData?.platform || props.platform || "其他", // 传递平台参数
+      });
+      emit("confirm");
+      emit("update:show", false);
     } catch (error) {
-      console.error('减仓失败:', error)
-      validationErrors.value.general = '减仓失败，请重试'
+      console.error("减仓失败:", error);
+      validationErrors.value.general = "减仓失败，请重试";
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  } else if (activeTab.value === 'edit') {
-    const currentValue = parseFloat(editAmount.value)
-    const profit = parseFloat(editProfit.value)
-    const platform = editPlatform.value
+  } else if (activeTab.value === "edit") {
+    const currentValue = parseFloat(editAmount.value);
+    const profit = parseFloat(editProfit.value);
+    const platform = editPlatform.value;
 
-    if (editAmount.value === '' || isNaN(currentValue) || currentValue <= 0) {
-      validationErrors.value.editAmount = '请输入有效的持仓金额（大于0）'
+    if (editAmount.value === "" || isNaN(currentValue) || currentValue <= 0) {
+      validationErrors.value.editAmount = "请输入有效的持仓金额（大于0）";
     }
 
-    if (editProfit.value === '' || isNaN(profit)) {
-      validationErrors.value.editProfit = '请输入有效的持有收益'
+    if (editProfit.value === "" || isNaN(profit)) {
+      validationErrors.value.editProfit = "请输入有效的持有收益";
     }
 
     // 如果有验证错误，返回
     if (Object.keys(validationErrors.value).length > 0) {
-      return
+      return;
     }
 
     // 计算持仓成本：当前价值 - 持有收益
-    const cost = currentValue - profit
+    const cost = currentValue - profit;
 
-    loading.value = true
+    loading.value = true;
     try {
       await holdingApi.update(props.fundData.fund_code, {
         current_value: currentValue,
         profit: profit,
-        platform: platform
-      })
-      emit('confirm')
-      emit('update:show', false)
+        platform: platform,
+      });
+      emit("confirm");
+      emit("update:show", false);
     } catch (error) {
-      console.error('修改持仓失败:', error)
-      validationErrors.value.general = '修改持仓失败，请重试'
+      console.error("修改持仓失败:", error);
+      validationErrors.value.general = "修改持仓失败，请重试";
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-  } else if (activeTab.value === 'delete') {
-    loading.value = true
+  } else if (activeTab.value === "delete") {
+    loading.value = true;
     try {
-      const platform = props.holdingData?.platform || props.platform || '其他'
-      await holdingApi.delete(props.fundData.fund_code, platform)
-      emit('confirm')
-      emit('update:show', false)
+      const platform = props.holdingData?.platform || props.platform || "其他";
+      await holdingApi.delete(props.fundData.fund_code, platform);
+      emit("confirm");
+      emit("update:show", false);
     } catch (error) {
-      console.error('删除持仓失败:', error)
-      validationErrors.value.general = '删除持仓失败，请重试'
+      console.error("删除持仓失败:", error);
+      validationErrors.value.general = "删除持仓失败，请重试";
     } finally {
-      loading.value = false
+      loading.value = false;
     }
   }
 }
 
 onBeforeUnmount(() => {
   if (chartInstance) {
-    chartInstance.destroy()
+    chartInstance.destroy();
   }
-})
+});
 </script>
 
 <style scoped>
