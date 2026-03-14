@@ -165,10 +165,12 @@ const {
   loadHoldings
 } = useHoldings()
 
-onMounted(() => {
-  loadHoldings()
-  loadWatchlist()
-})
+// onMounted中的数据加载已移至App.vue的watch(activeTab)中
+// 避免重复请求
+// onMounted(() => {
+//   loadHoldings()
+//   loadWatchlist()
+// })
 
 const showDetailModal = ref(false)
 const currentFund = ref(null)
