@@ -1320,6 +1320,8 @@ def manage_watchlist():
                 print(f"批量获取自选基金数据完成，耗时: {end_time - start_time:.2f}秒")
 
                 # 构建返回结果
+                import time
+                today = time.strftime('%Y-%m-%d')
                 for item in watchlist:
                     if not item.fund:
                         continue
@@ -1329,6 +1331,11 @@ def manage_watchlist():
 
                     if fund_data:
                         fund_data['tags'] = item.tags
+                        # 检查是否为非交易日
+                        fsrq = fund_data.get('fsrq', '')
+                        is_today = (fsrq == today)
+                        if not is_today:
+                            fund_data['estimate_change_rate'] = None
                         funds.append(fund_data)
                     else:
                         # 即使数据获取失败，也要返回基本信息
@@ -1338,7 +1345,7 @@ def manage_watchlist():
                             'net_value': '',
                             'unit_net_value': '',
                             'estimate_net_value': '',
-                            'estimate_change_rate': '-',
+                            'estimate_change_rate': None,
                             'estimate_time': '',
                             'one_month_rate': 0,
                             'three_month_rate': 0,
@@ -1374,6 +1381,11 @@ def manage_watchlist():
 
                         if fund_data:
                             fund_data['tags'] = ''
+                            # 检查是否为非交易日
+                            fsrq = fund_data.get('fsrq', '')
+                            is_today = (fsrq == today)
+                            if not is_today:
+                                fund_data['estimate_change_rate'] = None
                             funds.append(fund_data)
                         else:
                             basic_fund_data = {
@@ -1382,7 +1394,7 @@ def manage_watchlist():
                                 'net_value': '',
                                 'unit_net_value': '',
                                 'estimate_net_value': '',
-                                'estimate_change_rate': '-',
+                                'estimate_change_rate': None,
                                 'estimate_time': '',
                                 'one_month_rate': 0,
                                 'three_month_rate': 0,
@@ -1533,20 +1545,25 @@ def manage_holding():
                         today = time.strftime('%Y-%m-%d')
                         is_today = (fsrq == today)
 
-                        if daily_change_rate != '-' and daily_change_rate != 0 and is_today:
-                            # 最新涨幅已更新，使用最新涨幅计算今日收益和持仓金额
-                            change_rate = float(daily_change_rate)
-                            # 今日持仓金额 = 昨日持仓金额 × (1 + 涨幅%)
-                            # 昨日持仓金额 = 当前持仓金额（因为单位净值是昨天的）
-                            today_value = current_value * (1 + change_rate / 100)
-                            estimate_profit = today_value - current_value
-                            current_value = today_value
-                        elif estimate_change_rate != '-':
-                            # 使用估算涨幅计算今日收益
-                            change_rate = float(estimate_change_rate)
-                            estimate_profit = current_value - (current_value / (1 + change_rate / 100))
+                        if is_today and (daily_change_rate != '-' and daily_change_rate != 0 or estimate_change_rate != '-'):
+                            if daily_change_rate != '-' and daily_change_rate != 0 and is_today:
+                                # 最新涨幅已更新，使用最新涨幅计算今日收益和持仓金额
+                                change_rate = float(daily_change_rate)
+                                # 今日持仓金额 = 昨日持仓金额 × (1 + 涨幅%)
+                                # 昨日持仓金额 = 当前持仓金额（因为单位净值是昨天的）
+                                today_value = current_value * (1 + change_rate / 100)
+                                estimate_profit = today_value - current_value
+                                current_value = today_value
+                            elif estimate_change_rate != '-':
+                                # 使用估算涨幅计算今日收益
+                                change_rate = float(estimate_change_rate)
+                                estimate_profit = current_value - (current_value / (1 + change_rate / 100))
+                            else:
+                                estimate_profit = 0
                         else:
-                            estimate_profit = 0
+                            # 非交易日，设置为None表示不显示
+                            estimate_profit = None
+                            estimate_change_rate = None
                     else:
                         current_value = holding.cost
                         estimate_profit = 0
@@ -1564,7 +1581,7 @@ def manage_holding():
                         'current_value': current_value,
                         'profit_loss': profit_loss,
                         'profit_loss_rate': profit_loss_rate,
-                        'estimate_change_rate': fund_data['estimate_change_rate'],
+                        'estimate_change_rate': estimate_change_rate,
                         'estimate_profit': estimate_profit,
                         'daily_change_rate': fund_data.get('daily_change_rate', '-'),
                         'fsrq': fund_data.get('fsrq', ''),
