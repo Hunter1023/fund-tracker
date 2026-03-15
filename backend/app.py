@@ -1293,55 +1293,104 @@ def manage_watchlist():
     """
     管理自选基金
     """
-    print(f"[{datetime.now()}] 收到 /api/watchlist 请求，方法: {request.method}")
     db = next(get_db())
     try:
         if request.method == 'GET':
-                # 获取自选基金列表
-                watchlist = db.query(Watchlist).all()
-                funds = []
-                print(f"共有 {len(watchlist)} 个自选基金记录")
+            # 获取自选基金列表
+            watchlist = db.query(Watchlist).all()
+            funds = []
 
-                # 收集所有自选基金的fund_code
-                watchlist_fund_codes = []
-                watchlist_fund_ids = set()
+            # 收集所有自选基金的fund_code
+            watchlist_fund_codes = []
+            watchlist_fund_ids = set()
 
-                for item in watchlist:
-                    if item.fund:
-                        watchlist_fund_codes.append(item.fund.fund_code)
-                        watchlist_fund_ids.add(item.fund.id)
+            for item in watchlist:
+                if item.fund:
+                    watchlist_fund_codes.append(item.fund.fund_code)
+                    watchlist_fund_ids.add(item.fund.id)
 
-                print(f"开始并发获取 {len(watchlist_fund_codes)} 个自选基金的数据")
+            # 构建返回结果
+            import time
+            # 使用批量并发方法获取所有自选基金数据
+            funds_data_dict = get_fund_realtime_rates_batch(db, watchlist_fund_codes, force_refresh=False)
 
-                # 使用批量并发方法获取所有自选基金数据
-                start_time = time.time()
-                funds_data_dict = get_fund_realtime_rates_batch(db, watchlist_fund_codes, force_refresh=False)
-                end_time = time.time()
-                print(f"批量获取自选基金数据完成，耗时: {end_time - start_time:.2f}秒")
+            today = time.strftime('%Y-%m-%d')
 
-                # 构建返回结果
-                import time
-                today = time.strftime('%Y-%m-%d')
-                for item in watchlist:
-                    if not item.fund:
+            for item in watchlist:
+                if not item.fund:
+                    continue
+
+                fund_code = item.fund.fund_code
+                fund_data = funds_data_dict.get(fund_code)
+
+                if fund_data:
+                    fund_data['tags'] = item.tags
+                    # 检查是否为非交易日
+                    fsrq = fund_data.get('fsrq', '')
+                    is_today = (fsrq == today)
+                    if not is_today:
+                        fund_data['estimate_change_rate'] = None
+                    funds.append(fund_data)
+                else:
+                    # 即使数据获取失败，也要返回基本信息
+                    basic_fund_data = {
+                        'fund_code': fund_code,
+                        'fund_name': item.fund.fund_name,
+                        'net_value': '',
+                        'unit_net_value': '',
+                        'estimate_net_value': '',
+                        'estimate_change_rate': None,
+                        'estimate_time': '',
+                        'one_month_rate': 0,
+                        'three_month_rate': 0,
+                        'one_year_rate': 0,
+                        'daily_change_rate': '-',
+                        'tags': item.tags
+                    }
+                    funds.append(basic_fund_data)
+
+            # 获取持仓基金，添加不在自选列表中的持仓基金
+            holdings = db.query(FundHolding).all()
+            holding_fund_codes = []
+
+            for holding in holdings:
+                if holding.fund.id not in watchlist_fund_ids:
+                    holding_fund_codes.append(holding.fund.fund_code)
+
+            # 去重持仓基金代码
+            holding_fund_codes = list(set(holding_fund_codes))
+
+            # 如果有持仓基金需要获取数据，批量获取
+            if holding_fund_codes:
+                holding_funds_data_dict = get_fund_realtime_rates_batch(db, holding_fund_codes, force_refresh=False)
+
+                # 构建持仓基金返回结果
+                added_fund_codes = set()
+                for holding in holdings:
+                    if holding.fund.id in watchlist_fund_ids:
                         continue
 
-                    fund_code = item.fund.fund_code
-                    fund_data = funds_data_dict.get(fund_code)
+                    fund_code = holding.fund.fund_code
+
+                    # 检查是否已经添加过该基金
+                    if fund_code in added_fund_codes:
+                        continue
+
+                    fund_data = holding_funds_data_dict.get(fund_code)
 
                     if fund_data:
-                        fund_data['tags'] = item.tags
+                        fund_data['tags'] = ''
                         # 检查是否为非交易日
                         fsrq = fund_data.get('fsrq', '')
                         is_today = (fsrq == today)
                         if not is_today:
                             fund_data['estimate_change_rate'] = None
                         funds.append(fund_data)
+                        added_fund_codes.add(fund_code)
                     else:
-                        # 即使数据获取失败，也要返回基本信息
                         basic_fund_data = {
                             'fund_code': fund_code,
-                            'fund_name': item.fund.fund_name,
+                            'fund_name': holding.fund.fund_name,
                             'net_value': '',
                             'unit_net_value': '',
                             'estimate_net_value': '',
@@ -1351,61 +1400,12 @@ def manage_watchlist():
                             'three_month_rate': 0,
                             'one_year_rate': 0,
                             'daily_change_rate': '-',
-                            'tags': item.tags
+                            'tags': ''
                         }
                         funds.append(basic_fund_data)
+                        added_fund_codes.add(fund_code)
 
-                # 获取持仓基金，添加不在自选列表中的持仓基金
-                holdings = db.query(FundHolding).all()
-                holding_fund_codes = []
-
-                for holding in holdings:
-                    if holding.fund.id not in watchlist_fund_ids:
-                        holding_fund_codes.append(holding.fund.fund_code)
-
-                # 如果有持仓基金需要获取数据，批量获取
-                if holding_fund_codes:
-                    print(f"开始并发获取 {len(holding_fund_codes)} 个持仓基金的数据")
-                    start_time = time.time()
-                    holding_funds_data_dict = get_fund_realtime_rates_batch(db, holding_fund_codes, force_refresh=False)
-                    end_time = time.time()
-                    print(f"批量获取持仓基金数据完成，耗时: {end_time - start_time:.2f}秒")
-
-                    # 构建持仓基金返回结果
-                    for holding in holdings:
-                        if holding.fund.id in watchlist_fund_ids:
-                            continue
-
-                        fund_code = holding.fund.fund_code
-                        fund_data = holding_funds_data_dict.get(fund_code)
-
-                        if fund_data:
-                            fund_data['tags'] = ''
-                            # 检查是否为非交易日
-                            fsrq = fund_data.get('fsrq', '')
-                            is_today = (fsrq == today)
-                            if not is_today:
-                                fund_data['estimate_change_rate'] = None
-                            funds.append(fund_data)
-                        else:
-                            basic_fund_data = {
-                                'fund_code': fund_code,
-                                'fund_name': holding.fund.fund_name,
-                                'net_value': '',
-                                'unit_net_value': '',
-                                'estimate_net_value': '',
-                                'estimate_change_rate': None,
-                                'estimate_time': '',
-                                'one_month_rate': 0,
-                                'three_month_rate': 0,
-                                'one_year_rate': 0,
-                                'daily_change_rate': '-',
-                                'tags': ''
-                            }
-                            funds.append(basic_fund_data)
-
-                print(f"返回的基金列表长度: {len(funds)}")
-                return jsonify(funds)
+            return jsonify(funds)
 
         elif request.method == 'POST':
             # 添加自选基金
@@ -1466,8 +1466,13 @@ def manage_watchlist():
                     db.commit()
             return jsonify({'success': True})
     except Exception as e:
+        import traceback
+        error_message = str(e)
+        error_traceback = traceback.format_exc()
+        print(f"[ERROR] 处理 /api/watchlist 请求时出错: {error_message}")
+        print(f"[ERROR] 详细错误信息: {error_traceback}")
         db.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': error_message}), 500
     finally:
         db.close()
 
