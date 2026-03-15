@@ -178,10 +178,10 @@
                 <select class="form-input" v-model="editPlatform">
                   <option
                     v-for="platform in platforms"
-                    :key="platform"
-                    :value="platform"
+                    :key="platform.id"
+                    :value="platform.name"
                   >
-                    {{ platform }}
+                    {{ platform.name }}
                   </option>
                 </select>
               </div>
@@ -307,10 +307,10 @@
               <select class="form-input" v-model="addPlatform">
                 <option
                   v-for="platform in platforms"
-                  :key="platform"
-                  :value="platform"
+                  :key="platform.id"
+                  :value="platform.name"
                 >
-                  {{ platform }}
+                  {{ platform.name }}
                 </option>
               </select>
             </div>
@@ -556,7 +556,7 @@ const loading = ref(false);
 const chartLoading = ref(false);
 const selectedRange = ref("1month");
 const chartCanvas = ref(null);
-const platforms = ref(["其他"]);
+const platforms = ref([]);
 let chartInstance = null;
 
 const showOperation = ref(false);
@@ -589,9 +589,15 @@ const timeRanges = [
 async function loadPlatforms() {
   try {
     const response = await platformApi.get();
-    platforms.value = response.data.map((p) => p.name);
+    platforms.value = response.data;
+    // 如果平台列表为空，添加默认的"其他"选项
+    if (platforms.value.length === 0) {
+      platforms.value = [{ id: null, name: "其他" }];
+    }
   } catch (error) {
     console.error("加载平台列表失败:", error);
+    // 加载失败时添加默认选项
+    platforms.value = [{ id: null, name: "其他" }];
   }
 }
 
@@ -886,8 +892,12 @@ function renderChart(data, transactions) {
 
   if (transactions && transactions.length > 0) {
     transactions.forEach((transaction) => {
-      // 只处理当前平台的交易记录
-      if (transaction.platform === props.platform) {
+      // 处理交易记录：只显示当前平台的交易记录
+      // 从平台列表中找到对应的平台名称
+      const platformName =
+        platforms.value.find((p) => p.id === transaction.platform_id)?.name ||
+        "其他";
+      if (platformName === props.platform) {
         const transactionDate = transaction.date.split(" ")[0];
         transactionDates.add(transactionDate);
 
