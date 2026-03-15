@@ -39,12 +39,18 @@
           <div
             class="summary-value"
             :class="
-              summary.totalTodayProfit >= 0
+              summary.hasTradingDayData && summary.totalTodayProfit >= 0
                 ? 'profit-positive'
-                : 'profit-negative'
+                : summary.hasTradingDayData
+                  ? 'profit-negative'
+                  : ''
             "
           >
-            ¥{{ formatAmount(summary.totalTodayProfit) }}
+            {{
+              summary.hasTradingDayData
+                ? "¥" + formatAmount(summary.totalTodayProfit)
+                : "-"
+            }}
           </div>
         </div>
         <div class="summary-item">
@@ -217,20 +223,40 @@
                     <div
                       class="rate-value"
                       :style="{
-                        color: getChangeRateColor(holding.estimate_change_rate),
+                        color:
+                          holding.estimate_change_rate !== null &&
+                          holding.estimate_change_rate !== undefined &&
+                          holding.estimate_change_rate !== '-'
+                            ? getChangeRateColor(holding.estimate_change_rate)
+                            : '#6c757d',
                       }"
                     >
-                      {{ holding.estimate_change_rate }}%
+                      {{
+                        holding.estimate_change_rate !== null &&
+                        holding.estimate_change_rate !== undefined &&
+                        holding.estimate_change_rate !== "-"
+                          ? holding.estimate_change_rate + "%"
+                          : "-"
+                      }}
                     </div>
                   </td>
                   <td>
                     <div
                       class="rate-value"
                       :style="{
-                        color: getChangeRateColor(holding.estimate_profit),
+                        color:
+                          holding.estimate_profit !== null &&
+                          holding.estimate_profit !== undefined
+                            ? getChangeRateColor(holding.estimate_profit)
+                            : '#6c757d',
                       }"
                     >
-                      ¥{{ formatAmount(holding.estimate_profit || 0) }}
+                      {{
+                        holding.estimate_profit !== null &&
+                        holding.estimate_profit !== undefined
+                          ? "¥" + formatAmount(holding.estimate_profit || 0)
+                          : "-"
+                      }}
                     </div>
                   </td>
                   <td>

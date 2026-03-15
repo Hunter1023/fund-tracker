@@ -83,8 +83,8 @@
                 </div>
               </template>
               <template v-else-if="column.key === 'estimate_change_rate'">
-                <div class="rate-value" :style="{ color: getChangeRateColor(fund.estimate_change_rate) }">
-                  {{ fund.estimate_change_rate }}%
+                <div class="rate-value" :style="{ color: fund.estimate_change_rate !== null && fund.estimate_change_rate !== undefined && fund.estimate_change_rate !== '-' ? getChangeRateColor(fund.estimate_change_rate) : '#6c757d' }">
+                  {{ fund.estimate_change_rate !== null && fund.estimate_change_rate !== undefined && fund.estimate_change_rate !== '-' ? fund.estimate_change_rate + '%' : '-' }}
                 </div>
               </template>
               <template v-else-if="column.key === 'one_month_rate'">
