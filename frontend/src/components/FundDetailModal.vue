@@ -886,11 +886,14 @@ function renderChart(data, transactions) {
 
   if (transactions && transactions.length > 0) {
     transactions.forEach((transaction) => {
-      const transactionDate = transaction.date.split(" ")[0];
-      transactionDates.add(transactionDate);
+      // 只处理当前平台的交易记录
+      if (transaction.platform === props.platform) {
+        const transactionDate = transaction.date.split(" ")[0];
+        transactionDates.add(transactionDate);
 
-      if (!transactionMap.has(transactionDate)) {
-        transactionMap.set(transactionDate, transaction.type);
+        if (!transactionMap.has(transactionDate)) {
+          transactionMap.set(transactionDate, transaction.type);
+        }
       }
     });
   }
@@ -901,7 +904,7 @@ function renderChart(data, transactions) {
 
   const pointBackgroundColor = reversedData.map((item) => {
     const transactionType = transactionMap.get(item.date);
-    return transactionType === "buy" ? "#22c55e" : "#ef4444";
+    return transactionType === "buy" ? "#ef4444" : "#3b82f6";
   });
 
   const displayLabelIndices = [];
