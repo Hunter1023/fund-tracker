@@ -1240,7 +1240,7 @@ def get_fund_complete_info(fund_code):
                 'shares': t.shares,
                 'price': t.price,
                 'date': t.transaction_date.strftime('%Y-%m-%d %H:%M:%S'),
-                'platform': '其他'  # Transaction表中没有platform字段，默认为其他
+                'platform_id': t.platform_id  # 返回平台ID
             } for t in transactions]
 
         # 并行执行
@@ -1774,9 +1774,14 @@ def manage_holding():
                     )
                     db.add(fund_holding)
 
+                # 查询 platform_id
+                platform_obj = db.query(Platform).filter(Platform.name == platform).first()
+                platform_id = platform_obj.id if platform_obj else None
+
                 # 记录交易
                 transaction = Transaction(
                     fund_id=fund.id,
+                    platform_id=platform_id,
                     transaction_type=transaction_type,
                     amount=cost,
                     shares=shares,
@@ -1816,9 +1821,14 @@ def manage_holding():
                     # 重新计算平均成本（应该保持不变）
                     fund_holding.avg_cost = fund_holding.cost / fund_holding.shares
 
+                # 查询 platform_id
+                platform_obj = db.query(Platform).filter(Platform.name == platform).first()
+                platform_id = platform_obj.id if platform_obj else None
+
                 # 记录交易
                 transaction = Transaction(
                     fund_id=fund.id,
+                    platform_id=platform_id,
                     transaction_type=transaction_type,
                     amount=amount,
                     shares=shares,
