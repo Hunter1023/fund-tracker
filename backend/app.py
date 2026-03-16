@@ -1838,8 +1838,10 @@ def manage_holding():
                 # 更新持仓：按比例减少持仓成本
                 fund_holding.cost = fund_holding.cost * (1 - sell_ratio)
                 fund_holding.shares -= shares
-                if fund_holding.shares <= 0:
+                logger.info(f"减仓后 - 剩余份额: {fund_holding.shares}, 剩余成本: {fund_holding.cost}")
+                if fund_holding.shares <= 0.01 or fund_holding.cost <= 0.01:
                     # 清空持仓
+                    logger.info(f"清仓 - 基金代码: {fund_code}, 平台: {platform}")
                     db.delete(fund_holding)
                     fund_holding = None
                 else:
