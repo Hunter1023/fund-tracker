@@ -184,6 +184,22 @@ export function useHoldings() {
     }
   }
 
+  function updateHoldingLocally(updatedHolding) {
+    if (!updatedHolding) return;
+
+    const index = holdings.value.findIndex(
+      (h) =>
+        h.fund_code === updatedHolding.fund_code &&
+        (h.platform || "其他") === (updatedHolding.platform || "其他"),
+    );
+
+    if (index !== -1) {
+      holdings.value[index] = { ...updatedHolding };
+    } else {
+      holdings.value.push({ ...updatedHolding });
+    }
+  }
+
   async function updateHolding(fundCode, data) {
     try {
       const response = await holdingApi.update(fundCode, data);
@@ -245,6 +261,7 @@ export function useHoldings() {
     loadPlatforms,
     addHolding,
     updateHolding,
+    updateHoldingLocally,
     deleteHolding,
     handleSort,
     getCurrentDate,

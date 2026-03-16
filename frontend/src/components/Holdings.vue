@@ -352,6 +352,7 @@ const {
   summary,
   loadHoldings,
   loadPlatforms,
+  updateHoldingLocally,
   handleSort,
   getCurrentDate,
   getChangeRateColor,
@@ -387,8 +388,12 @@ function openFundDetail(holding) {
   showDetailModal.value = true;
 }
 
-async function handleDetailConfirm() {
-  await loadHoldings();
+async function handleDetailConfirm(updatedHolding) {
+  if (updatedHolding) {
+    updateHoldingLocally(updatedHolding);
+  } else {
+    await loadHoldings();
+  }
 }
 
 function handleSelectFund(fund) {

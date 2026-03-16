@@ -1857,6 +1857,95 @@ def manage_holding():
                 calculate_holding(fund_holding, current_price)
 
             db.commit()
+
+            # 对于加仓/减仓操作，返回更新后的持仓数据
+            if transaction_type in ('buy', 'sell') and fund_holding:
+                # 获取基金实时数据
+                fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True)
+                # 获取标签
+                watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id).first()
+                tags = watchlist_item.tags if watchlist_item else ''
+
+                if fund_data:
+                    unit_net_value = fund_data.get('unit_net_value')
+                    fsrq = fund_data.get('fsrq', '')
+                    daily_change_rate = fund_data.get('daily_change_rate', '-')
+                    estimate_change_rate = fund_data.get('estimate_change_rate', '-')
+
+                    if unit_net_value:
+                        current_value = fund_holding.shares * float(unit_net_value)
+
+                        # 检查最新涨幅是否已更新（fsrq是否为今日）
+                        import time
+                        today = time.strftime('%Y-%m-%d')
+                        is_today = (fsrq == today)
+
+                        # 检查是否有估算数据，无论是否为交易日都使用估算数据
+                        if estimate_change_rate != '-' and estimate_change_rate is not None:
+                            # 使用估算涨幅计算今日收益
+                            change_rate = float(estimate_change_rate)
+                            estimate_profit = current_value * (change_rate / 100)
+                        elif is_today and daily_change_rate != '-' and daily_change_rate != 0:
+                            # 最新涨幅已更新，使用最新涨幅计算今日收益和持仓金额
+                            change_rate = float(daily_change_rate)
+                            # 今日持仓金额 = 昨日持仓金额 × (1 + 涨幅%)
+                            # 昨日持仓金额 = 当前持仓金额（因为单位净值是昨天的）
+                            today_value = current_value * (1 + change_rate / 100)
+                            estimate_profit = today_value - current_value
+                            current_value = today_value
+                        else:
+                            # 没有估算数据且不是交易日，设置为None表示不显示
+                            estimate_profit = None
+                            estimate_change_rate = None
+                    else:
+                        current_value = fund_holding.cost
+                        estimate_profit = 0
+
+                    # 实时计算持有收益和持仓金额
+                    profit_loss = current_value - fund_holding.cost
+                    profit_loss_rate = (profit_loss / fund_holding.cost * 100) if fund_holding.cost > 0 else 0
+
+                    updated_holding = {
+                        'fund_code': fund.fund_code,
+                        'fund_name': fund.fund_name,
+                        'cost': fund_holding.cost,
+                        'shares': fund_holding.shares,
+                        'avg_cost': fund_holding.avg_cost,
+                        'current_value': current_value,
+                        'profit_loss': profit_loss,
+                        'profit_loss_rate': profit_loss_rate,
+                        'estimate_change_rate': estimate_change_rate,
+                        'estimate_profit': estimate_profit,
+                        'daily_change_rate': fund_data.get('daily_change_rate', '-'),
+                        'fsrq': fund_data.get('fsrq', ''),
+                        'one_month_rate': fund_data.get('one_month_rate', 0),
+                        'tags': tags,
+                        'platform': fund_holding.platform or '其他'
+                    }
+                else:
+                    updated_holding = {
+                        'fund_code': fund.fund_code,
+                        'fund_name': fund.fund_name,
+                        'cost': fund_holding.cost,
+                        'shares': fund_holding.shares,
+                        'avg_cost': fund_holding.avg_cost,
+                        'current_value': fund_holding.current_value or fund_holding.cost,
+                        'profit_loss': fund_holding.profit_loss or 0,
+                        'profit_loss_rate': fund_holding.profit_loss_rate or 0,
+                        'estimate_change_rate': '0.00',
+                        'estimate_profit': 0,
+                        'daily_change_rate': '-',
+                        'fsrq': '',
+                        'one_month_rate': 0,
+                        'tags': tags,
+                        'platform': fund_holding.platform or '其他'
+                    }
+
+                return jsonify({
+                    'success': True,
+                    'holding': updated_holding
+                })
+
             return jsonify({'success': True})
     except Exception as e:
         db.rollback()
