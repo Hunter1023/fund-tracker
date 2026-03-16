@@ -152,6 +152,29 @@
                   min="0"
                   step="0.01"
                 />
+                <div v-if="holdingData" class="quick-fill-buttons">
+                  <button
+                    type="button"
+                    class="quick-fill-btn"
+                    @click="fillSellShares(0.25)"
+                  >
+                    1/4
+                  </button>
+                  <button
+                    type="button"
+                    class="quick-fill-btn"
+                    @click="fillSellShares(0.5)"
+                  >
+                    1/2
+                  </button>
+                  <button
+                    type="button"
+                    class="quick-fill-btn"
+                    @click="fillSellShares(1)"
+                  >
+                    全部
+                  </button>
+                </div>
                 <div v-if="holdingData" class="hint-text">
                   可用份额：{{ holdingData.shares.toFixed(2) }}
                 </div>
@@ -1092,6 +1115,13 @@ function showOperationArea(tab) {
   }
 }
 
+function fillSellShares(ratio) {
+  if (props.holdingData && props.holdingData.shares > 0) {
+    const shares = props.holdingData.shares * ratio;
+    sellShares.value = shares.toFixed(2);
+  }
+}
+
 function cancelAddHolding() {
   addCurrentValue.value = "";
   addProfit.value = "";
@@ -1615,6 +1645,31 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   font-size: 0.8rem;
   color: #dc3545;
+}
+
+.quick-fill-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.quick-fill-btn {
+  padding: 6px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.quick-fill-btn:hover {
+  border-color: #4f46e5;
+  color: #4f46e5;
+  background: #f5f3ff;
 }
 
 .alert {
