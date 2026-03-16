@@ -1813,7 +1813,7 @@ def manage_holding():
                 if shares <= 0:
                     return jsonify({'error': '份额不能为空且必须大于0'}), 400
 
-                if not fund_holding or fund_holding.shares < shares:
+                if not fund_holding or fund_holding.shares < shares - 0.01:
                     return jsonify({'error': '持仓份额不足'}), 400
 
                 # 计算卖出金额
