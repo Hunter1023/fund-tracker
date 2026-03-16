@@ -1325,11 +1325,7 @@ def manage_watchlist():
 
                 if fund_data:
                     fund_data['tags'] = item.tags
-                    # 检查是否为非交易日
-                    fsrq = fund_data.get('fsrq', '')
-                    is_today = (fsrq == today)
-                    if not is_today:
-                        fund_data['estimate_change_rate'] = None
+                    # 保留估算数据，无论净值日期是否为今天
                     funds.append(fund_data)
                 else:
                     # 即使数据获取失败，也要返回基本信息
@@ -1380,11 +1376,7 @@ def manage_watchlist():
 
                     if fund_data:
                         fund_data['tags'] = ''
-                        # 检查是否为非交易日
-                        fsrq = fund_data.get('fsrq', '')
-                        is_today = (fsrq == today)
-                        if not is_today:
-                            fund_data['estimate_change_rate'] = None
+                        # 保留估算数据，无论净值日期是否为今天
                         funds.append(fund_data)
                         added_fund_codes.add(fund_code)
                     else:
