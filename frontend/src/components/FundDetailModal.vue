@@ -1197,14 +1197,14 @@ async function confirm() {
 
     loading.value = true;
     try {
-      await holdingApi.add({
+      const response = await holdingApi.add({
         fund_code: props.fundData.fund_code,
         type: "buy",
         cost: amount,
         buy_date: buyDate.value,
-        platform: props.holdingData?.platform || props.platform || "其他", // 传递平台参数
+        platform: props.holdingData?.platform || props.platform || "其他",
       });
-      emit("confirm");
+      emit("confirm", response.data.holding);
       emit("update:show", false);
     } catch (error) {
       console.error("加仓失败:", error);
@@ -1226,14 +1226,14 @@ async function confirm() {
 
     loading.value = true;
     try {
-      await holdingApi.add({
+      const response = await holdingApi.add({
         fund_code: props.fundData.fund_code,
         type: "sell",
         shares: shares,
         sell_date: sellDate.value,
-        platform: props.holdingData?.platform || props.platform || "其他", // 传递平台参数
+        platform: props.holdingData?.platform || props.platform || "其他",
       });
-      emit("confirm");
+      emit("confirm", response.data.holding);
       emit("update:show", false);
     } catch (error) {
       console.error("减仓失败:", error);
