@@ -1810,10 +1810,23 @@ def manage_holding():
                 shares = data.get('shares', 0)
                 sell_date = data.get('sell_date')
 
+                logger.info(f"减仓操作 - 基金代码: {fund_code}, 平台: {platform}")
+                logger.info(f"输入数据: 份额={shares}, 卖出日期={sell_date}")
+                logger.info(f"当前持仓: 份额={fund_holding.shares if fund_holding else 'None'}, 成本={fund_holding.cost if fund_holding else 'None'}")
+
+                # 确保shares是浮点数类型
+                try:
+                    shares = float(shares)
+                except (TypeError, ValueError):
+                    return jsonify({'error': '份额格式错误'}), 400
+
+                logger.info(f"转换后份额: {shares}, current_price: {current_price}")
+
                 if shares <= 0:
                     return jsonify({'error': '份额不能为空且必须大于0'}), 400
 
                 if not fund_holding or fund_holding.shares < shares - 0.01:
+                    logger.error(f"持仓份额不足: 持仓份额={fund_holding.shares if fund_holding else 'None'}, 减仓份额={shares}")
                     return jsonify({'error': '持仓份额不足'}), 400
 
                 # 计算卖出金额
