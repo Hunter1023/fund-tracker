@@ -1253,7 +1253,7 @@ async function confirm() {
       return;
     }
 
-    if (props.holdingData && shares > props.holdingData.shares) {
+    if (props.holdingData && shares > props.holdingData.shares + 0.01) {
       validationErrors.value.sellShares = "减仓份额不能超过可用份额";
       return;
     }

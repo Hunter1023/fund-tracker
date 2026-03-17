@@ -1810,10 +1810,23 @@ def manage_holding():
                 shares = data.get('shares', 0)
                 sell_date = data.get('sell_date')
 
+                logger.info(f"减仓操作 - 基金代码: {fund_code}, 平台: {platform}")
+                logger.info(f"输入数据: 份额={shares}, 卖出日期={sell_date}")
+                logger.info(f"当前持仓: 份额={fund_holding.shares if fund_holding else 'None'}, 成本={fund_holding.cost if fund_holding else 'None'}")
+
+                # 确保shares是浮点数类型
+                try:
+                    shares = float(shares)
+                except (TypeError, ValueError):
+                    return jsonify({'error': '份额格式错误'}), 400
+
+                logger.info(f"转换后份额: {shares}, current_price: {current_price}")
+
                 if shares <= 0:
                     return jsonify({'error': '份额不能为空且必须大于0'}), 400
 
-                if not fund_holding or fund_holding.shares < shares:
+                if not fund_holding or fund_holding.shares < shares - 0.01:
+                    logger.error(f"持仓份额不足: 持仓份额={fund_holding.shares if fund_holding else 'None'}, 减仓份额={shares}")
                     return jsonify({'error': '持仓份额不足'}), 400
 
                 # 计算卖出金额
@@ -1825,8 +1838,10 @@ def manage_holding():
                 # 更新持仓：按比例减少持仓成本
                 fund_holding.cost = fund_holding.cost * (1 - sell_ratio)
                 fund_holding.shares -= shares
-                if fund_holding.shares <= 0:
+                logger.info(f"减仓后 - 剩余份额: {fund_holding.shares}, 剩余成本: {fund_holding.cost}")
+                if fund_holding.shares <= 0.01 or fund_holding.cost <= 0.01:
                     # 清空持仓
+                    logger.info(f"清仓 - 基金代码: {fund_code}, 平台: {platform}")
                     db.delete(fund_holding)
                     fund_holding = None
                 else:
