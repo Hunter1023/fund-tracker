@@ -528,10 +528,7 @@
 <script setup>
 import Chart from "chart.js/auto";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { useHoldings } from "../composables/useHoldings";
 import { fundApi, platformApi, tagsApi } from "../services/api";
-
-const { addHolding } = useHoldings();
 
 function formatAmount(amount) {
   return parseFloat(amount).toLocaleString("zh-CN", {
@@ -561,6 +558,10 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  addHolding: {
+    type: Function,
+    required: true,
+  },
 });
 
 const emit = defineEmits(["update:show", "confirm"]);
@@ -576,7 +577,7 @@ const editPlatform = ref("其他");
 const addCurrentValue = ref("");
 const addProfit = ref("");
 const addTags = ref("");
-const addPlatform = ref("其他");
+const addPlatform = ref(props.platform || "其他");
 const tagsInput = ref("");
 const loading = ref(false);
 const chartLoading = ref(false);
@@ -648,10 +649,8 @@ watch(
       showAddHoldingForm.value = false;
       fundTags.value = props.fundData.tags || "";
 
-      // 如果是添加新持仓（holdingData为null），设置默认平台
-      if (!props.holdingData && props.platform) {
-        addPlatform.value = props.platform;
-      }
+      // 设置默认平台
+      addPlatform.value = props.platform || "其他";
 
       // 异步加载历史数据，不阻塞其他操作
       loadHistoryData();
@@ -1190,7 +1189,7 @@ function confirmAddHolding() {
   emit("update:show", false);
 
   // 异步发送请求给后端
-  addHolding({
+  props.addHolding({
     fund_code: props.fundData.fund_code,
     fund_name: props.fundData.fund_name,
     type: "sync",
@@ -1217,7 +1216,7 @@ async function confirm() {
     emit("update:show", false);
 
     // 异步发送请求给后端
-    addHolding({
+    props.addHolding({
       fund_code: props.fundData.fund_code,
       fund_name: props.fundData.fund_name,
       type: "buy",
@@ -1242,7 +1241,7 @@ async function confirm() {
     emit("update:show", false);
 
     // 异步发送请求给后端
-    addHolding({
+    props.addHolding({
       fund_code: props.fundData.fund_code,
       fund_name: props.fundData.fund_name,
       type: "sell",

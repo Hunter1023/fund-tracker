@@ -1,7 +1,7 @@
 name: fund-tracker-dev
 
 services:
-  # PostgreSQL数据库服务
+   # PostgreSQL数据库服务
   postgres-dev:
     image: postgres:15-alpine
     restart: no

@@ -173,6 +173,9 @@ export function useHoldings() {
 
   function addHolding(data) {
     // 前端先本地更新，展示添加效果
+    // 使用与当前选中平台一致的平台值，确保新添加的持仓能立即显示
+    const platform = data.platform || selectedPlatform.value || "其他";
+
     if (data.type === "sync") {
       // 同步持仓操作，直接创建新的持仓对象
       const newHolding = {
@@ -192,15 +195,14 @@ export function useHoldings() {
         fsrq: "",
         one_month_rate: 0,
         tags: data.tags || "",
-        platform: data.platform || "其他",
+        platform: platform,
       };
       updateHoldingLocally(newHolding);
     } else if (data.type === "buy") {
       // 加仓操作，更新现有持仓
       const existingHolding = holdings.value.find(
         (h) =>
-          h.fund_code === data.fund_code &&
-          (h.platform || "其他") === (data.platform || "其他"),
+          h.fund_code === data.fund_code && (h.platform || "其他") === platform,
       );
       if (existingHolding) {
         // 更新现有持仓
@@ -235,7 +237,7 @@ export function useHoldings() {
           fsrq: "",
           one_month_rate: 0,
           tags: "",
-          platform: data.platform || "其他",
+          platform: platform,
         };
         updateHoldingLocally(newHolding);
       }
@@ -243,8 +245,7 @@ export function useHoldings() {
       // 减仓操作，更新现有持仓
       const existingHolding = holdings.value.find(
         (h) =>
-          h.fund_code === data.fund_code &&
-          (h.platform || "其他") === (data.platform || "其他"),
+          h.fund_code === data.fund_code && (h.platform || "其他") === platform,
       );
       if (existingHolding) {
         // 计算减仓后的持仓
@@ -261,7 +262,7 @@ export function useHoldings() {
           const index = holdings.value.findIndex(
             (h) =>
               h.fund_code === data.fund_code &&
-              (h.platform || "其他") === (data.platform || "其他"),
+              (h.platform || "其他") === platform,
           );
           if (index !== -1) {
             holdings.value.splice(index, 1);
@@ -272,9 +273,14 @@ export function useHoldings() {
       }
     }
 
-    // 异步发送请求给后端
+    // 异步发送请求给后端，使用与本地更新一致的平台值
+    const requestData = {
+      ...data,
+      platform: platform,
+    };
+
     holdingApi
-      .add(data)
+      .add(requestData)
       .then((response) => {
         if (!response.data.success) {
           // 如果后端失败，重新加载持仓列表
