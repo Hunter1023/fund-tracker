@@ -316,6 +316,7 @@
       :fund-data="currentFund"
       :holding-data="currentHolding"
       :platform="selectedPlatform"
+      :add-holding="addHolding"
       @confirm="handleDetailConfirm"
     />
 
@@ -352,6 +353,7 @@ const {
   summary,
   loadHoldings,
   loadPlatforms,
+  addHolding,
   updateHoldingLocally,
   handleSort,
   getCurrentDate,
@@ -388,12 +390,11 @@ function openFundDetail(holding) {
   showDetailModal.value = true;
 }
 
-async function handleDetailConfirm(updatedHolding) {
+function handleDetailConfirm(updatedHolding) {
   if (updatedHolding) {
     updateHoldingLocally(updatedHolding);
-  } else {
-    await loadHoldings();
   }
+  // 不再重新加载持仓列表，因为addHolding函数已经在本地更新了数据
 }
 
 function handleSelectFund(fund) {
