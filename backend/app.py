@@ -15,13 +15,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import threading
 from sqlalchemy.exc import OperationalError
 import random
+from config import DATABASE_URL
 
 app = Flask(__name__)
-# 从环境变量获取数据库路径，没有则用默认
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-default_db_path = os.path.join(BASE_DIR, '..', 'data', 'fund_tracker.db')
-db_path = os.getenv('DATABASE_PATH', default_db_path)
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 CORS(app)
@@ -86,8 +83,8 @@ def init_default_platform():
     finally:
         db.close()
 
-# 注释掉自动初始化默认平台的逻辑
-# init_default_platform()
+# 初始化默认平台
+init_default_platform()
 
 # 创建定时任务调度器
 scheduler = BackgroundScheduler()
@@ -143,6 +140,7 @@ def preload_all_funds_history():
     定时任务：预加载所有自选基金和持仓基金的历史净值数据到数据库
     每天执行一次，确保历史净值数据已缓存
     """
+    from datetime import datetime, timedelta
     print(f"[{datetime.now()}] 开始预加载基金历史净值数据...")
     db = next(get_db())
     try:
@@ -170,9 +168,12 @@ def preload_all_funds_history():
                 # 检查是否已有未过期的数据
                 if fund.realtime_data and fund.realtime_data.net_values:
                     updated_at = fund.realtime_data.updated_at
-                    if updated_at and (datetime.now() - updated_at) < timedelta(days=1):
-                        print(f"基金 {fund_code} 的历史净值数据已是最新，跳过")
-                        continue
+                    if updated_at:
+                        # 使用当前时间，忽略时区差异
+                        now = datetime.now()
+                        if (now - updated_at.replace(tzinfo=None)) < timedelta(days=1):
+                            print(f"基金 {fund_code} 的历史净值数据已是最新，跳过")
+                            continue
 
                 # 从第三方接口获取历史净值数据
                 history_data = DataFetcher.get_fund_history(fund_code)
@@ -414,6 +415,36 @@ print("定时任务已启动：每10分钟更新一次基金数据")
 print("定时任务已启动：每10分钟检查一次持仓收益更新（交易日19:00-23:00）")
 print("定时任务已启动：每天凌晨1点更新基金历史净值数据")
 
+# 应用启动时异步预加载历史净值数据
+def start_preload_history():
+    """
+    应用启动时异步预加载所有基金的历史净值数据
+    """
+    print(f"[{datetime.now()}] 应用启动，开始异步预加载基金历史净值数据...")
+    import traceback
+    try:
+        print(f"[{datetime.now()}] 调用 preload_all_funds_history...")
+        preload_all_funds_history()
+        print(f"[{datetime.now()}] 历史净值数据预加载完成")
+    except Exception as e:
+        print(f"[{datetime.now()}] 历史净值数据预加载失败: {e}")
+        traceback.print_exc()
+
+# 在后台线程中执行预加载，避免阻塞应用启动
+# 添加延迟以确保数据库表已完全创建
+def delayed_preload():
+    print(f"[{datetime.now()}] 进入 delayed_preload 函数...")
+    import time
+    print(f"[{datetime.now()}] 等待2秒，确保数据库表已完全创建...")
+    time.sleep(2)  # 等待2秒，确保数据库表已完全创建
+    print(f"[{datetime.now()}] 调用 start_preload_history...")
+    start_preload_history()
+
+preload_thread = threading.Thread(target=delayed_preload)
+preload_thread.daemon = True
+preload_thread.start()
+print("历史净值数据预加载任务已在后台启动")
+
 # 辅助函数：获取基金或创建
 
 def get_or_create_fund(db: Session, fund_code: str):
@@ -480,7 +511,11 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         need_refresh = force_refresh
         if not need_refresh and realtime_data:
             if realtime_data.updated_at:
-                time_diff = datetime.now() - realtime_data.updated_at
+                from datetime import datetime, timedelta
+                # 使用当前时间，忽略时区差异
+                now = datetime.now()
+                # 直接比较，忽略时区差异
+                time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
                 if time_diff > timedelta(minutes=10):
                     need_refresh = True
 
@@ -528,14 +563,36 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
 
             if rates_data:
                 # 准备数据
+                net_value_date = ''
+                if fund_data:
+                    net_value_date = fund_data.get('net_value', '')
+                elif rates_data:
+                    net_value_date = rates_data.get('fsrq', '')
+
+                unit_net_value = None
+                if fund_data and fund_data.get('unit_net_value'):
+                    unit_net_value = float(fund_data.get('unit_net_value'))
+
+                estimate_net_value = None
+                if fund_data and fund_data.get('estimate_net_value'):
+                    estimate_net_value = float(fund_data.get('estimate_net_value'))
+
+                estimate_change_rate = None
+                if fund_data and fund_data.get('estimate_change_rate'):
+                    estimate_change_rate = float(fund_data.get('estimate_change_rate'))
+
+                estimate_time = ''
+                if fund_data:
+                    estimate_time = fund_data.get('estimate_time', '')
+
                 data = {
                     'fund_code': fund_code,
                     'fund_name': fund.fund_name,
-                    'net_value_date': fund_data.get('net_value') if fund_data else rates_data.get('fsrq', ''),
-                    'unit_net_value': float(fund_data.get('unit_net_value', 0)) if fund_data else None,
-                    'estimate_net_value': float(fund_data.get('estimate_net_value', 0)) if fund_data else None,
-                    'estimate_change_rate': float(fund_data.get('estimate_change_rate', 0)) if fund_data else None,
-                    'estimate_time': fund_data.get('estimate_time', '') if fund_data else '',
+                    'net_value_date': net_value_date,
+                    'unit_net_value': unit_net_value,
+                    'estimate_net_value': estimate_net_value,
+                    'estimate_change_rate': estimate_change_rate,
+                    'estimate_time': estimate_time,
                     'one_month_rate': rates_data.get('one_month_rate', 0),
                     'three_month_rate': rates_data.get('three_month_rate', 0),
                     'one_year_rate': rates_data.get('one_year_rate', 0),
@@ -632,9 +689,13 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
     if not need_refresh and realtime_data:
         # 检查数据是否过期（10分钟）
         if realtime_data.updated_at:
-            time_diff = datetime.now() - realtime_data.updated_at
-            if time_diff > timedelta(minutes=10):
-                need_refresh = True
+                from datetime import datetime, timedelta
+                # 使用带有时区信息的当前时间
+                now = datetime.now()
+                # 直接比较，忽略时区差异
+                time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
+                if time_diff > timedelta(minutes=10):
+                    need_refresh = True
 
     if need_refresh:
         # 从API获取数据
@@ -824,9 +885,13 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
     if not need_refresh and realtime_data:
         # 检查数据是否过期（10分钟）
         if realtime_data.updated_at:
-            time_diff = datetime.now() - realtime_data.updated_at
-            if time_diff > timedelta(minutes=10):
-                need_refresh = True
+                from datetime import datetime, timedelta
+                # 使用带有时区信息的当前时间
+                now = datetime.now()
+                # 直接比较，忽略时区差异
+                time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
+                if time_diff > timedelta(minutes=10):
+                    need_refresh = True
 
     if need_refresh:
         # 从API获取数据
@@ -848,9 +913,9 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                 'fund_code': fund_code,
                 'fund_name': fund.fund_name,
                 'net_value_date': fund_data.get('net_value') if fund_data else history_data.get('fsrq', ''),
-                'unit_net_value': float(fund_data.get('unit_net_value', 0)) if fund_data else float(history_data.get('unit_net_value', 0)),
-                'estimate_net_value': float(fund_data.get('estimate_net_value', 0)) if fund_data else None,
-                'estimate_change_rate': float(fund_data.get('estimate_change_rate', 0)) if fund_data else None,
+                'unit_net_value': float(fund_data.get('unit_net_value', 0)) if fund_data and fund_data.get('unit_net_value') else (float(history_data.get('unit_net_value', 0)) if history_data and history_data.get('unit_net_value') else None),
+                'estimate_net_value': float(fund_data.get('estimate_net_value', 0)) if fund_data and fund_data.get('estimate_net_value') else None,
+                'estimate_change_rate': float(fund_data.get('estimate_change_rate', 0)) if fund_data and fund_data.get('estimate_change_rate') else None,
                 'estimate_time': fund_data.get('estimate_time', '') if fund_data else '',
                 'one_month_rate': history_data.get('one_month_rate', 0),
                 'three_month_rate': history_data.get('three_month_rate', 0),
@@ -1080,7 +1145,7 @@ def get_fund_history(fund_code):
         if fund and fund.realtime_data and fund.realtime_data.net_values:
             # 检查数据是否过期（超过1天）
             updated_at = fund.realtime_data.updated_at
-            if updated_at and (datetime.now() - updated_at) < timedelta(days=1):
+            if updated_at and (datetime.now() - updated_at.replace(tzinfo=None)) < timedelta(days=1):
                 # 数据未过期，直接返回数据库中的数据
                 net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
                 return jsonify({
@@ -1187,7 +1252,7 @@ def get_fund_complete_info(fund_code):
             if fund and fund.realtime_data and fund.realtime_data.net_values:
                 # 检查数据是否过期（超过1天）
                 updated_at = fund.realtime_data.updated_at
-                if updated_at and (datetime.now() - updated_at) < timedelta(days=1):
+                if updated_at and (datetime.now() - updated_at.replace(tzinfo=None)) < timedelta(days=1):
                     # 数据未过期，直接返回数据库中的数据
                     net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
                     return {
@@ -1243,7 +1308,8 @@ def get_fund_complete_info(fund_code):
                 'platform_id': t.platform_id  # 返回平台ID
             } for t in transactions]
 
-        # 并行执行
+        # 并行执行，PostgreSQL支持并发操作
+        from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=3) as executor:
             future_basic = executor.submit(get_basic_info)
             future_history = executor.submit(get_history_data)
@@ -1512,11 +1578,22 @@ def manage_holding():
     try:
         if request.method == 'GET':
             # 获取持仓列表
+            print("[DEBUG] 开始获取持仓列表")
             holdings = db.query(FundHolding).all()
+            print(f"[DEBUG] 获取到 {len(holdings)} 个持仓")
 
             # 批量获取所有基金的实时数据（并发优化）
             fund_codes = [holding.fund.fund_code for holding in holdings]
-            fund_data_dict = get_fund_realtime_rates_batch(db, fund_codes)
+            print(f"[DEBUG] 基金代码: {fund_codes}")
+            print("[DEBUG] 开始调用 get_fund_realtime_rates_batch")
+            try:
+                fund_data_dict = get_fund_realtime_rates_batch(db, fund_codes)
+                print("[DEBUG] get_fund_realtime_rates_batch 调用完成")
+            except Exception as e:
+                print(f"[ERROR] get_fund_realtime_rates_batch 调用失败: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
 
             # 批量获取所有基金的标签（板块）
             fund_ids = [holding.fund.id for holding in holdings]
