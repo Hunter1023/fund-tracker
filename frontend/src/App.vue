@@ -419,8 +419,8 @@ async function confirmTags() {
         selectedFund.value.fund_code,
         tags,
       );
-      // 更新本地自选基金列表
-      await loadWatchlistAndHoldings();
+      // 不需要调用loadWatchlistAndHoldings，因为addToWatchlist已经更新了本地列表
+      // 并且Watchlist组件会自动处理持有标识的显示
     }
 
     // 关闭模态框
