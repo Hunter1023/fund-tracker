@@ -1157,7 +1157,7 @@ function handleConfirm() {
   }
 }
 
-async function confirmAddHolding() {
+function confirmAddHolding() {
   // 重置验证错误
   validationErrors.value = {};
 
