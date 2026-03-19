@@ -172,7 +172,7 @@ export function useHoldings() {
   }
 
   function addHolding(data) {
-    // 根据操作类型处理本地更新
+    // 前端先本地更新，展示添加效果
     if (data.type === "sync") {
       // 同步持仓操作，直接创建新的持仓对象
       const newHolding = {
