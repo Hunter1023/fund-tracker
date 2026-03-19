@@ -11,6 +11,8 @@ services:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - fund-network
+    ports:
+      - "5432:5432"  # 暴露数据库端口，便于本地访问
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fund_user"]
       interval: 10s
@@ -33,6 +35,8 @@ services:
       - DB_NAME=fund_tracker
     networks:
       - fund-network
+    ports:
+      - "5000:5000"  # 暴露后端API端口，便于本地访问
     depends_on:
       postgres:
         condition: service_healthy
