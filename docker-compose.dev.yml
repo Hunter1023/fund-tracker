@@ -1,6 +1,26 @@
 name: fund-tracker-dev
 
 services:
+  # PostgreSQL数据库服务
+  postgres-dev:
+    image: postgres:15-alpine
+    restart: no
+    environment:
+      - POSTGRES_USER=fund_user
+      - POSTGRES_PASSWORD=fund_password
+      - POSTGRES_DB=fund_tracker_dev
+    ports:
+      - "5433:5432"  # 暴露PostgreSQL端口，使用5433避免冲突
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - fund-network-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fund_user -d fund_tracker_dev"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
   # 后端Flask服务（开发模式）
   backend-dev:
     build: ./backend
@@ -9,13 +29,20 @@ services:
       - ./data-dev:/app/data
       - ./backend:/app  # 挂载本地后端代码，支持热更新
     environment:
-      - DATABASE_PATH=/app/data/fund_tracker.db
+      - DB_USER=fund_user
+      - DB_PASSWORD=fund_password
+      - DB_HOST=postgres-dev
+      - DB_PORT=5432
+      - DB_NAME=fund_tracker_dev
       - FLASK_ENV=development  # 开发模式
       - FLASK_DEBUG=True  # 启用调试模式
     ports:
       - "5001:5000"  # 开发环境后端端口，避免与生产环境冲突
     networks:
       - fund-network-dev
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
     command: python app.py --host 0.0.0.0 --port 5000
 
   # 前端Vite开发服务器
@@ -45,3 +72,4 @@ networks:
 # 数据卷
 volumes:
   data-dev:
+  postgres-data:

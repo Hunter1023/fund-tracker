@@ -9,15 +9,16 @@ DATA_SOURCES = {
 
 # 数据库配置
 import os
-# 使用环境变量中的数据库路径，如果没有则使用默认路径
-DATABASE_PATH = os.environ.get('DATABASE_PATH', os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "fund_tracker.db"))
-DATABASE_URL = f'sqlite:///{DATABASE_PATH}'
 
-# SQLite 连接参数，用于改善并发性能
-SQLITE_CONNECT_ARGS = {
-    'check_same_thread': False,
-    'timeout': 30  # 设置30秒超时，避免快速锁定
-}
+# PostgreSQL配置
+DB_USER = os.environ.get('DB_USER', 'postgres')
+DB_PASSWORD = os.environ.get('DB_PASSWORD', 'postgres')
+DB_HOST = os.environ.get('DB_HOST', 'localhost')
+DB_PORT = os.environ.get('DB_PORT', '5432')
+DB_NAME = os.environ.get('DB_NAME', 'fund_tracker')
+DATABASE_URL = f'postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+# PostgreSQL连接参数，设置时区为UTC
+CONNECT_ARGS = {'options': '-c timezone=UTC'}
 
 # 刷新间隔（秒）
 REFRESH_INTERVAL = 30

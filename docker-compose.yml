@@ -1,16 +1,41 @@
 services:
+  # PostgreSQL数据库服务
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=fund_user
+      - POSTGRES_PASSWORD=fund_password
+      - POSTGRES_DB=fund_tracker
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - fund-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fund_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # 后端Flask服务
   backend:
     build: ./backend
     restart: always  # 容器异常自动重启
     volumes:
-      # 使用Docker命名卷持久化SQLite数据库，与项目目录隔离
-      - db-data:/app/data
+      # 使用Docker命名卷持久化数据
+      - app-data:/app/data
     environment:
-      # 配置数据库路径（指向挂载的data目录）
-      - DATABASE_PATH=/app/data/fund_tracker.db
+      # PostgreSQL数据库配置
+      - DB_USER=fund_user
+      - DB_PASSWORD=fund_password
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=fund_tracker
     networks:
       - fund-network
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   # 前端Nginx服务
   frontend:
@@ -39,7 +64,9 @@ networks:
   fund-network:
     driver: bridge
 
-# 数据卷：持久化SQLite数据库
+# 数据卷：持久化PostgreSQL数据库和应用数据
 volumes:
-  db-data:
+  postgres-data:
+    driver: local
+  app-data:
     driver: local

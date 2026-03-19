@@ -2,12 +2,12 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boo
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from config import DATABASE_URL, SQLITE_CONNECT_ARGS
+from config import DATABASE_URL, CONNECT_ARGS
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 Base = declarative_base()
-engine = create_engine(DATABASE_URL, echo=False, connect_args=SQLITE_CONNECT_ARGS)
+engine = create_engine(DATABASE_URL, echo=False, connect_args=CONNECT_ARGS)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 class Fund(Base):
@@ -51,7 +51,7 @@ class FundRealtimeData(Base):
     net_values = Column(Text)  # 历史净值数据，JSON格式
 
     # 更新时间
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=False), server_default=func.now(), onupdate=func.now())
 
     # 关系
     fund = relationship("Fund", back_populates="realtime_data")
@@ -69,7 +69,7 @@ class FundHolding(Base):
     profit_loss = Column(Float)  # 盈亏金额
     profit_loss_rate = Column(Float)  # 盈亏比例
     platform = Column(String(50), default='其他')  # 平台（如：支付宝、理财通等）
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=False), server_default=func.now(), onupdate=func.now())
 
     # 关系
     fund = relationship("Fund", back_populates="holdings")
