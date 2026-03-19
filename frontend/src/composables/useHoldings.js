@@ -171,17 +171,54 @@ export function useHoldings() {
     }
   }
 
-  async function addHolding(data) {
-    try {
-      const response = await holdingApi.add(data);
-      if (response.data.success) {
-        await loadHoldings();
-      }
-      return response.data;
-    } catch (error) {
-      console.error("添加持仓失败:", error);
-      throw error;
-    }
+  function addHolding(data) {
+    // 前端先本地更新，展示添加效果
+    const newHolding = {
+      fund_code: data.fund_code,
+      fund_name: data.fund_name,
+      cost: data.cost || 0,
+      shares: data.shares || 0,
+      avg_cost: data.avg_cost || 0,
+      current_value: data.current_value || 0,
+      profit_loss: data.profit_loss || 0,
+      profit_loss_rate: data.profit_loss_rate || 0,
+      estimate_change_rate: '0.00',
+      estimate_profit: 0,
+      daily_change_rate: '-',
+      fsrq: '',
+      one_month_rate: 0,
+      tags: data.tags || '',
+      platform: data.platform || '其他'
+    };
+    updateHoldingLocally(newHolding);
+    
+    // 异步发送请求给后端
+    holdingApi.add(data)
+      .then(response => {
+        if (!response.data.success) {
+          // 如果后端失败，从本地移除添加的持仓
+          const index = holdings.value.findIndex(
+            (h) => h.fund_code === newHolding.fund_code && 
+                   (h.platform || "其他") === (newHolding.platform || "其他")
+          );
+          if (index !== -1) {
+            holdings.value.splice(index, 1);
+          }
+        }
+      })
+      .catch(error => {
+        console.error("添加持仓失败:", error);
+        // 后端失败，从本地移除添加的持仓
+        const index = holdings.value.findIndex(
+          (h) => h.fund_code === newHolding.fund_code && 
+                 (h.platform || "其他") === (newHolding.platform || "其他")
+        );
+        if (index !== -1) {
+          holdings.value.splice(index, 1);
+        }
+      });
+    
+    return { success: true };
   }
 
   function updateHoldingLocally(updatedHolding) {
