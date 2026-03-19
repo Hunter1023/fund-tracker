@@ -1154,7 +1154,7 @@ function handleConfirm() {
   }
 }
 
-async function confirmAddHolding() {
+function confirmAddHolding() {
   // 重置验证错误
   validationErrors.value = {};
 
@@ -1182,40 +1182,22 @@ async function confirmAddHolding() {
   // 计算持仓成本：当前价值 - 持有收益
   const cost = currentValue - profit;
 
-  loading.value = true;
-  try {
-    const response = await holdingApi.add({
-      fund_code: props.fundData.fund_code,
-      type: "sync",
-      current_value: currentValue,
-      profit: profit,
-      tags: tags,
-      platform: platform,
-    });
+  // 立即关闭弹窗并显示添加效果
+  emit("confirm");
+  emit("update:show", false);
 
-    // 检查响应是否成功
-    if (response && response.data) {
-      if (response.data.error) {
-        validationErrors.value.general = response.data.error;
-      } else {
-        emit("confirm");
-        emit("update:show", false);
-      }
-    } else {
-      emit("confirm");
-      emit("update:show", false);
-    }
-  } catch (error) {
+  // 异步发送请求给后端
+  holdingApi.add({
+    fund_code: props.fundData.fund_code,
+    type: "sync",
+    current_value: currentValue,
+    profit: profit,
+    tags: tags,
+    platform: platform,
+  }).catch(error => {
     console.error("添加持仓失败:", error);
-    // 显示错误提示，但不使用alert
-    if (error.response && error.response.data && error.response.data.error) {
-      validationErrors.value.general = error.response.data.error;
-    } else {
-      validationErrors.value.general = "添加持仓失败，请重试";
-    }
-  } finally {
-    loading.value = false;
-  }
+    // 这里可以添加错误提示，例如使用通知组件
+  });
 }
 
 async function confirm() {
