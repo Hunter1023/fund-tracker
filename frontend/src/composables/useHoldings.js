@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { holdingApi, platformApi } from "../services/api";
+import { fundApi, holdingApi, platformApi } from "../services/api";
 
 export function useHoldings() {
   const holdings = ref([]);
@@ -334,13 +334,11 @@ export function useHoldings() {
     );
 
     if (index !== -1) {
-      // 使用展开运算符创建新数组，确保触发响应式更新但只更新特定元素
-      holdings.value = holdings.value.map((holding, i) =>
-        i === index ? { ...updatedHolding } : holding,
-      );
+      // 使用 splice 方法更新数组元素，保持数组引用的稳定性
+      holdings.value.splice(index, 1, { ...updatedHolding });
     } else {
-      // 添加新元素时也使用展开运算符
-      holdings.value = [...holdings.value, { ...updatedHolding }];
+      // 使用 push 方法添加新元素，保持数组引用的稳定性
+      holdings.value.push({ ...updatedHolding });
     }
   }
 
