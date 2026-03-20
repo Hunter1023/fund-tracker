@@ -1080,7 +1080,6 @@ async function confirmTagUpdate() {
 
     // 再更新自选的板块标签
     try {
-      const { watchlistApi } = await import("../services/api");
       await watchlistApi.updateTags(props.fundData.fund_code, tags);
     } catch (error) {
       console.log("更新自选标签失败（可能不在自选列表中）:", error);
