@@ -38,6 +38,7 @@
           placeholder="输入基金代码或名称"
           autocomplete="off"
           @input="handleSearch"
+          @click="handleSearchClick"
         />
         <div
           v-if="showSearchDropdown && searchResults.length > 0"
@@ -262,6 +263,15 @@ async function loadWatchlistAndHoldings() {
     console.error("加载自选和持仓失败:", error);
   } finally {
     isLoadingData = false;
+  }
+}
+
+// 点击搜索框时的处理函数
+function handleSearchClick() {
+  const keyword = searchKeyword.value.trim();
+  if (keyword && searchResults.value.length > 0) {
+    // 如果搜索框有内容且已有搜索结果，显示下拉框
+    showSearchDropdown.value = true;
   }
 }
 
