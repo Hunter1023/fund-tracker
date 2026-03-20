@@ -528,7 +528,7 @@
 <script setup>
 import Chart from "chart.js/auto";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { fundApi, holdingApi, platformApi, tagsApi } from "../services/api";
+import { fundApi, platformApi, tagsApi } from "../services/api";
 
 function formatAmount(amount) {
   return parseFloat(amount).toLocaleString("zh-CN", {
@@ -558,6 +558,10 @@ const props = defineProps({
     type: String,
     default: "",
   },
+  addHolding: {
+    type: Function,
+    required: true,
+  },
 });
 
 const emit = defineEmits(["update:show", "confirm"]);
@@ -573,7 +577,7 @@ const editPlatform = ref("其他");
 const addCurrentValue = ref("");
 const addProfit = ref("");
 const addTags = ref("");
-const addPlatform = ref("其他");
+const addPlatform = ref(props.platform || "其他");
 const tagsInput = ref("");
 const loading = ref(false);
 const chartLoading = ref(false);
@@ -645,10 +649,8 @@ watch(
       showAddHoldingForm.value = false;
       fundTags.value = props.fundData.tags || "";
 
-      // 如果是添加新持仓（holdingData为null），设置默认平台
-      if (!props.holdingData && props.platform) {
-        addPlatform.value = props.platform;
-      }
+      // 设置默认平台
+      addPlatform.value = props.platform || "其他";
 
       // 异步加载历史数据，不阻塞其他操作
       loadHistoryData();
@@ -1153,7 +1155,7 @@ function handleConfirm() {
   }
 }
 
-async function confirmAddHolding() {
+function confirmAddHolding() {
   // 重置验证错误
   validationErrors.value = {};
 
@@ -1181,40 +1183,20 @@ async function confirmAddHolding() {
   // 计算持仓成本：当前价值 - 持有收益
   const cost = currentValue - profit;
 
-  loading.value = true;
-  try {
-    const response = await holdingApi.add({
-      fund_code: props.fundData.fund_code,
-      type: "sync",
-      current_value: currentValue,
-      profit: profit,
-      tags: tags,
-      platform: platform,
-    });
+  // 立即关闭弹窗并显示添加效果
+  emit("confirm");
+  emit("update:show", false);
 
-    // 检查响应是否成功
-    if (response && response.data) {
-      if (response.data.error) {
-        validationErrors.value.general = response.data.error;
-      } else {
-        emit("confirm");
-        emit("update:show", false);
-      }
-    } else {
-      emit("confirm");
-      emit("update:show", false);
-    }
-  } catch (error) {
-    console.error("添加持仓失败:", error);
-    // 显示错误提示，但不使用alert
-    if (error.response && error.response.data && error.response.data.error) {
-      validationErrors.value.general = error.response.data.error;
-    } else {
-      validationErrors.value.general = "添加持仓失败，请重试";
-    }
-  } finally {
-    loading.value = false;
-  }
+  // 异步发送请求给后端
+  props.addHolding({
+    fund_code: props.fundData.fund_code,
+    fund_name: props.fundData.fund_name,
+    type: "sync",
+    current_value: currentValue,
+    profit: profit,
+    tags: tags,
+    platform: platform,
+  });
 }
 
 async function confirm() {
@@ -1228,23 +1210,19 @@ async function confirm() {
       return;
     }
 
-    loading.value = true;
-    try {
-      const response = await holdingApi.add({
-        fund_code: props.fundData.fund_code,
-        type: "buy",
-        cost: amount,
-        buy_date: buyDate.value,
-        platform: props.holdingData?.platform || props.platform || "其他",
-      });
-      emit("confirm", response.data.holding);
-      emit("update:show", false);
-    } catch (error) {
-      console.error("加仓失败:", error);
-      validationErrors.value.general = "加仓失败，请重试";
-    } finally {
-      loading.value = false;
-    }
+    // 立即关闭弹窗并显示添加效果
+    emit("confirm");
+    emit("update:show", false);
+
+    // 异步发送请求给后端
+    props.addHolding({
+      fund_code: props.fundData.fund_code,
+      fund_name: props.fundData.fund_name,
+      type: "buy",
+      cost: amount,
+      buy_date: buyDate.value,
+      platform: props.holdingData?.platform || props.platform || "其他",
+    });
   } else if (activeTab.value === "sell") {
     const shares = parseFloat(sellShares.value);
     if (sellShares.value === "" || isNaN(shares) || shares <= 0) {
@@ -1257,23 +1235,19 @@ async function confirm() {
       return;
     }
 
-    loading.value = true;
-    try {
-      const response = await holdingApi.add({
-        fund_code: props.fundData.fund_code,
-        type: "sell",
-        shares: shares,
-        sell_date: sellDate.value,
-        platform: props.holdingData?.platform || props.platform || "其他",
-      });
-      emit("confirm", response.data.holding);
-      emit("update:show", false);
-    } catch (error) {
-      console.error("减仓失败:", error);
-      validationErrors.value.general = "减仓失败，请重试";
-    } finally {
-      loading.value = false;
-    }
+    // 立即关闭弹窗并显示添加效果
+    emit("confirm");
+    emit("update:show", false);
+
+    // 异步发送请求给后端
+    props.addHolding({
+      fund_code: props.fundData.fund_code,
+      fund_name: props.fundData.fund_name,
+      type: "sell",
+      shares: shares,
+      sell_date: sellDate.value,
+      platform: props.holdingData?.platform || props.platform || "其他",
+    });
   } else if (activeTab.value === "edit") {
     const currentValue = parseFloat(editAmount.value);
     const profit = parseFloat(editProfit.value);

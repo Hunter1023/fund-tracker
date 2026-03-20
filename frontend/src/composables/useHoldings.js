@@ -171,17 +171,129 @@ export function useHoldings() {
     }
   }
 
-  async function addHolding(data) {
-    try {
-      const response = await holdingApi.add(data);
-      if (response.data.success) {
-        await loadHoldings();
+  function addHolding(data) {
+    // 前端先本地更新，展示添加效果
+    // 使用与当前选中平台一致的平台值，确保新添加的持仓能立即显示
+    const platform = data.platform || selectedPlatform.value || "其他";
+
+    if (data.type === "sync") {
+      // 同步持仓操作，直接创建新的持仓对象
+      const newHolding = {
+        fund_code: data.fund_code,
+        fund_name: data.fund_name,
+        cost: data.current_value - data.profit || 0,
+        shares: 0,
+        avg_cost: 0,
+        current_value: data.current_value || 0,
+        profit_loss: data.profit || 0,
+        profit_loss_rate:
+          ((data.profit || 0) / (data.current_value - data.profit || 1)) *
+            100 || 0,
+        estimate_change_rate: "0.00",
+        estimate_profit: 0,
+        daily_change_rate: "-",
+        fsrq: "",
+        one_month_rate: 0,
+        tags: data.tags || "",
+        platform: platform,
+      };
+      updateHoldingLocally(newHolding);
+    } else if (data.type === "buy") {
+      // 加仓操作，更新现有持仓
+      const existingHolding = holdings.value.find(
+        (h) =>
+          h.fund_code === data.fund_code && (h.platform || "其他") === platform,
+      );
+      if (existingHolding) {
+        // 更新现有持仓
+        const updatedHolding = {
+          ...existingHolding,
+          cost: existingHolding.cost + (data.cost || 0),
+          shares:
+            existingHolding.shares +
+            ((data.cost || 0) / existingHolding.avg_cost || 0),
+          avg_cost:
+            (existingHolding.cost + (data.cost || 0)) /
+              (existingHolding.shares +
+                ((data.cost || 0) / existingHolding.avg_cost || 0)) || 0,
+          current_value: existingHolding.current_value + (data.cost || 0),
+          profit_loss: existingHolding.profit_loss,
+        };
+        updateHoldingLocally(updatedHolding);
+      } else {
+        // 创建新持仓
+        const newHolding = {
+          fund_code: data.fund_code,
+          fund_name: data.fund_name,
+          cost: data.cost || 0,
+          shares: data.cost || 0,
+          avg_cost: 1,
+          current_value: data.cost || 0,
+          profit_loss: 0,
+          profit_loss_rate: 0,
+          estimate_change_rate: "0.00",
+          estimate_profit: 0,
+          daily_change_rate: "-",
+          fsrq: "",
+          one_month_rate: 0,
+          tags: "",
+          platform: platform,
+        };
+        updateHoldingLocally(newHolding);
       }
-      return response.data;
-    } catch (error) {
-      console.error("添加持仓失败:", error);
-      throw error;
+    } else if (data.type === "sell") {
+      // 减仓操作，更新现有持仓
+      const existingHolding = holdings.value.find(
+        (h) =>
+          h.fund_code === data.fund_code && (h.platform || "其他") === platform,
+      );
+      if (existingHolding) {
+        // 计算减仓后的持仓
+        const sellRatio = (data.shares || 0) / existingHolding.shares;
+        const updatedHolding = {
+          ...existingHolding,
+          cost: existingHolding.cost * (1 - sellRatio),
+          shares: existingHolding.shares - (data.shares || 0),
+          current_value: existingHolding.current_value * (1 - sellRatio),
+          profit_loss: existingHolding.profit_loss * (1 - sellRatio),
+        };
+        if (updatedHolding.shares <= 0.01) {
+          // 如果份额为0，从持仓列表中移除
+          const index = holdings.value.findIndex(
+            (h) =>
+              h.fund_code === data.fund_code &&
+              (h.platform || "其他") === platform,
+          );
+          if (index !== -1) {
+            holdings.value.splice(index, 1);
+          }
+        } else {
+          updateHoldingLocally(updatedHolding);
+        }
+      }
     }
+
+    // 异步发送请求给后端，使用与本地更新一致的平台值
+    const requestData = {
+      ...data,
+      platform: platform,
+    };
+
+    holdingApi
+      .add(requestData)
+      .then((response) => {
+        if (!response.data.success) {
+          // 如果后端失败，重新加载持仓列表
+          loadHoldings();
+        }
+      })
+      .catch((error) => {
+        console.error("添加持仓失败:", error);
+        // 后端失败，重新加载持仓列表
+        loadHoldings();
+      });
+
+    return { success: true };
   }
 
   function updateHoldingLocally(updatedHolding) {
