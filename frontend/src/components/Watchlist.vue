@@ -360,6 +360,7 @@ async function handleConfirm() {
 
 defineExpose({
   loadWatchlist,
+  loadHoldingCodes,
   addToWatchlist,
 });
 </script>
