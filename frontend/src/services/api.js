@@ -33,8 +33,9 @@ function isCacheValid(cacheItem) {
 }
 
 export const fundApi = {
-  search: (keyword) =>
-    api.get(`/fund/search?keyword=${encodeURIComponent(keyword)}`),
+  search: (keyword, signal) =>
+    api.get(`/fund/search?keyword=${encodeURIComponent(keyword)}`, { signal }),
+
   getChart: (fundCode) => api.get(`/fund/${fundCode}/chart`),
   getHistory: async (fundCode) => {
     const now = Date.now();
