@@ -38,8 +38,6 @@
           placeholder="输入基金代码或名称"
           autocomplete="off"
           @input="handleSearch"
-          @focus="handleSearch"
-          @click="handleSearch"
         />
         <div
           v-if="showSearchDropdown && searchResults.length > 0"
@@ -286,9 +284,17 @@ async function handleSearch() {
       currentSearchRequest.cancel();
     }
 
+    // 保存当前搜索关键词
+    const currentKeyword = keyword;
+
     try {
       // 先加载自选和持仓数据，用于判断搜索结果是否已存在
       await loadWatchlistAndHoldings();
+
+      // 检查关键词是否已经变化，如果变化则不再继续
+      if (currentKeyword !== searchKeyword.value.trim()) {
+        return;
+      }
 
       // 创建新的请求
       const controller = new AbortController();
@@ -296,9 +302,13 @@ async function handleSearch() {
         cancel: () => controller.abort(),
       };
 
-      const response = await fundApi.search(keyword, controller.signal);
-      searchResults.value = response.data;
-      showSearchDropdown.value = true;
+      const response = await fundApi.search(currentKeyword, controller.signal);
+
+      // 再次检查关键词是否已经变化，如果变化则不更新结果
+      if (currentKeyword === searchKeyword.value.trim()) {
+        searchResults.value = response.data;
+        showSearchDropdown.value = true;
+      }
     } catch (error) {
       // 忽略取消请求的错误
       if (error.name !== "CanceledError" && error.code !== "ERR_CANCELED") {
