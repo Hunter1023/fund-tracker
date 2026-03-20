@@ -334,9 +334,13 @@ export function useHoldings() {
     );
 
     if (index !== -1) {
-      holdings.value[index] = { ...updatedHolding };
+      // 使用展开运算符创建新数组，确保触发响应式更新但只更新特定元素
+      holdings.value = holdings.value.map((holding, i) =>
+        i === index ? { ...updatedHolding } : holding,
+      );
     } else {
-      holdings.value.push({ ...updatedHolding });
+      // 添加新元素时也使用展开运算符
+      holdings.value = [...holdings.value, { ...updatedHolding }];
     }
   }
 
