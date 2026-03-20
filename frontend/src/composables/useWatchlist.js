@@ -22,6 +22,7 @@ export function useWatchlist() {
   ]);
   const draggedColumn = ref(null);
   const columnWidths = ref({});
+  const holdingCodes = ref([]);
 
   const filteredFunds = computed(() => {
     let result = funds.value;
@@ -90,6 +91,20 @@ export function useWatchlist() {
     } finally {
       loading.value = false;
     }
+  }
+
+  async function loadHoldingCodes() {
+    try {
+      const response = await holdingApi.getCodes();
+      holdingCodes.value = response.data.fund_codes || [];
+    } catch (error) {
+      console.error("加载持仓基金代码失败:", error);
+      holdingCodes.value = [];
+    }
+  }
+
+  function isHolding(fundCode) {
+    return holdingCodes.value.includes(fundCode);
   }
 
   async function addToWatchlist(fundCode, tags = "") {
@@ -297,6 +312,8 @@ export function useWatchlist() {
     allTags,
     tagCounts,
     loadWatchlist,
+    loadHoldingCodes,
+    isHolding,
     addToWatchlist,
     removeFromWatchlist,
     changeFundTags,

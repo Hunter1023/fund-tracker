@@ -216,7 +216,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { ref } from "vue";
 import { useHoldings } from "../composables/useHoldings";
 import { useWatchlist } from "../composables/useWatchlist";
 import ConfirmDialog from "./ConfirmDialog.vue";
@@ -233,6 +233,8 @@ const {
   allTags,
   tagCounts,
   loadWatchlist,
+  loadHoldingCodes,
+  isHolding,
   addToWatchlist,
   removeFromWatchlist,
   handleSort,
@@ -258,16 +260,6 @@ const currentHolding = ref(null);
 const showConfirmDialog = ref(false);
 const confirmMessage = ref("");
 const fundToDelete = ref(null);
-
-// 监听holdings变化，确保持仓状态更新时重新计算
-watch(
-  holdings,
-  () => {
-    // 持仓数据变化时，不需要强制刷新自选列表，因为持有标识会通过计算属性实时更新
-    // 避免重复调用loadWatchlist接口
-  },
-  { deep: true },
-);
 
 const columns = [
   {
@@ -316,20 +308,21 @@ function getTagColorIndex(tag) {
   return colors[Math.abs(hash) % colors.length];
 }
 
-function isHolding(fundCode) {
-  return holdings.value.some((holding) => holding.fund_code === fundCode);
-}
-
-function openFundDetail(fund) {
+async function openFundDetail(fund) {
   if (!fund) return;
-
-  const holding = holdings.value.find((h) => h.fund_code === fund.fund_code);
 
   currentFund.value = {
     fund_code: fund.fund_code,
     fund_name: fund.fund_name,
     tags: fund.tags,
   };
+
+  // 如果 holdings 为空，先加载持仓数据
+  if (holdings.value.length === 0) {
+    await loadHoldings();
+  }
+
+  const holding = holdings.value.find((h) => h.fund_code === fund.fund_code);
 
   if (holding) {
     currentHolding.value = {

@@ -93,6 +93,7 @@ export const watchlistApi = {
 
 export const holdingApi = {
   get: () => api.get("/holding"),
+  getCodes: () => api.get("/holding/codes"),
   add: (data) => api.post("/holding", data),
   update: (fundCode, data) => api.put(`/holding/${fundCode}`, data),
   updateTags: (fundCode, tags) =>
