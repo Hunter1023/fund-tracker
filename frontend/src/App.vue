@@ -301,7 +301,7 @@ async function handleSearch() {
       showSearchDropdown.value = true;
     } catch (error) {
       // 忽略取消请求的错误
-      if (error.name !== "AbortError") {
+      if (error.name !== "CanceledError" && error.code !== "ERR_CANCELED") {
         console.error("搜索失败:", error);
       }
     } finally {
