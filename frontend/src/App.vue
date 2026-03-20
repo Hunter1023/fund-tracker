@@ -506,6 +506,10 @@ watch(activeTab, async (newTab) => {
     watchlistRef.value.loadWatchlist
   ) {
     try {
+      // 加载自选列表前，先加载持仓基金代码列表，以便正确显示持仓标识
+      if (watchlistRef.value.loadHoldingCodes) {
+        await watchlistRef.value.loadHoldingCodes();
+      }
       await watchlistRef.value.loadWatchlist();
     } catch (error) {
       console.error("加载自选基金失败:", error);

@@ -2315,6 +2315,22 @@ def update_holding_tags():
     finally:
         db.close()
 
+@app.route('/api/holding/codes', methods=['GET'])
+def get_holding_codes():
+    """
+    获取所有持仓基金代码列表（轻量级接口，用于判断基金是否在持仓中）
+    """
+    db = next(get_db())
+    try:
+        holdings = db.query(FundHolding).all()
+        fund_codes = [holding.fund.fund_code for holding in holdings]
+        return jsonify({'fund_codes': fund_codes})
+    except Exception as e:
+        print(f"获取持仓基金代码失败: {e}")
+        return jsonify({'fund_codes': []})
+    finally:
+        db.close()
+
 @app.route('/api/tags', methods=['GET'])
 def get_all_tags():
     """
