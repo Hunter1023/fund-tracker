@@ -126,19 +126,25 @@ export function useWatchlist() {
                 (f) => f.fund_code === fundCode,
               );
               if (index !== -1) {
-                funds.value[index] = {
-                  ...funds.value[index],
-                  fund_name: fundData.fund_name || funds.value[index].fund_name,
-                  daily_change_rate: fundData.daily_change_rate || "-",
-                  estimate_change_rate: fundData.estimate_change_rate || "-",
-                  one_month_rate: fundData.one_month_rate || 0,
-                  three_month_rate: fundData.three_month_rate || 0,
-                  one_year_rate: fundData.one_year_rate || 0,
-                  net_value: fundData.net_value || "",
-                  unit_net_value: fundData.unit_net_value || "",
-                  estimate_net_value: fundData.estimate_net_value || "",
-                  estimate_time: fundData.estimate_time || "",
-                };
+                // 使用展开运算符创建新数组，确保触发响应式更新但只更新特定元素
+                funds.value = funds.value.map((fund, i) =>
+                  i === index
+                    ? {
+                        ...fund,
+                        fund_name: fundData.fund_name || fund.fund_name,
+                        daily_change_rate: fundData.daily_change_rate || "-",
+                        estimate_change_rate:
+                          fundData.estimate_change_rate || "-",
+                        one_month_rate: fundData.one_month_rate || 0,
+                        three_month_rate: fundData.three_month_rate || 0,
+                        one_year_rate: fundData.one_year_rate || 0,
+                        net_value: fundData.net_value || "",
+                        unit_net_value: fundData.unit_net_value || "",
+                        estimate_net_value: fundData.estimate_net_value || "",
+                        estimate_time: fundData.estimate_time || "",
+                      }
+                    : fund,
+                );
               }
             }
           })
