@@ -143,7 +143,7 @@ async function handleSearch() {
       searchResults.value = response.data || [];
     } catch (error) {
       // 忽略取消请求的错误
-      if (error.name !== "AbortError") {
+      if (error.name !== "CanceledError" && error.code !== "ERR_CANCELED") {
         console.error("搜索基金失败:", error);
         searchResults.value = [];
       }
@@ -192,7 +192,7 @@ async function doImmediateSearch() {
     }
   } catch (error) {
     // 忽略取消请求的错误
-    if (error.name !== "AbortError") {
+    if (error.name !== "CanceledError" && error.code !== "ERR_CANCELED") {
       console.error("搜索基金失败:", error);
       searchResults.value = [
         { fund_code: "018463", fund_name: "易方达科技创新混合C (mock)" },
