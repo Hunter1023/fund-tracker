@@ -38,8 +38,7 @@
           placeholder="输入基金代码或名称"
           autocomplete="off"
           @input="handleSearch"
-          @focus="handleSearch"
-          @click="handleSearch"
+          @click="handleSearchClick"
         />
         <div
           v-if="showSearchDropdown && searchResults.length > 0"
@@ -267,6 +266,15 @@ async function loadWatchlistAndHoldings() {
   }
 }
 
+// 点击搜索框时的处理函数
+function handleSearchClick() {
+  const keyword = searchKeyword.value.trim();
+  if (keyword && searchResults.value.length > 0) {
+    // 如果搜索框有内容且已有搜索结果，显示下拉框
+    showSearchDropdown.value = true;
+  }
+}
+
 async function handleSearch() {
   const keyword = searchKeyword.value.trim();
 
@@ -286,9 +294,14 @@ async function handleSearch() {
       currentSearchRequest.cancel();
     }
 
+    // 保存当前搜索关键词
+    const currentKeyword = keyword;
+
     try {
-      // 先加载自选和持仓数据，用于判断搜索结果是否已存在
-      await loadWatchlistAndHoldings();
+      // 检查关键词是否已经变化，如果变化则不再继续
+      if (currentKeyword !== searchKeyword.value.trim()) {
+        return;
+      }
 
       // 创建新的请求
       const controller = new AbortController();
@@ -296,9 +309,13 @@ async function handleSearch() {
         cancel: () => controller.abort(),
       };
 
-      const response = await fundApi.search(keyword, controller.signal);
-      searchResults.value = response.data;
-      showSearchDropdown.value = true;
+      const response = await fundApi.search(currentKeyword, controller.signal);
+
+      // 再次检查关键词是否已经变化，如果变化则不更新结果
+      if (currentKeyword === searchKeyword.value.trim()) {
+        searchResults.value = response.data;
+        showSearchDropdown.value = true;
+      }
     } catch (error) {
       // 忽略取消请求的错误
       if (error.name !== "CanceledError" && error.code !== "ERR_CANCELED") {
@@ -462,6 +479,12 @@ function handleClickOutside(event) {
 // 初始化加载默认标签的数据
 onMounted(async () => {
   await nextTick();
+  // 加载自选和持仓数据，用于搜索结果显示
+  try {
+    await loadWatchlistAndHoldings();
+  } catch (error) {
+    console.error("加载自选和持仓数据失败:", error);
+  }
   // 加载默认标签（holding）的数据
   if (holdingsRef.value && holdingsRef.value.loadHoldings) {
     try {
