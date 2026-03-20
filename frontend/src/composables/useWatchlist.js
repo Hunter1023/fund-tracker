@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { watchlistApi } from "../services/api";
+import { fundApi, watchlistApi } from "../services/api";
 
 export function useWatchlist() {
   const funds = ref([]);
