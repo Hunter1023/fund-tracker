@@ -415,16 +415,18 @@ async function confirmTags() {
 
     // 加入自选
     if (watchlistRef.value && watchlistRef.value.addToWatchlist) {
-      await watchlistRef.value.addToWatchlist(
+      const result = await watchlistRef.value.addToWatchlist(
         selectedFund.value.fund_code,
         tags,
       );
-      // 不需要调用loadWatchlistAndHoldings，因为addToWatchlist已经更新了本地列表
-      // 并且Watchlist组件会自动处理持有标识的显示
+      
+      // 只有成功时才关闭模态框
+      if (result && result.success) {
+        closeTagsModal();
+      } else {
+        console.error("添加自选失败:", result);
+      }
     }
-
-    // 关闭模态框
-    closeTagsModal();
   } catch (error) {
     console.error("操作失败:", error);
   } finally {
