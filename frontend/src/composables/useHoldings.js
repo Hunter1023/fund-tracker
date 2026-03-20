@@ -205,6 +205,14 @@ export function useHoldings() {
           h.fund_code === data.fund_code && (h.platform || "其他") === platform,
       );
       if (existingHolding) {
+        // 计算更新后的当前价值
+        const newCurrentValue =
+          existingHolding.current_value + (data.cost || 0);
+        // 计算更新后的今日收益
+        const estimateChangeRate =
+          parseFloat(existingHolding.estimate_change_rate) || 0;
+        const newEstimateProfit = (estimateChangeRate * newCurrentValue) / 100;
+
         // 更新现有持仓
         const updatedHolding = {
           ...existingHolding,
@@ -216,8 +224,9 @@ export function useHoldings() {
             (existingHolding.cost + (data.cost || 0)) /
               (existingHolding.shares +
                 ((data.cost || 0) / existingHolding.avg_cost || 0)) || 0,
-          current_value: existingHolding.current_value + (data.cost || 0),
+          current_value: newCurrentValue,
           profit_loss: existingHolding.profit_loss,
+          estimate_profit: newEstimateProfit,
         };
         updateHoldingLocally(updatedHolding);
       } else {
