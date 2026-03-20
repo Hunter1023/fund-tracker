@@ -1,15 +1,28 @@
 <template>
-  <div class="modal-overlay" :class="{ show: show }" :style="{ display: show ? 'flex' : 'none' }" @click="handleOverlayClick">
+  <div
+    class="modal-overlay"
+    :class="{ show: show }"
+    :style="{ display: show ? 'flex' : 'none' }"
+    @click="handleOverlayClick"
+  >
     <div class="modal-container" @click.stop>
       <div class="modal-header">
         <h3 class="modal-title">搜索基金</h3>
-        <button type="button" class="close-btn" @click="$emit('update:show', false)">
+        <button
+          type="button"
+          class="close-btn"
+          @click="$emit('update:show', false)"
+        >
           <i class="bi bi-x-lg"></i>
         </button>
       </div>
       <div class="modal-body">
         <div class="search-section">
-          <div class="search-input-wrapper" @click="handleWrapperClick" @mousedown="handleWrapperMouseDown">
+          <div
+            class="search-input-wrapper"
+            @click="handleWrapperClick"
+            @mousedown="handleWrapperMouseDown"
+          >
             <input
               ref="searchInputRef"
               type="text"
@@ -58,115 +71,166 @@
 </template>
 
 <script setup>
-import { nextTick, ref, watch } from 'vue'
-import { fundApi } from '../services/api'
+import { nextTick, ref, watch } from "vue";
+import { fundApi } from "../services/api";
 
 const props = defineProps({
   show: Boolean,
   platform: {
     type: String,
-    default: ''
-  }
-})
-const emit = defineEmits(['update:show', 'select'])
+    default: "",
+  },
+});
+const emit = defineEmits(["update:show", "select"]);
 
-const searchKeyword = ref('')
-const searchResults = ref([])
-const searchLoading = ref(false)
-const searchInputRef = ref(null)
-let searchTimer = null
+const searchKeyword = ref("");
+const searchResults = ref([]);
+const searchLoading = ref(false);
+const searchInputRef = ref(null);
+let searchTimer = null;
+let currentRequest = null;
 
-watch(() => props.show, async (newVal, oldVal) => {
-  console.log('SearchFundModal show changed:', { oldVal, newVal, currentKeyword: searchKeyword.value })
-  if (newVal) {
-    console.log('Opening modal, clearing search keyword')
-    searchKeyword.value = ''
-    searchResults.value = []
-    await nextTick()
-    if (searchInputRef.value && searchInputRef.value.focus) {
-      searchInputRef.value.focus()
+watch(
+  () => props.show,
+  async (newVal, oldVal) => {
+    console.log("SearchFundModal show changed:", {
+      oldVal,
+      newVal,
+      currentKeyword: searchKeyword.value,
+    });
+    if (newVal) {
+      console.log("Opening modal, clearing search keyword");
+      searchKeyword.value = "";
+      searchResults.value = [];
+      await nextTick();
+      if (searchInputRef.value && searchInputRef.value.focus) {
+        searchInputRef.value.focus();
+      }
+    } else {
+      console.log("Closing modal, clearing search keyword");
+      searchKeyword.value = "";
+      searchResults.value = [];
     }
-  } else {
-    console.log('Closing modal, clearing search keyword')
-    searchKeyword.value = ''
-    searchResults.value = []
-  }
-})
+  },
+);
 
 async function handleSearch() {
   if (!searchKeyword.value || searchKeyword.value.trim().length < 2) {
-    searchResults.value = []
-    return
+    searchResults.value = [];
+    return;
   }
 
-  clearTimeout(searchTimer)
+  clearTimeout(searchTimer);
   searchTimer = setTimeout(async () => {
-    searchLoading.value = true
-    try {
-      const response = await fundApi.search(searchKeyword.value.trim())
-      searchResults.value = response.data || []
-    } catch (error) {
-      console.error('搜索基金失败:', error)
-      searchResults.value = []
-    } finally {
-      searchLoading.value = false
+    // 取消之前的请求
+    if (currentRequest) {
+      currentRequest.cancel();
     }
-  }, 300)
+
+    searchLoading.value = true;
+    try {
+      // 创建新的请求
+      const controller = new AbortController();
+      currentRequest = {
+        cancel: () => controller.abort(),
+      };
+
+      // 使用新的API调用方式，支持取消请求
+      const response = await fundApi.search(
+        searchKeyword.value.trim(),
+        controller.signal,
+      );
+      searchResults.value = response.data || [];
+    } catch (error) {
+      // 忽略取消请求的错误
+      if (error.name !== "AbortError") {
+        console.error("搜索基金失败:", error);
+        searchResults.value = [];
+      }
+    } finally {
+      searchLoading.value = false;
+      currentRequest = null;
+    }
+  }, 300);
 }
 
 async function doImmediateSearch() {
   if (!searchKeyword.value || searchKeyword.value.trim().length < 2) {
-    searchResults.value = []
-    return
+    searchResults.value = [];
+    return;
   }
-  clearTimeout(searchTimer)
-  console.log('doImmediateSearch start, keyword=', searchKeyword.value)
-  searchLoading.value = true
+  clearTimeout(searchTimer);
+
+  // 取消之前的请求
+  if (currentRequest) {
+    currentRequest.cancel();
+  }
+
+  console.log("doImmediateSearch start, keyword=", searchKeyword.value);
+  searchLoading.value = true;
   try {
-    const response = await fundApi.search(searchKeyword.value.trim())
-    console.log('doImmediateSearch response:', response && response.data)
+    // 创建新的请求
+    const controller = new AbortController();
+    currentRequest = {
+      cancel: () => controller.abort(),
+    };
+
+    const response = await fundApi.search(
+      searchKeyword.value.trim(),
+      controller.signal,
+    );
+    console.log("doImmediateSearch response:", response && response.data);
     // 如果后端返回空结果，为便于测试回退到模拟数据
     if (response && response.data && response.data.length > 0) {
-      searchResults.value = response.data
+      searchResults.value = response.data;
     } else {
       const mockResults = [
-        { fund_code: '018463', fund_name: '易方达科技创新混合C' }
-      ]
-      console.log('doImmediateSearch: response empty, use mockResults')
-      searchResults.value = mockResults
+        { fund_code: "018463", fund_name: "易方达科技创新混合C" },
+      ];
+      console.log("doImmediateSearch: response empty, use mockResults");
+      searchResults.value = mockResults;
     }
   } catch (error) {
-    console.error('搜索基金失败:', error)
-    searchResults.value = [ { fund_code: '018463', fund_name: '易方达科技创新混合C (mock)' } ]
+    // 忽略取消请求的错误
+    if (error.name !== "AbortError") {
+      console.error("搜索基金失败:", error);
+      searchResults.value = [
+        { fund_code: "018463", fund_name: "易方达科技创新混合C (mock)" },
+      ];
+    }
   } finally {
-    searchLoading.value = false
-    console.log('doImmediateSearch end, results length=', searchResults.value.length)
+    searchLoading.value = false;
+    currentRequest = null;
+    console.log(
+      "doImmediateSearch end, results length=",
+      searchResults.value.length,
+    );
   }
 }
 
 function handleFocus() {
-  console.log('handleFocus, keyword=', searchKeyword.value)
+  console.log("handleFocus, keyword=", searchKeyword.value);
 }
 
 function handleWrapperClick() {
-  console.log('handleWrapperClick, keyword=', searchKeyword.value)
+  console.log("handleWrapperClick, keyword=", searchKeyword.value);
 }
 
 function handleWrapperMouseDown(e) {
-  console.log('handleWrapperMouseDown, keyword=', searchKeyword.value)
+  console.log("handleWrapperMouseDown, keyword=", searchKeyword.value);
 }
 
 function handleOverlayClick() {
-  emit('update:show', false)
+  emit("update:show", false);
 }
 
 function selectFund(fund) {
-  emit('select', fund)
-  emit('update:show', false)
+  emit("select", fund);
+  emit("update:show", false);
 }
 
 function selectFirstResult() {
-  if (searchResults.value.length > 0) selectFund(searchResults.value[0])
+  if (searchResults.value.length > 0) selectFund(searchResults.value[0]);
 }
 </script>
 
