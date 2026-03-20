@@ -285,6 +285,34 @@ export function useHoldings() {
         if (!response.data.success) {
           // 如果后端失败，重新加载持仓列表
           loadHoldings();
+        } else {
+          // 后端成功后，异步获取基金最新数据并更新本地持仓
+          fundApi
+            .get(data.fund_code)
+            .then((fundResponse) => {
+              const fundData = fundResponse.data;
+              if (fundData) {
+                const updatedHolding = {
+                  ...holdings.value.find(
+                    (h) =>
+                      h.fund_code === data.fund_code &&
+                      (h.platform || "其他") === platform,
+                  ),
+                  daily_change_rate: fundData.daily_change_rate || "-",
+                  estimate_change_rate: fundData.estimate_change_rate || "0.00",
+                  estimate_profit:
+                    (parseFloat(fundData.estimate_change_rate) *
+                      (data.current_value || 0)) /
+                      100 || 0,
+                  one_month_rate: fundData.one_month_rate || 0,
+                  fund_name: fundData.fund_name || data.fund_name,
+                };
+                updateHoldingLocally(updatedHolding);
+              }
+            })
+            .catch((error) => {
+              console.error("获取基金数据失败:", error);
+            });
         }
       })
       .catch((error) => {
@@ -354,7 +382,7 @@ export function useHoldings() {
 
   function getChangeRateColor(rate) {
     const numRate = parseFloat(rate);
-    if (isNaN(numRate)) return "#6c757d";
+    if (isNaN(numRate) || numRate === 0) return "#6c757d";
     return numRate > 0 ? "#dc3545" : "#28a745";
   }
 
