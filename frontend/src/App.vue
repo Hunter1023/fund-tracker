@@ -288,9 +288,6 @@ async function handleSearch() {
     const currentKeyword = keyword;
 
     try {
-      // 先加载自选和持仓数据，用于判断搜索结果是否已存在
-      await loadWatchlistAndHoldings();
-
       // 检查关键词是否已经变化，如果变化则不再继续
       if (currentKeyword !== searchKeyword.value.trim()) {
         return;
@@ -472,6 +469,12 @@ function handleClickOutside(event) {
 // 初始化加载默认标签的数据
 onMounted(async () => {
   await nextTick();
+  // 加载自选和持仓数据，用于搜索结果显示
+  try {
+    await loadWatchlistAndHoldings();
+  } catch (error) {
+    console.error("加载自选和持仓数据失败:", error);
+  }
   // 加载默认标签（holding）的数据
   if (holdingsRef.value && holdingsRef.value.loadHoldings) {
     try {
