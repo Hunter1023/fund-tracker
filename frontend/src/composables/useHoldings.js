@@ -301,22 +301,43 @@ export function useHoldings() {
             .then((fundResponse) => {
               const fundData = fundResponse.data;
               if (fundData) {
-                const updatedHolding = {
-                  ...holdings.value.find(
-                    (h) =>
-                      h.fund_code === data.fund_code &&
-                      (h.platform || "其他") === platform,
-                  ),
-                  daily_change_rate: fundData.daily_change_rate || "-",
-                  estimate_change_rate: fundData.estimate_change_rate || "0.00",
-                  estimate_profit:
-                    (parseFloat(fundData.estimate_change_rate) *
-                      (data.current_value || 0)) /
-                      100 || 0,
-                  one_month_rate: fundData.one_month_rate || 0,
-                  fund_name: fundData.fund_name || data.fund_name,
-                };
-                updateHoldingLocally(updatedHolding);
+                const currentHolding = holdings.value.find(
+                  (h) =>
+                    h.fund_code === data.fund_code &&
+                    (h.platform || "其他") === platform,
+                );
+                if (currentHolding) {
+                  // 根据最新净值重新计算当前价值
+                  const unitNetValue = parseFloat(fundData.unit_net_value) || 0;
+                  const newCurrentValue = currentHolding.shares * unitNetValue;
+
+                  // 计算今日收益，确保使用正确的估算涨跌幅
+                  const estimateChangeRate =
+                    parseFloat(fundData.estimate_change_rate) || 0;
+                  const estimateProfit =
+                    (estimateChangeRate * newCurrentValue) / 100;
+
+                  // 重新计算持有收益
+                  const profitLoss = newCurrentValue - currentHolding.cost;
+                  const profitLossRate =
+                    currentHolding.cost > 0
+                      ? (profitLoss / currentHolding.cost) * 100
+                      : 0;
+
+                  const updatedHolding = {
+                    ...currentHolding,
+                    current_value: newCurrentValue,
+                    profit_loss: profitLoss,
+                    profit_loss_rate: profitLossRate,
+                    daily_change_rate: fundData.daily_change_rate || "-",
+                    estimate_change_rate:
+                      fundData.estimate_change_rate || "0.00",
+                    estimate_profit: estimateProfit,
+                    one_month_rate: fundData.one_month_rate || 0,
+                    fund_name: fundData.fund_name || data.fund_name,
+                  };
+                  updateHoldingLocally(updatedHolding);
+                }
               }
             })
             .catch((error) => {
