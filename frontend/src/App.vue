@@ -227,6 +227,7 @@ const showDropdown = ref(false);
 const filteredTags = ref([]);
 
 let searchTimeout = null;
+let currentSearchRequest = null;
 
 function showLoading() {
   loading.value = true;
@@ -280,15 +281,31 @@ async function handleSearch() {
   }
 
   searchTimeout = setTimeout(async () => {
+    // 取消之前的请求
+    if (currentSearchRequest) {
+      currentSearchRequest.cancel();
+    }
+
     try {
       // 先加载自选和持仓数据，用于判断搜索结果是否已存在
       await loadWatchlistAndHoldings();
 
-      const response = await fundApi.search(keyword);
+      // 创建新的请求
+      const controller = new AbortController();
+      currentSearchRequest = {
+        cancel: () => controller.abort(),
+      };
+
+      const response = await fundApi.search(keyword, controller.signal);
       searchResults.value = response.data;
       showSearchDropdown.value = true;
     } catch (error) {
-      console.error("搜索失败:", error);
+      // 忽略取消请求的错误
+      if (error.name !== "AbortError") {
+        console.error("搜索失败:", error);
+      }
+    } finally {
+      currentSearchRequest = null;
     }
   }, 150);
 }
@@ -419,7 +436,7 @@ async function confirmTags() {
         selectedFund.value.fund_code,
         tags,
       );
-      
+
       // 只有成功时才关闭模态框
       if (result && result.success) {
         closeTagsModal();
