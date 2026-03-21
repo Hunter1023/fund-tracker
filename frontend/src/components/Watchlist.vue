@@ -376,29 +376,8 @@ defineExpose({
 
 .tag-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
-  padding: 0 4px;
-  scrollbar-width: thin;
-  -webkit-overflow-scrolling: touch;
-}
-
-.tag-tabs::-webkit-scrollbar {
-  height: 6px;
-}
-
-.tag-tabs::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
-}
-
-.tag-tabs::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
-}
-
-.tag-tabs::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
 }
 
 .tag-tab {
