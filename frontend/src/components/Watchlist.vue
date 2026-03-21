@@ -376,8 +376,29 @@ defineExpose({
 
 .tag-tabs {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
+  overflow-x: auto;
+  padding: 0 4px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tag-tabs::-webkit-scrollbar {
+  height: 6px;
+}
+
+.tag-tabs::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.tag-tabs::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.tag-tabs::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
 }
 
 .tag-tab {
@@ -456,6 +477,7 @@ defineExpose({
   overflow-x: auto;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  -webkit-overflow-scrolling: touch;
 }
 
 .custom-table {
@@ -463,6 +485,7 @@ defineExpose({
   border-collapse: separate;
   border-spacing: 0;
   background: #fff;
+  min-width: 900px;
 }
 
 .table-header {
@@ -474,6 +497,7 @@ defineExpose({
   text-align: left;
   border: none;
   position: relative;
+  white-space: nowrap;
 }
 
 .table-header:first-child {
@@ -527,6 +551,7 @@ defineExpose({
   padding: 16px;
   border-bottom: 1px solid #e5e7eb;
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .table-row:last-child td {
@@ -608,6 +633,9 @@ defineExpose({
   font-weight: 600;
   color: #1f2937;
   font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fund-name.clickable {

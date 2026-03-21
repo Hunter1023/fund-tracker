@@ -102,18 +102,11 @@
           v-if="showSectorDistribution && sortedHoldings.length > 0"
           class="chart-container"
         >
-          <div
-            class="pie-chart-wrapper"
-            style="display: flex; align-items: flex-start; gap: 20px"
-          >
-            <div style="flex: 1">
+          <div class="pie-chart-wrapper">
+            <div class="chart-area">
               <canvas ref="pieChart"></canvas>
             </div>
-            <div
-              ref="legendContainer"
-              class="custom-legend"
-              style="flex: 0 0 400px"
-            ></div>
+            <div ref="legendContainer" class="custom-legend"></div>
           </div>
         </div>
       </div>
@@ -937,6 +930,7 @@ defineExpose({
   overflow-x: auto;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  -webkit-overflow-scrolling: touch;
 }
 
 .custom-table {
@@ -944,6 +938,7 @@ defineExpose({
   border-collapse: separate;
   border-spacing: 0;
   background: #fff;
+  min-width: 900px;
 }
 
 .custom-table th:nth-child(2),
@@ -962,6 +957,7 @@ defineExpose({
   text-align: left;
   border: none;
   position: relative;
+  white-space: nowrap;
 }
 
 .table-header:first-child {
@@ -1015,6 +1011,7 @@ defineExpose({
   padding: 16px;
   border-bottom: 1px solid #e5e7eb;
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .table-row:last-child td {
@@ -1039,6 +1036,9 @@ defineExpose({
   font-weight: 600;
   color: #1f2937;
   font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fund-name.clickable {
@@ -1109,6 +1109,7 @@ defineExpose({
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
 
 .tag-badge:hover {
@@ -1154,10 +1155,21 @@ defineExpose({
 
 .pie-chart-wrapper {
   position: relative;
-  height: 320px;
   max-width: 100%;
   margin: 0 auto;
   width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.chart-area {
+  flex: 1;
+  min-height: 250px;
+}
+
+.custom-legend {
+  flex: 0 0 400px;
 }
 
 /* 移除3D阴影效果 */
@@ -1241,11 +1253,48 @@ defineExpose({
 
 @media (max-width: 768px) {
   .summary-card {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 12px;
+    justify-content: center;
+  }
+
+  .summary-item:nth-child(1),
+  .summary-item:nth-child(2) {
+    flex: 0 0 calc(50% - 3px);
+  }
+
+  .summary-item:nth-child(3),
+  .summary-item:nth-child(4),
+  .summary-item:nth-child(5) {
+    flex: 0 0 calc(33.333% - 4px);
+  }
+
+  .summary-item {
+    text-align: center;
+  }
+
+  .summary-label {
+    font-size: 0.7rem;
+    margin-bottom: 2px;
   }
 
   .summary-value {
-    font-size: 1.25rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .platform-tab {
+    font-size: 0.9rem;
+  }
+
+  .sector-title {
+    font-size: 0.9rem;
+  }
+
+  .table-header {
+    font-size: 0.9rem;
   }
 
   .action-bar {
@@ -1257,7 +1306,18 @@ defineExpose({
   }
 
   .pie-chart-wrapper {
-    height: 250px;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .chart-area {
+    min-height: 150px;
+    max-height: 180px;
+  }
+
+  .custom-legend {
+    flex: 0 0 auto;
+    width: 100%;
   }
 
   .chart-container {
