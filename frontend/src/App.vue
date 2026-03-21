@@ -1036,4 +1036,111 @@ watch(activeTab, async (newTab) => {
 .common-tag:active {
   transform: translateY(0);
 }
+
+/* 移动端响应式布局 */
+@media (max-width: 768px) {
+  .app-container {
+    padding: 10px;
+  }
+
+  .header-section {
+    margin-bottom: 20px;
+    padding: 10px 0;
+  }
+
+  .app-title {
+    font-size: 2rem;
+  }
+
+  .app-subtitle {
+    font-size: 0.9rem;
+    text-align: center;
+  }
+
+  .search-container {
+    padding: 0 12px;
+  }
+
+  .search-input {
+    padding: 14px 0;
+    font-size: 0.9rem;
+  }
+
+  .tabs-section {
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .tab-btn {
+    padding: 12px 16px;
+    font-size: 0.9rem;
+  }
+
+  .content-section {
+    padding: 16px;
+  }
+
+  .modal-content {
+    width: 95%;
+    max-height: 85vh;
+  }
+
+  .modal-header {
+    padding: 16px 20px;
+  }
+
+  .modal-header h3 {
+    font-size: 1.1rem;
+  }
+
+  .modal-body {
+    padding: 20px;
+  }
+
+  .modal-footer {
+    padding: 16px 20px;
+  }
+
+  .btn {
+    padding: 8px 16px;
+    font-size: 0.8rem;
+  }
+
+  .dropdown-item-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .fund-badges {
+    flex-direction: row;
+  }
+
+  .dropdown-item-actions {
+    flex-direction: column;
+  }
+
+  .action-btn {
+    padding: 10px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-title {
+    font-size: 1.8rem;
+  }
+
+  .search-input {
+    font-size: 0.85rem;
+  }
+
+  .tab-btn {
+    font-size: 0.85rem;
+    padding: 10px 14px;
+  }
+
+  .content-section {
+    padding: 12px;
+  }
+}
 </style>
