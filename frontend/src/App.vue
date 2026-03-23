@@ -244,17 +244,19 @@ async function loadWatchlistAndHoldings() {
 
   isLoadingData = true;
   try {
-    // 加载自选基金
-    if (watchlistRef.value && watchlistRef.value.funds) {
-      watchlistFunds.value = watchlistRef.value.funds;
-    } else {
-      const watchlistResponse = await watchlistApi.get();
-      watchlistFunds.value = watchlistResponse.data || [];
-    }
-
     // 加载持仓基金 - 只用于搜索结果显示，不触发组件的loadHoldings
     const holdingsResponse = await holdingApi.get();
     holdingsFunds.value = holdingsResponse.data || [];
+    
+    // 只有在当前显示的是自选标签或watchlistRef已挂载时才加载自选基金
+    if (activeTab.value === "watchlist" || (watchlistRef.value && watchlistRef.value.funds)) {
+      if (watchlistRef.value && watchlistRef.value.funds) {
+        watchlistFunds.value = watchlistRef.value.funds;
+      } else {
+        const watchlistResponse = await watchlistApi.get();
+        watchlistFunds.value = watchlistResponse.data || [];
+      }
+    }
   } catch (error) {
     console.error("加载自选和持仓失败:", error);
   } finally {

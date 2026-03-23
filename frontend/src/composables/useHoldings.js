@@ -8,25 +8,30 @@ export function useHoldings() {
   const sortField = ref("one_month_rate");
   const sortDirection = ref("desc");
   const transactionType = ref("sync");
-  const selectedPlatform = ref("默认");
+  const selectedPlatform = ref("其他");
   const platforms = ref([]);
 
   async function loadPlatforms() {
     try {
       const response = await platformApi.get();
       const platformNames = response.data.map((p) => p.name);
+      // 确保"其他"平台在列表中
+      if (!platformNames.includes("其他")) {
+        platformNames.push("其他");
+      }
       platforms.value = platformNames;
       // 平台列表加载后自动选择第一个平台
       if (platformNames.length > 0) {
         selectedPlatform.value = platformNames[0];
       } else {
-        // 如果没有平台，使用默认平台
-        selectedPlatform.value = "默认";
+        // 如果没有平台，使用"其他"作为默认平台
+        selectedPlatform.value = "其他";
       }
     } catch (error) {
       console.error("加载平台列表失败:", error);
-      // 加载失败时使用默认平台
-      selectedPlatform.value = "默认";
+      // 加载失败时使用"其他"作为默认平台
+      selectedPlatform.value = "其他";
+      platforms.value = ["其他"];
     }
   }
 
