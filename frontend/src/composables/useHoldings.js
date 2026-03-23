@@ -8,30 +8,25 @@ export function useHoldings() {
   const sortField = ref("one_month_rate");
   const sortDirection = ref("desc");
   const transactionType = ref("sync");
-  const selectedPlatform = ref("其他");
+  const selectedPlatform = ref("默认");
   const platforms = ref([]);
 
   async function loadPlatforms() {
     try {
       const response = await platformApi.get();
       const platformNames = response.data.map((p) => p.name);
-      // 确保"其他"平台在列表中
-      if (!platformNames.includes("其他")) {
-        platformNames.push("其他");
-      }
       platforms.value = platformNames;
       // 平台列表加载后自动选择第一个平台
       if (platformNames.length > 0) {
         selectedPlatform.value = platformNames[0];
       } else {
-        // 如果没有平台，使用"其他"作为默认平台
-        selectedPlatform.value = "其他";
+        // 如果没有平台，使用默认平台
+        selectedPlatform.value = "默认";
       }
     } catch (error) {
       console.error("加载平台列表失败:", error);
-      // 加载失败时使用"其他"作为默认平台
-      selectedPlatform.value = "其他";
-      platforms.value = ["其他"];
+      // 加载失败时使用默认平台
+      selectedPlatform.value = "默认";
     }
   }
 
@@ -113,9 +108,15 @@ export function useHoldings() {
   }
 
   const sortedHoldings = computed(() => {
-    const filteredHoldings = holdings.value.filter(
-      (h) => (h.platform || "其他") === selectedPlatform.value,
-    );
+    const filteredHoldings = holdings.value.filter((h) => {
+      const holdingPlatform = h.platform || "";
+      // 如果选择的是默认平台，则匹配没有平台信息的持仓
+      if (selectedPlatform.value === "默认") {
+        return !holdingPlatform;
+      }
+      // 否则匹配平台名称
+      return holdingPlatform === selectedPlatform.value;
+    });
     return sortFunds(filteredHoldings, sortField.value, sortDirection.value);
   });
 
@@ -126,9 +127,15 @@ export function useHoldings() {
     let totalTodayProfit = 0;
     let hasTradingDayData = false;
 
-    const filteredHoldings = holdings.value.filter(
-      (h) => (h.platform || "其他") === selectedPlatform.value,
-    );
+    const filteredHoldings = holdings.value.filter((h) => {
+      const holdingPlatform = h.platform || "";
+      // 如果选择的是默认平台，则匹配没有平台信息的持仓
+      if (selectedPlatform.value === "默认") {
+        return !holdingPlatform;
+      }
+      // 否则匹配平台名称
+      return holdingPlatform === selectedPlatform.value;
+    });
 
     if (Array.isArray(filteredHoldings)) {
       filteredHoldings.forEach((holding) => {
