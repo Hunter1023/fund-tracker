@@ -544,8 +544,8 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
 
     # 并发获取需要刷新的基金数据
     if funds_to_refresh:
-        # 使用小时级时间戳作为缓存键，每1小时更新一次
-        cache_key = int(time.time() / (60 * 60))
+        # 使用分钟级时间戳作为缓存键，每5分钟更新一次
+        cache_key = int(time.time() / (5 * 60))
 
         # 并发获取估值数据
         valuation_data_dict = DataFetcher.get_fund_valuation_batch(funds_to_refresh, cache_key)

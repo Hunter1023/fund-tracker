@@ -35,6 +35,14 @@ def retry_on_failure(max_retries=3, delay=1, backoff=2, exceptions=(requests.Req
                         current_delay *= backoff
                     else:
                         print(f"API请求失败，已达到最大重试次数{max_retries}次，放弃重试。错误: {e}")
+                except ValueError as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        print(f"API返回None值，第{attempt + 1}次重试，等待{current_delay:.2f}秒... 错误: {e}")
+                        time.sleep(current_delay)
+                        current_delay *= backoff
+                    else:
+                        print(f"API返回None值，已达到最大重试次数{max_retries}次，放弃重试。错误: {e}")
                 except Exception as e:
                     print(f"API请求遇到非重试异常: {e}")
                     raise e
