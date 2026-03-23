@@ -1,11 +1,47 @@
 import requests
 import json
 import time
-from functools import lru_cache
+from functools import lru_cache, wraps
 from bs4 import BeautifulSoup
 from config import DATA_SOURCES
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+
+def retry_on_failure(max_retries=3, delay=1, backoff=2, exceptions=(requests.RequestException, requests.Timeout, ConnectionError, json.JSONDecodeError)):
+    """
+    重试装饰器，用于处理API请求失败的情况
+    :param max_retries: 最大重试次数
+    :param delay: 初始延迟时间（秒）
+    :param backoff: 延迟时间倍数
+    :param exceptions: 需要重试的异常类型
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            current_delay = delay
+
+            for attempt in range(max_retries):
+                try:
+                    result = func(*args, **kwargs)
+                    if result is None:
+                        raise ValueError("API返回None值")
+                    return result
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        print(f"API请求失败，第{attempt + 1}次重试，等待{current_delay:.2f}秒... 错误: {e}")
+                        time.sleep(current_delay)
+                        current_delay *= backoff
+                    else:
+                        print(f"API请求失败，已达到最大重试次数{max_retries}次，放弃重试。错误: {e}")
+                except Exception as e:
+                    print(f"API请求遇到非重试异常: {e}")
+                    raise e
+
+            return None
+        return wrapper
+    return decorator
 
 class DataFetcher:
     """数据获取类"""
@@ -15,6 +51,7 @@ class DataFetcher:
     _lock = threading.Lock()
 
     @staticmethod
+    @retry_on_failure(max_retries=3, delay=1, backoff=2)
     @lru_cache(maxsize=512)
     def get_fund_valuation(fund_code, timestamp=None):
         """
@@ -148,6 +185,7 @@ class DataFetcher:
             return []
 
     @staticmethod
+    @retry_on_failure(max_retries=3, delay=1, backoff=2)
     @lru_cache(maxsize=512)
     def get_fund_rates(fund_code, timestamp=None):
         """
@@ -461,7 +499,7 @@ class DataFetcher:
             for future in as_completed(future_to_fund):
                 fund_code = future_to_fund[future]
                 try:
-                    data = future.result(timeout=5)  # 5秒超时
+                    data = future.result(timeout=15)  # 增加超时时间到15秒
                     results[fund_code] = data
                 except Exception as e:
                     print(f"获取基金 {fund_code} 数据失败: {e}")
@@ -502,7 +540,7 @@ class DataFetcher:
             for future in as_completed(future_to_fund):
                 fund_code = future_to_fund[future]
                 try:
-                    data = future.result(timeout=5)  # 5秒超时
+                    data = future.result(timeout=15)  # 增加超时时间到15秒
                     results[fund_code] = data
                 except Exception as e:
                     print(f"获取基金 {fund_code} 估值数据失败: {e}")
