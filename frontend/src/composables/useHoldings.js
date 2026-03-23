@@ -109,10 +109,10 @@ export function useHoldings() {
 
   const sortedHoldings = computed(() => {
     const filteredHoldings = holdings.value.filter((h) => {
-      const holdingPlatform = h.platform || "";
-      // 如果选择的是默认平台，则匹配没有平台信息的持仓
+      const holdingPlatform = h.platform || "其他";
+      // 如果选择的是默认平台，则匹配所有持仓
       if (selectedPlatform.value === "默认") {
-        return !holdingPlatform;
+        return true;
       }
       // 否则匹配平台名称
       return holdingPlatform === selectedPlatform.value;
@@ -128,10 +128,10 @@ export function useHoldings() {
     let hasTradingDayData = false;
 
     const filteredHoldings = holdings.value.filter((h) => {
-      const holdingPlatform = h.platform || "";
-      // 如果选择的是默认平台，则匹配没有平台信息的持仓
+      const holdingPlatform = h.platform || "其他";
+      // 如果选择的是默认平台，则匹配所有持仓
       if (selectedPlatform.value === "默认") {
-        return !holdingPlatform;
+        return true;
       }
       // 否则匹配平台名称
       return holdingPlatform === selectedPlatform.value;
