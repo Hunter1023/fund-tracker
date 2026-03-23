@@ -51,7 +51,7 @@ services:
     restart: no
     volumes:
       - ./frontend:/app  # 挂载整个前端目录
-      - /app/node_modules  # 确保 node_modules 在容器内部，避免 Windows 挂载问题
+      - frontend-node-modules:/app/node_modules  # 使用命名卷保存依赖，避免重复安装
     working_dir: /app
     environment:
       - VITE_API_BASE_URL=http://backend-dev:5000  # 后端API地址（内部网络地址）
@@ -73,3 +73,4 @@ networks:
 volumes:
   data-dev:
   postgres-data:
+  frontend-node-modules:

@@ -560,7 +560,7 @@ const props = defineProps({
   },
   addHolding: {
     type: Function,
-    required: true,
+    default: null,
   },
 });
 
@@ -1188,15 +1188,28 @@ function confirmAddHolding() {
   emit("update:show", false);
 
   // 异步发送请求给后端
-  props.addHolding({
-    fund_code: props.fundData.fund_code,
-    fund_name: props.fundData.fund_name,
-    type: "sync",
-    current_value: currentValue,
-    profit: profit,
-    tags: tags,
-    platform: platform,
-  });
+  if (props.addHolding) {
+    props.addHolding({
+      fund_code: props.fundData.fund_code,
+      fund_name: props.fundData.fund_name,
+      type: "sync",
+      current_value: currentValue,
+      profit: profit,
+      tags: tags,
+      platform: platform,
+    });
+  } else {
+    // 如果没有提供addHolding函数，通过emit事件通知父组件
+    emit("confirm", {
+      fund_code: props.fundData.fund_code,
+      fund_name: props.fundData.fund_name,
+      type: "sync",
+      current_value: currentValue,
+      profit: profit,
+      tags: tags,
+      platform: platform,
+    });
+  }
 }
 
 async function confirm() {
@@ -1215,14 +1228,26 @@ async function confirm() {
     emit("update:show", false);
 
     // 异步发送请求给后端
-    props.addHolding({
-      fund_code: props.fundData.fund_code,
-      fund_name: props.fundData.fund_name,
-      type: "buy",
-      cost: amount,
-      buy_date: buyDate.value,
-      platform: props.holdingData?.platform || props.platform || "其他",
-    });
+    if (props.addHolding) {
+      props.addHolding({
+        fund_code: props.fundData.fund_code,
+        fund_name: props.fundData.fund_name,
+        type: "buy",
+        cost: amount,
+        buy_date: buyDate.value,
+        platform: props.holdingData?.platform || props.platform || "其他",
+      });
+    } else {
+      // 如果没有提供addHolding函数，通过emit事件通知父组件
+      emit("confirm", {
+        fund_code: props.fundData.fund_code,
+        fund_name: props.fundData.fund_name,
+        type: "buy",
+        cost: amount,
+        buy_date: buyDate.value,
+        platform: props.holdingData?.platform || props.platform || "其他",
+      });
+    }
   } else if (activeTab.value === "sell") {
     const shares = parseFloat(sellShares.value);
     if (sellShares.value === "" || isNaN(shares) || shares <= 0) {
@@ -1240,14 +1265,26 @@ async function confirm() {
     emit("update:show", false);
 
     // 异步发送请求给后端
-    props.addHolding({
-      fund_code: props.fundData.fund_code,
-      fund_name: props.fundData.fund_name,
-      type: "sell",
-      shares: shares,
-      sell_date: sellDate.value,
-      platform: props.holdingData?.platform || props.platform || "其他",
-    });
+    if (props.addHolding) {
+      props.addHolding({
+        fund_code: props.fundData.fund_code,
+        fund_name: props.fundData.fund_name,
+        type: "sell",
+        shares: shares,
+        sell_date: sellDate.value,
+        platform: props.holdingData?.platform || props.platform || "其他",
+      });
+    } else {
+      // 如果没有提供addHolding函数，通过emit事件通知父组件
+      emit("confirm", {
+        fund_code: props.fundData.fund_code,
+        fund_name: props.fundData.fund_name,
+        type: "sell",
+        shares: shares,
+        sell_date: sellDate.value,
+        platform: props.holdingData?.platform || props.platform || "其他",
+      });
+    }
   } else if (activeTab.value === "edit") {
     const currentValue = parseFloat(editAmount.value);
     const profit = parseFloat(editProfit.value);
