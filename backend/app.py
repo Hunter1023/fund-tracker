@@ -516,7 +516,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 now = datetime.now()
                 # 直接比较，忽略时区差异
                 time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                if time_diff > timedelta(minutes=10):
+                if time_diff > timedelta(minutes=5):
                     need_refresh = True
 
         if need_refresh:
@@ -694,7 +694,7 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
                 now = datetime.now()
                 # 直接比较，忽略时区差异
                 time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                if time_diff > timedelta(minutes=10):
+                if time_diff > timedelta(minutes=5):
                     need_refresh = True
 
     if need_refresh:
@@ -890,7 +890,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                 now = datetime.now()
                 # 直接比较，忽略时区差异
                 time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                if time_diff > timedelta(minutes=10):
+                if time_diff > timedelta(minutes=5):
                     need_refresh = True
 
     if need_refresh:
