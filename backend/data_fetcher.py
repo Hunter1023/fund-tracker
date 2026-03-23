@@ -51,8 +51,8 @@ class DataFetcher:
     _lock = threading.Lock()
 
     @staticmethod
-    @retry_on_failure(max_retries=3, delay=1, backoff=2)
     @lru_cache(maxsize=512)
+    @retry_on_failure(max_retries=3, delay=1, backoff=2)
     def get_fund_valuation(fund_code, timestamp=None):
         """
         获取基金估值数据
@@ -185,8 +185,8 @@ class DataFetcher:
             return []
 
     @staticmethod
-    @retry_on_failure(max_retries=3, delay=1, backoff=2)
     @lru_cache(maxsize=512)
+    @retry_on_failure(max_retries=3, delay=1, backoff=2)
     def get_fund_rates(fund_code, timestamp=None):
         """
         只获取基金涨跌幅数据（不获取历史净值数组）
