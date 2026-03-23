@@ -409,12 +409,13 @@ async function handlePlatformUpdate() {
 }
 
 // 组件挂载时自动加载数据
-// 数据加载已移至App.vue的watch(activeTab)中，避免重复请求
-// 但仍需要初始化平台数据和图表相关逻辑
+// 加载平台数据和持仓数据，确保页面刷新时能正常显示
 onMounted(async () => {
   await nextTick();
   // 加载平台数据，确保平台列表能正常显示
   await loadPlatforms();
+  // 加载持仓数据，确保页面刷新时能正常显示
+  await loadHoldings();
   updatePieChart();
 });
 
