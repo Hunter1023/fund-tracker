@@ -252,13 +252,9 @@ async function loadWatchlistAndHoldings() {
       watchlistFunds.value = watchlistResponse.data || [];
     }
 
-    // 加载持仓基金
-    if (holdingsRef.value && holdingsRef.value.holdings) {
-      holdingsFunds.value = holdingsRef.value.holdings;
-    } else {
-      const holdingsResponse = await holdingApi.get();
-      holdingsFunds.value = holdingsResponse.data || [];
-    }
+    // 加载持仓基金 - 只用于搜索结果显示，不触发组件的loadHoldings
+    const holdingsResponse = await holdingApi.get();
+    holdingsFunds.value = holdingsResponse.data || [];
   } catch (error) {
     console.error("加载自选和持仓失败:", error);
   } finally {
@@ -348,10 +344,9 @@ function openFundDetailForHolding(fund) {
 
 // 处理基金详情模态框确认
 async function handleDetailConfirm() {
+  // 只更新搜索结果显示的持仓数据，不触发组件的loadHoldings
+  // 因为addHolding函数已经在本地更新了数据
   await loadWatchlistAndHoldings();
-  if (holdingsRef.value && holdingsRef.value.loadHoldings) {
-    await holdingsRef.value.loadHoldings();
-  }
 }
 
 // 打开标签输入模态框
@@ -484,15 +479,6 @@ onMounted(async () => {
     await loadWatchlistAndHoldings();
   } catch (error) {
     console.error("加载自选和持仓数据失败:", error);
-  }
-  // 加载默认标签（holding）的数据
-  if (holdingsRef.value && holdingsRef.value.loadHoldings) {
-    try {
-      await holdingsRef.value.loadHoldings();
-      await holdingsRef.value.loadPlatforms();
-    } catch (error) {
-      console.error("加载持仓基金失败:", error);
-    }
   }
   document.addEventListener("click", handleClickOutside);
 });
