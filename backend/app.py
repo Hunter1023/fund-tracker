@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 import threading
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, IntegrityError
 import random
 from config import DATABASE_URL
 
@@ -625,8 +625,22 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                     )
                     db.add(realtime_data)
 
-                db.flush()
-                db.refresh(realtime_data)
+                # 添加死锁处理和重试机制
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        db.flush()
+                        db.refresh(realtime_data)
+                        break
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            print(f"数据库更新失败，第{attempt + 1}次重试... 错误: {e}")
+                            db.rollback()
+                            time.sleep(0.1 * (attempt + 1))
+                        else:
+                            print(f"数据库更新失败，已达到最大重试次数{max_retries}次。错误: {e}")
+                            db.rollback()
+                            raise
 
                 # 添加到结果
                 results[fund_code] = {
@@ -747,8 +761,22 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
                     )
                     db.add(new_realtime_data)
                     return new_realtime_data
-                db.flush()
-                db.refresh(realtime_data)
+                # 添加死锁处理和重试机制
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        db.flush()
+                        db.refresh(realtime_data)
+                        break
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            print(f"数据库更新失败，第{attempt + 1}次重试... 错误: {e}")
+                            db.rollback()
+                            time.sleep(0.1 * (attempt + 1))
+                        else:
+                            print(f"数据库更新失败，已达到最大重试次数{max_retries}次。错误: {e}")
+                            db.rollback()
+                            raise
                 return realtime_data
 
             realtime_data = update_realtime_data()
@@ -948,8 +976,22 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                     )
                     db.add(realtime_data)
 
-                db.flush()
-                db.refresh(realtime_data)
+                # 添加死锁处理和重试机制
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        db.flush()
+                        db.refresh(realtime_data)
+                        break
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            print(f"数据库更新失败，第{attempt + 1}次重试... 错误: {e}")
+                            db.rollback()
+                            time.sleep(0.1 * (attempt + 1))
+                        else:
+                            print(f"数据库更新失败，已达到最大重试次数{max_retries}次。错误: {e}")
+                            db.rollback()
+                            raise
         else:
             # API调用失败，返回数据库中的旧数据（如果有）
             if not realtime_data:
