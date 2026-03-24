@@ -16,10 +16,17 @@ import threading
 from sqlalchemy.exc import OperationalError, IntegrityError
 import random
 from config import DATABASE_URL
+import concurrent.futures
+import traceback
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# 数据库连接池配置
+app.config['SQLALCHEMY_POOL_SIZE'] = 10  # 连接池大小
+app.config['SQLALCHEMY_MAX_OVERFLOW'] = 20  # 最大溢出连接数
+app.config['SQLALCHEMY_POOL_TIMEOUT'] = 30  # 连接超时时间（秒）
+app.config['SQLALCHEMY_POOL_RECYCLE'] = 1800  # 连接回收时间（秒）
 db = SQLAlchemy(app)
 CORS(app)
 
@@ -37,7 +44,7 @@ logger = logging.getLogger(__name__)
 # 数据库操作重试装饰器
 def retry_db_operation(max_retries=3, base_delay=0.1):
     """
-    数据库操作重试装饰器，用于处理SQLite锁定问题
+    数据库操作重试装饰器，用于处理数据库锁定和死锁问题
     """
     def decorator(func):
         def wrapper(*args, **kwargs):
@@ -45,11 +52,13 @@ def retry_db_operation(max_retries=3, base_delay=0.1):
                 try:
                     return func(*args, **kwargs)
                 except OperationalError as e:
-                    if 'database is locked' in str(e) and attempt < max_retries - 1:
+                    error_msg = str(e)
+                    if ('database is locked' in error_msg or 'deadlock detected' in error_msg) and attempt < max_retries - 1:
                         delay = base_delay * (2 ** attempt) + random.uniform(0, 0.1)
-                        logger.warning(f"数据库锁定，第{attempt + 1}次重试，等待{delay:.2f}秒...")
+                        logger.warning(f"数据库锁定或死锁，第{attempt + 1}次重试，等待{delay:.2f}秒...")
                         time.sleep(delay)
                     else:
+                        logger.error(f"数据库操作失败: {e}")
                         raise
         return wrapper
     return decorator
@@ -96,7 +105,7 @@ def update_all_funds_data():
     """
     定时任务：更新所有自选基金和持仓基金的实时数据
     """
-    print(f"[{datetime.now()}] 开始更新基金数据...")
+    logger.info(f"[{datetime.now()}] 开始更新基金数据...")
     db = next(get_db())
     try:
         # 获取所有需要更新的基金（自选基金 + 持仓基金）
@@ -111,20 +120,32 @@ def update_all_funds_data():
             if holding.fund:
                 fund_codes.add(holding.fund.fund_code)
 
-        print(f"需要更新 {len(fund_codes)} 个基金的数据")
+        logger.info(f"需要更新 {len(fund_codes)} 个基金的数据")
 
-        # 更新每个基金的数据
-        for fund_code in fund_codes:
-            try:
-                # 强制刷新数据
-                get_fund_realtime_data(db, fund_code, force_refresh=True)
-                print(f"成功更新基金 {fund_code} 的数据")
-            except Exception as e:
-                print(f"更新基金 {fund_code} 数据失败: {e}")
+        # 分批处理基金数据，每批5个
+        fund_codes_list = list(fund_codes)
+        batch_size = 5
+        for i in range(0, len(fund_codes_list), batch_size):
+            batch_codes = fund_codes_list[i:i+batch_size]
+            logger.info(f"处理第 {i//batch_size + 1} 批基金数据，共 {len(batch_codes)} 个基金")
 
-        print(f"[{datetime.now()}] 基金数据更新完成")
+            # 使用线程池并发更新
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                # 为每个基金代码创建一个任务
+                future_to_fund = {executor.submit(get_fund_realtime_data, db, fund_code, force_refresh=True, skip_db_write=False): fund_code for fund_code in batch_codes}
+
+                # 处理完成的任务
+                for future in concurrent.futures.as_completed(future_to_fund, timeout=60):
+                    fund_code = future_to_fund[future]
+                    try:
+                        future.result()
+                        logger.info(f"成功更新基金 {fund_code} 的数据")
+                    except Exception as e:
+                        logger.error(f"更新基金 {fund_code} 数据失败: {e}")
+
+        logger.info(f"[{datetime.now()}] 基金数据更新完成")
     except Exception as e:
-        print(f"定时任务执行失败: {e}")
+        logger.error(f"定时任务执行失败: {e}")
         import traceback
         traceback.print_exc()
     finally:
@@ -1615,27 +1636,46 @@ def manage_holding():
     """
 
     """
-    import time
     db = next(get_db())
     try:
         if request.method == 'GET':
+            # 设置请求超时控制
+            start_time = time.time()
+            MAX_REQUEST_TIME = 30  # 最大请求时间（秒）
+
             # 获取持仓列表
-            print("[DEBUG] 开始获取持仓列表")
-            holdings = db.query(FundHolding).all()
-            print(f"[DEBUG] 获取到 {len(holdings)} 个持仓")
+            logger.info("开始获取持仓列表")
+            try:
+                holdings = db.query(FundHolding).all()
+                logger.info(f"获取到 {len(holdings)} 个持仓")
+            except Exception as e:
+                logger.error(f"获取持仓列表失败: {e}")
+                return jsonify({'error': '获取持仓列表失败'}), 500
 
             # 批量获取所有基金的实时数据（并发优化）
             fund_codes = [holding.fund.fund_code for holding in holdings]
-            print(f"[DEBUG] 基金代码: {fund_codes}")
-            print("[DEBUG] 开始调用 get_fund_realtime_rates_batch")
+            logger.info(f"基金代码: {fund_codes}")
+
+            # 使用线程池执行数据获取，设置超时
+            fund_data_dict = {}
             try:
-                fund_data_dict = get_fund_realtime_rates_batch(db, fund_codes)
-                print("[DEBUG] get_fund_realtime_rates_batch 调用完成")
+                with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                    # 为每个基金代码创建一个任务
+                    future_to_fund = {executor.submit(get_fund_realtime_rates, db, fund_code): fund_code for fund_code in fund_codes}
+
+                    # 处理完成的任务，设置超时
+                    for future in concurrent.futures.as_completed(future_to_fund, timeout=20):
+                        fund_code = future_to_fund[future]
+                        try:
+                            data = future.result()
+                            if data:
+                                fund_data_dict[fund_code] = data
+                        except Exception as e:
+                            logger.error(f"获取基金 {fund_code} 数据失败: {e}")
+            except concurrent.futures.TimeoutError:
+                logger.warning("获取基金数据超时，使用部分数据")
             except Exception as e:
-                print(f"[ERROR] get_fund_realtime_rates_batch 调用失败: {e}")
-                import traceback
-                traceback.print_exc()
-                raise
+                logger.error(f"获取基金数据失败: {e}")
 
             # 批量获取所有基金的标签（板块）
             fund_ids = [holding.fund.id for holding in holdings]
@@ -1644,6 +1684,11 @@ def manage_holding():
 
             holding_list = []
             for holding in holdings:
+                # 检查请求时间是否超时
+                if time.time() - start_time > MAX_REQUEST_TIME:
+                    logger.warning("请求超时，返回部分数据")
+                    break
+
                 fund_data = fund_data_dict.get(holding.fund.fund_code)
                 tags = tags_dict.get(holding.fund.id, '')
 
@@ -1657,7 +1702,6 @@ def manage_holding():
                         current_value = holding.shares * float(unit_net_value)
 
                         # 检查最新涨幅是否已更新（fsrq是否为今日）
-                        import time
                         today = time.strftime('%Y-%m-%d')
                         is_today = (fsrq == today)
 
@@ -1723,6 +1767,8 @@ def manage_holding():
                         'tags': tags,
                         'platform': holding.platform or '其他'
                     })
+
+            logger.info(f"返回 {len(holding_list)} 个持仓数据")
             return jsonify(holding_list)
 
         elif request.method == 'POST':
