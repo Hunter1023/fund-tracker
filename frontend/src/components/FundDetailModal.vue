@@ -528,7 +528,7 @@
 <script setup>
 import Chart from "chart.js/auto";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { fundApi, platformApi, tagsApi } from "../services/api";
+import { fundApi, holdingApi, platformApi, tagsApi } from "../services/api";
 
 function formatAmount(amount) {
   return parseFloat(amount).toLocaleString("zh-CN", {
