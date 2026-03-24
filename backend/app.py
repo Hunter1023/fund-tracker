@@ -22,6 +22,8 @@ import traceback
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# 强制启用调试模式以查看详细错误信息
+app.config['DEBUG'] = True
 # 数据库连接池配置
 app.config['SQLALCHEMY_POOL_SIZE'] = 10  # 连接池大小
 app.config['SQLALCHEMY_MAX_OVERFLOW'] = 20  # 最大溢出连接数
@@ -63,8 +65,18 @@ def retry_db_operation(max_retries=3, base_delay=0.1):
         return wrapper
     return decorator
 
-# 创建数据库表
-create_tables()
+# 尝试创建数据库表
+try:
+    create_tables()
+    print("数据库表创建成功")
+except Exception as e:
+    print(f"数据库表创建失败: {e}")
+
+# 尝试初始化默认平台
+try:
+    init_default_platform()
+except Exception as e:
+    print(f"初始化默认平台失败: {e}")
 
 # 初始化默认平台
 def init_default_platform():
@@ -372,6 +384,7 @@ def update_all_funds_history():
     """
     定时任务：每天更新所有自选基金和持仓基金的历史净值数据
     """
+    import time
     print(f"[{datetime.now()}] 开始更新基金历史净值数据...")
     db = next(get_db())
     try:
@@ -511,6 +524,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
     :param force_refresh: 是否强制刷新
     :return: 基金实时涨跌幅数据字典 {fund_code: data}
     """
+    import time
     if not fund_codes:
         return {}
 
@@ -657,6 +671,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                         if attempt < max_retries - 1:
                             print(f"数据库更新失败，第{attempt + 1}次重试... 错误: {e}")
                             db.rollback()
+                            import time
                             time.sleep(0.1 * (attempt + 1))
                         else:
                             print(f"数据库更新失败，已达到最大重试次数{max_retries}次。错误: {e}")
@@ -710,140 +725,146 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
     :param force_refresh: 是否强制刷新
     :return: 基金实时涨跌幅数据字典
     """
-    fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
-    if not fund:
-        return None
+    import time
+    fund = None
+    realtime_data = None
 
-    # 检查数据库中是否有实时数据
-    realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
+    # 尝试从数据库获取基金信息
+    try:
+        fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+        if fund:
+            realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
+    except Exception as e:
+        print(f"数据库查询失败: {e}")
 
     # 如果强制刷新或数据不存在或数据过期（超过10分钟），则从API获取
     need_refresh = force_refresh
     fund_data = None
     rates_data = None
-    if not need_refresh and realtime_data:
-        # 检查数据是否过期（10分钟）
-        if realtime_data.updated_at:
-                from datetime import datetime, timedelta
-                # 使用带有时区信息的当前时间
-                now = datetime.now()
-                # 直接比较，忽略时区差异
-                time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                if time_diff > timedelta(minutes=5):
-                    need_refresh = True
 
-    if need_refresh:
-        # 从API获取数据
-        # 使用分钟级时间戳作为缓存键，每5分钟更新一次
-        cache_key = int(time.time() / (5 * 60))
-        fund_data = DataFetcher.get_fund_valuation(fund_code, cache_key)
-        rates_data = DataFetcher.get_fund_rates(fund_code, cache_key)
+    # 无论是否有数据库数据，都尝试从API获取数据
+    # 因为数据库可能连接失败，或者数据过期
+    print(f"获取基金 {fund_code} 数据，缓存键: {int(time.time() / (5 * 60))}")
+    fund_data = DataFetcher.get_fund_valuation(fund_code, int(time.time() / (5 * 60)))
+    print(f"基金 {fund_code} 估值数据: {fund_data}")
+    rates_data = DataFetcher.get_fund_rates(fund_code, int(time.time() / (5 * 60)))
+    print(f"基金 {fund_code} 涨跌幅数据: {rates_data}")
 
-        # 只要rates_data有数据，就处理
-        if rates_data:
-            # 准备数据
-            data = {
-                'fund_code': fund_code,
-                'fund_name': fund.fund_name,
-                'net_value_date': fund_data.get('net_value') if fund_data else rates_data.get('fsrq', ''),
-                'unit_net_value': float(fund_data.get('unit_net_value', 0)) if fund_data else None,
-                'estimate_net_value': float(fund_data.get('estimate_net_value', 0)) if fund_data else None,
-                'estimate_change_rate': float(fund_data.get('estimate_change_rate', 0)) if fund_data else None,
-                'estimate_time': fund_data.get('estimate_time', '') if fund_data else '',
-                'one_month_rate': rates_data.get('one_month_rate', 0),
-                'three_month_rate': rates_data.get('three_month_rate', 0),
-                'one_year_rate': rates_data.get('one_year_rate', 0),
-                'daily_change_rate': rates_data.get('daily_change_rate', 0),
-                'fsrq': rates_data.get('fsrq', ''),
-                'net_values': '[]'  # 不存储历史净值数组
-            }
+    # 只要有数据，就处理
+    if fund_data or rates_data:
+        # 准备数据
+        fund_name = fund.fund_name if fund else fund_code
+        data = {
+            'fund_code': fund_code,
+            'fund_name': fund_name,
+            'net_value_date': fund_data.get('net_value') if fund_data else rates_data.get('fsrq', '') if rates_data else '',
+            'unit_net_value': float(fund_data.get('unit_net_value', 0)) if fund_data else None,
+            'estimate_net_value': float(fund_data.get('estimate_net_value', 0)) if fund_data else None,
+            'estimate_change_rate': float(fund_data.get('estimate_change_rate', 0)) if fund_data else None,
+            'estimate_time': fund_data.get('estimate_time', '') if fund_data else '',
+            'one_month_rate': rates_data.get('one_month_rate', 0) if rates_data else 0,
+            'three_month_rate': rates_data.get('three_month_rate', 0) if rates_data else 0,
+            'one_year_rate': rates_data.get('one_year_rate', 0) if rates_data else 0,
+            'daily_change_rate': rates_data.get('daily_change_rate', 0) if rates_data else 0,
+            'fsrq': rates_data.get('fsrq', '') if rates_data else '',
+            'net_values': '[]'  # 不存储历史净值数组
+        }
+        print(f"准备更新基金 {fund_code} 数据: {data}")
 
-            # 更新或创建数据库记录（添加重试机制）
-            @retry_db_operation(max_retries=5, base_delay=0.2)
-            def update_realtime_data():
-                if realtime_data:
-                    for key, value in data.items():
-                        if key != 'fund_code' and key != 'fund_name':
-                            setattr(realtime_data, key, value)
-                else:
-                    new_realtime_data = FundRealtimeData(
-                        fund_id=fund.id,
-                        net_value_date=data['net_value_date'],
-                        unit_net_value=data['unit_net_value'],
-                        estimate_net_value=data['estimate_net_value'],
-                        estimate_change_rate=data['estimate_change_rate'],
-                        estimate_time=data['estimate_time'],
-                        one_month_rate=data['one_month_rate'],
-                        three_month_rate=data['three_month_rate'],
-                        one_year_rate=data['one_year_rate'],
-                        daily_change_rate=data['daily_change_rate'],
-                        fsrq=data['fsrq'],
-                        net_values=data['net_values']
-                    )
-                    db.add(new_realtime_data)
-                    return new_realtime_data
-                # 添加死锁处理和重试机制
-                max_retries = 3
-                for attempt in range(max_retries):
-                    try:
-                        db.flush()
-                        db.refresh(realtime_data)
-                        break
-                    except Exception as e:
-                        if attempt < max_retries - 1:
-                            print(f"数据库更新失败，第{attempt + 1}次重试... 错误: {e}")
-                            db.rollback()
-                            time.sleep(0.1 * (attempt + 1))
-                        else:
-                            print(f"数据库更新失败，已达到最大重试次数{max_retries}次。错误: {e}")
-                            db.rollback()
-                            raise
-                return realtime_data
+        # 尝试更新或创建数据库记录（添加重试机制）
+        try:
+            if fund:
+                @retry_db_operation(max_retries=5, base_delay=0.2)
+                def update_realtime_data():
+                    import time
+                    if realtime_data:
+                        for key, value in data.items():
+                            if key != 'fund_code' and key != 'fund_name':
+                                setattr(realtime_data, key, value)
+                    else:
+                        new_realtime_data = FundRealtimeData(
+                            fund_id=fund.id,
+                            net_value_date=data['net_value_date'],
+                            unit_net_value=data['unit_net_value'],
+                            estimate_net_value=data['estimate_net_value'],
+                            estimate_change_rate=data['estimate_change_rate'],
+                            estimate_time=data['estimate_time'],
+                            one_month_rate=data['one_month_rate'],
+                            three_month_rate=data['three_month_rate'],
+                            one_year_rate=data['one_year_rate'],
+                            daily_change_rate=data['daily_change_rate'],
+                            fsrq=data['fsrq'],
+                            net_values=data['net_values']
+                        )
+                        db.add(new_realtime_data)
+                        return new_realtime_data
+                    # 添加死锁处理和重试机制
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            db.flush()
+                            db.refresh(realtime_data)
+                            break
+                        except Exception as e:
+                            if attempt < max_retries - 1:
+                                print(f"数据库更新失败，第{attempt + 1}次重试... 错误: {e}")
+                                db.rollback()
+                                time.sleep(0.1 * (attempt + 1))
+                            else:
+                                print(f"数据库更新失败，已达到最大重试次数{max_retries}次。错误: {e}")
+                                db.rollback()
+                                raise
+                    return realtime_data
 
-            realtime_data = update_realtime_data()
-        else:
-            # API调用失败，返回数据库中的旧数据（如果有）
-            if not realtime_data:
-                # 如果数据库中也没有数据，返回基本信息
-                return {
-                    'fund_code': fund_code,
-                    'fund_name': fund.fund_name,
-                    'net_value': '',
-                    'unit_net_value': None,
-                    'estimate_net_value': None,
-                    'estimate_change_rate': '-',
-                    'estimate_time': '',
-                    'one_month_rate': 0,
-                    'three_month_rate': 0,
-                    'one_year_rate': 0,
-                    'daily_change_rate': 0,
-                    'fsrq': '',
-                    'net_values': []
-                }
-            else:
-                # 返回数据库中的旧数据
-                return {
-                    'fund_code': fund_code,
-                    'fund_name': fund.fund_name,
-                    'net_value': realtime_data.net_value_date if realtime_data else '',
-                    'unit_net_value': realtime_data.unit_net_value if realtime_data else None,
-                    'estimate_net_value': realtime_data.estimate_net_value if realtime_data else None,
-                    'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data and realtime_data.estimate_change_rate is not None else '-',
-                    'estimate_time': realtime_data.estimate_time if realtime_data else '',
-                    'one_month_rate': realtime_data.one_month_rate if realtime_data else 0,
-                    'three_month_rate': realtime_data.three_month_rate if realtime_data else 0,
-                    'one_year_rate': realtime_data.one_year_rate if realtime_data else 0,
-                    'daily_change_rate': realtime_data.daily_change_rate if realtime_data else 0,
-                    'fsrq': realtime_data.fsrq if realtime_data else '',
-                    'net_values': []
-                }
+                realtime_data = update_realtime_data()
+        except Exception as e:
+            print(f"数据库操作失败，继续返回API数据: {e}")
+            # 数据库操作失败，仍然返回API数据
+
+        # 返回API数据
+        result = {
+            'fund_code': fund_code,
+            'fund_name': fund_name,
+            'net_value': data.get('net_value_date', ''),
+            'unit_net_value': data.get('unit_net_value', None),
+            'estimate_net_value': data.get('estimate_net_value', None),
+            'estimate_change_rate': str(data.get('estimate_change_rate', 0)) if data.get('estimate_change_rate') is not None else '-',
+            'estimate_time': data.get('estimate_time', ''),
+            'one_month_rate': data.get('one_month_rate', 0),
+            'three_month_rate': data.get('three_month_rate', 0),
+            'one_year_rate': data.get('one_year_rate', 0),
+            'daily_change_rate': data.get('daily_change_rate', 0),
+            'fsrq': data.get('fsrq', ''),
+            'net_values': []
+        }
+        print(f"基金 {fund_code} 返回API数据: {result}")
+        return result
     else:
-        # 从数据库读取数据
-        if not realtime_data:
-            # 如果数据库中也没有数据，返回基本信息
+        # API调用失败，尝试返回数据库中的旧数据（如果有）
+        if fund and realtime_data:
+            # 返回数据库中的旧数据
+            print(f"基金 {fund_code} API调用失败，返回数据库旧数据")
             return {
                 'fund_code': fund_code,
                 'fund_name': fund.fund_name,
+                'net_value': realtime_data.net_value_date if realtime_data else '',
+                'unit_net_value': realtime_data.unit_net_value if realtime_data else None,
+                'estimate_net_value': realtime_data.estimate_net_value if realtime_data else None,
+                'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data and realtime_data.estimate_change_rate is not None else '-',
+                'estimate_time': realtime_data.estimate_time if realtime_data else '',
+                'one_month_rate': realtime_data.one_month_rate if realtime_data else 0,
+                'three_month_rate': realtime_data.three_month_rate if realtime_data else 0,
+                'one_year_rate': realtime_data.one_year_rate if realtime_data else 0,
+                'daily_change_rate': realtime_data.daily_change_rate if realtime_data else 0,
+                'fsrq': realtime_data.fsrq if realtime_data else '',
+                'net_values': []
+            }
+        else:
+            # 如果数据库中也没有数据，返回基本信息
+            print(f"基金 {fund_code} API调用失败，返回默认数据")
+            return {
+                'fund_code': fund_code,
+                'fund_name': fund.fund_name if fund else fund_code,
                 'net_value': '',
                 'unit_net_value': None,
                 'estimate_net_value': None,
@@ -857,58 +878,6 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
                 'net_values': []
             }
 
-        data = {
-            'fund_code': fund_code,
-            'fund_name': fund.fund_name,
-            'net_value': realtime_data.net_value_date,
-            'unit_net_value': realtime_data.unit_net_value,
-            'estimate_net_value': realtime_data.estimate_net_value,
-            'estimate_change_rate': realtime_data.estimate_change_rate,
-            'estimate_time': realtime_data.estimate_time,
-            'one_month_rate': realtime_data.one_month_rate,
-            'three_month_rate': realtime_data.three_month_rate,
-            'one_year_rate': realtime_data.one_year_rate,
-            'daily_change_rate': realtime_data.daily_change_rate,
-            'fsrq': realtime_data.fsrq,
-            'net_values': []
-        }
-
-    # 返回格式化的数据
-    if need_refresh and (fund_data or rates_data):
-        # 如果刚从API获取了数据，使用data变量
-        return {
-            'fund_code': fund_code,
-            'fund_name': fund.fund_name,
-            'net_value': data.get('net_value_date', ''),
-            'unit_net_value': data.get('unit_net_value', None),
-            'estimate_net_value': data.get('estimate_net_value', None),
-            'estimate_change_rate': str(data.get('estimate_change_rate', 0)) if data.get('estimate_change_rate') is not None else '-',
-            'estimate_time': data.get('estimate_time', ''),
-            'one_month_rate': data.get('one_month_rate', 0),
-            'three_month_rate': data.get('three_month_rate', 0),
-            'one_year_rate': data.get('one_year_rate', 0),
-            'daily_change_rate': data.get('daily_change_rate', 0),
-            'fsrq': data.get('fsrq', ''),
-            'net_values': []
-        }
-    else:
-        # 否则使用realtime_data
-        return {
-            'fund_code': fund_code,
-            'fund_name': fund.fund_name,
-            'net_value': realtime_data.net_value_date if realtime_data else '',
-            'unit_net_value': realtime_data.unit_net_value if realtime_data else None,
-            'estimate_net_value': realtime_data.estimate_net_value if realtime_data else None,
-            'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data and realtime_data.estimate_change_rate is not None else '-',
-            'estimate_time': realtime_data.estimate_time if realtime_data else '',
-            'one_month_rate': realtime_data.one_month_rate if realtime_data else 0,
-            'three_month_rate': realtime_data.three_month_rate if realtime_data else 0,
-            'one_year_rate': realtime_data.one_year_rate if realtime_data else 0,
-            'daily_change_rate': realtime_data.daily_change_rate if realtime_data else 0,
-            'fsrq': realtime_data.fsrq if realtime_data else '',
-            'net_values': []
-        }
-
 @retry_db_operation()
 def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, need_history_data=True, skip_db_write=False):
     """
@@ -920,6 +889,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
     :param skip_db_write: 是否跳过数据库写入操作（默认False）
     :return: 基金实时数据字典
     """
+    import time
     fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
     if not fund:
         return None
@@ -1443,7 +1413,7 @@ def manage_watchlist():
             # 使用批量并发方法获取所有自选基金数据
             funds_data_dict = get_fund_realtime_rates_batch(db, watchlist_fund_codes, force_refresh=False)
 
-            today = time.strftime('%Y-%m-%d')
+            today = datetime.now().strftime('%Y-%m-%d')
 
             for item in watchlist:
                 if not item.fund:
@@ -1634,13 +1604,25 @@ def change_fund_tags():
 @app.route('/api/holding', methods=['GET', 'POST'])
 def manage_holding():
     """
-
+    管理持仓接口
+    GET: 获取持仓列表
+    POST: 添加或更新持仓
     """
-    db = next(get_db())
+    import time
     try:
+        logger.info("开始处理 /api/holding 请求")
+        logger.info("导入必要的模块")
+        from datetime import datetime
+        import concurrent.futures
+        logger.info("模块导入成功")
+        logger.info("获取数据库连接")
+        db = next(get_db())
+        logger.info("数据库连接获取成功")
+
         if request.method == 'GET':
+            logger.info("处理 GET 请求")
             # 设置请求超时控制
-            start_time = time.time()
+            start_time = datetime.now().timestamp()
             MAX_REQUEST_TIME = 30  # 最大请求时间（秒）
 
             # 获取持仓列表
@@ -1670,12 +1652,17 @@ def manage_holding():
                             data = future.result()
                             if data:
                                 fund_data_dict[fund_code] = data
+                                logger.info(f"获取基金 {fund_code} 数据成功: {data}")
+                            else:
+                                logger.warning(f"获取基金 {fund_code} 数据返回空")
                         except Exception as e:
                             logger.error(f"获取基金 {fund_code} 数据失败: {e}")
             except concurrent.futures.TimeoutError:
                 logger.warning("获取基金数据超时，使用部分数据")
             except Exception as e:
                 logger.error(f"获取基金数据失败: {e}")
+
+            logger.info(f"获取到的基金数据: {fund_data_dict}")
 
             # 批量获取所有基金的标签（板块）
             fund_ids = [holding.fund.id for holding in holdings]
@@ -1685,7 +1672,7 @@ def manage_holding():
             holding_list = []
             for holding in holdings:
                 # 检查请求时间是否超时
-                if time.time() - start_time > MAX_REQUEST_TIME:
+                if datetime.now().timestamp() - start_time > MAX_REQUEST_TIME:
                     logger.warning("请求超时，返回部分数据")
                     break
 
@@ -1702,7 +1689,7 @@ def manage_holding():
                         current_value = holding.shares * float(unit_net_value)
 
                         # 检查最新涨幅是否已更新（fsrq是否为今日）
-                        today = time.strftime('%Y-%m-%d')
+                        today = datetime.now().strftime('%Y-%m-%d')
                         is_today = (fsrq == today)
 
                         # 逻辑：
@@ -2058,8 +2045,7 @@ def manage_holding():
                         current_value = fund_holding.shares * float(unit_net_value)
 
                         # 检查最新涨幅是否已更新（fsrq是否为今日）
-                        import time
-                        today = time.strftime('%Y-%m-%d')
+                        today = datetime.now().strftime('%Y-%m-%d')
                         is_today = (fsrq == today)
 
                         # 逻辑：
@@ -2132,10 +2118,18 @@ def manage_holding():
 
             return jsonify({'success': True})
     except Exception as e:
-        db.rollback()
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"处理 /api/holding 请求时发生错误: {e}")
+        logger.error(f"错误堆栈: {error_trace}")
+        print(f"处理 /api/holding 请求时发生错误: {e}")
+        print(f"错误堆栈: {error_trace}")
+        if 'db' in locals():
+            db.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
-        db.close()
+        if 'db' in locals():
+            db.close()
 
 @app.route('/api/transaction/<fund_code>', methods=['GET'])
 def get_transaction_history(fund_code):
