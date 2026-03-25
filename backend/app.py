@@ -65,19 +65,6 @@ def retry_db_operation(max_retries=3, base_delay=0.1):
         return wrapper
     return decorator
 
-# 尝试创建数据库表
-try:
-    create_tables()
-    print("数据库表创建成功")
-except Exception as e:
-    print(f"数据库表创建失败: {e}")
-
-# 尝试初始化默认平台
-try:
-    init_default_platform()
-except Exception as e:
-    print(f"初始化默认平台失败: {e}")
-
 # 初始化默认平台
 def init_default_platform():
     """
@@ -104,8 +91,18 @@ def init_default_platform():
     finally:
         db.close()
 
-# 初始化默认平台
-init_default_platform()
+# 尝试创建数据库表
+try:
+    create_tables()
+    print("数据库表创建成功")
+except Exception as e:
+    print(f"数据库表创建失败: {e}")
+
+# 尝试初始化默认平台
+try:
+    init_default_platform()
+except Exception as e:
+    print(f"初始化默认平台失败: {e}")
 
 # 创建定时任务调度器
 scheduler = BackgroundScheduler()
@@ -142,12 +139,12 @@ def update_all_funds_data():
             logger.info(f"处理第 {i//batch_size + 1} 批基金数据，共 {len(batch_codes)} 个基金")
 
             # 使用线程池并发更新
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                 # 为每个基金代码创建一个任务
                 future_to_fund = {executor.submit(get_fund_realtime_data, db, fund_code, force_refresh=True, skip_db_write=False): fund_code for fund_code in batch_codes}
 
                 # 处理完成的任务
-                for future in concurrent.futures.as_completed(future_to_fund, timeout=60):
+                for future in concurrent.futures.as_completed(future_to_fund, timeout=30):
                     fund_code = future_to_fund[future]
                     try:
                         future.result()
@@ -173,7 +170,6 @@ def preload_all_funds_history():
     定时任务：预加载所有自选基金和持仓基金的历史净值数据到数据库
     每天执行一次，确保历史净值数据已缓存
     """
-    from datetime import datetime, timedelta
     print(f"[{datetime.now()}] 开始预加载基金历史净值数据...")
     db = next(get_db())
     try:
@@ -725,7 +721,6 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
     :param force_refresh: 是否强制刷新
     :return: 基金实时涨跌幅数据字典
     """
-    import time
     fund = None
     realtime_data = None
 
@@ -744,10 +739,11 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
 
     # 无论是否有数据库数据，都尝试从API获取数据
     # 因为数据库可能连接失败，或者数据过期
-    print(f"获取基金 {fund_code} 数据，缓存键: {int(time.time() / (5 * 60))}")
-    fund_data = DataFetcher.get_fund_valuation(fund_code, int(time.time() / (5 * 60)))
+    cache_key = int(time.time() / (5 * 60))
+    print(f"获取基金 {fund_code} 数据，缓存键: {cache_key}")
+    fund_data = DataFetcher.get_fund_valuation(fund_code, cache_key)
     print(f"基金 {fund_code} 估值数据: {fund_data}")
-    rates_data = DataFetcher.get_fund_rates(fund_code, int(time.time() / (5 * 60)))
+    rates_data = DataFetcher.get_fund_rates(fund_code, cache_key)
     print(f"基金 {fund_code} 涨跌幅数据: {rates_data}")
 
     # 只要有数据，就处理
@@ -889,7 +885,6 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
     :param skip_db_write: 是否跳过数据库写入操作（默认False）
     :return: 基金实时数据字典
     """
-    import time
     fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
     if not fund:
         return None
@@ -1608,13 +1603,8 @@ def manage_holding():
     GET: 获取持仓列表
     POST: 添加或更新持仓
     """
-    import time
     try:
         logger.info("开始处理 /api/holding 请求")
-        logger.info("导入必要的模块")
-        from datetime import datetime
-        import concurrent.futures
-        logger.info("模块导入成功")
         logger.info("获取数据库连接")
         db = next(get_db())
         logger.info("数据库连接获取成功")
