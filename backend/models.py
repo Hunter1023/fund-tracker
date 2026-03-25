@@ -116,6 +116,7 @@ class FundHolding(Base):
 
     # 关系
     fund = relationship("Fund", back_populates="holdings")
+    profit_histories = relationship("HoldingProfitHistory", backref="holding", cascade="all, delete-orphan")
 
 class Transaction(Base):
     """交易记录表"""
