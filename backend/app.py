@@ -548,7 +548,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 (realtime_data.three_month_rate and realtime_data.three_month_rate != 0) or
                 (realtime_data.one_year_rate and realtime_data.one_year_rate != 0)
             )
-            
+
             # 检查是否过期
             is_expired = False
             if realtime_data.updated_at:
@@ -556,7 +556,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
                 if time_diff > timedelta(minutes=5):
                     is_expired = True
-            
+
             if is_expired or not has_valid_data:
                 need_refresh = True
 
@@ -1998,8 +1998,10 @@ def manage_holding():
                 fund_holding.shares -= shares
                 logger.info(f"减仓后 - 剩余份额: {fund_holding.shares}, 剩余成本: {fund_holding.cost}")
                 if fund_holding.shares <= 0.01 or fund_holding.cost <= 0.01:
-                    # 清空持仓
+                    # 清空持仓 - 先删除相关的收益历史记录
                     logger.info(f"清仓 - 基金代码: {fund_code}, 平台: {platform}")
+                    from models import HoldingProfitHistory
+                    db.query(HoldingProfitHistory).filter(HoldingProfitHistory.holding_id == fund_holding.id).delete()
                     db.delete(fund_holding)
                     fund_holding = None
                 else:
@@ -2235,6 +2237,8 @@ def delete_holding(fund_code):
         if not fund_holding:
             return jsonify({'error': '持仓不存在'}), 404
 
+        from models import HoldingProfitHistory
+        db.query(HoldingProfitHistory).filter(HoldingProfitHistory.holding_id == fund_holding.id).delete()
         db.delete(fund_holding)
         db.commit()
         return jsonify({'success': True})
