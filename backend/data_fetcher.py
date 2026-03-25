@@ -55,7 +55,7 @@ class DataFetcher:
     """数据获取类"""
 
     # 线程池执行器，用于并发请求
-    _executor = ThreadPoolExecutor(max_workers=10)
+    _executor = ThreadPoolExecutor(max_workers=5)  # 减少线程池大小，避免资源占用过多
     _lock = threading.Lock()
 
     @staticmethod
