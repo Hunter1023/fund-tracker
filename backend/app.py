@@ -521,6 +521,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
     :return: 基金实时涨跌幅数据字典 {fund_code: data}
     """
     import time
+    from datetime import datetime, timedelta
     if not fund_codes:
         return {}
 
@@ -542,7 +543,6 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         need_refresh = force_refresh
         if not need_refresh and realtime_data:
             if realtime_data.updated_at:
-                from datetime import datetime, timedelta
                 # 使用当前时间，忽略时区差异
                 now = datetime.now()
                 # 直接比较，忽略时区差异
@@ -721,6 +721,7 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
     :param force_refresh: 是否强制刷新
     :return: 基金实时涨跌幅数据字典
     """
+    from datetime import datetime, timedelta
     fund = None
     realtime_data = None
 
@@ -885,6 +886,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
     :param skip_db_write: 是否跳过数据库写入操作（默认False）
     :return: 基金实时数据字典
     """
+    from datetime import datetime, timedelta
     fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
     if not fund:
         return None
@@ -899,13 +901,12 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
     if not need_refresh and realtime_data:
         # 检查数据是否过期（10分钟）
         if realtime_data.updated_at:
-                from datetime import datetime, timedelta
-                # 使用带有时区信息的当前时间
-                now = datetime.now()
-                # 直接比较，忽略时区差异
-                time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                if time_diff > timedelta(minutes=5):
-                    need_refresh = True
+            # 使用带有时区信息的当前时间
+            now = datetime.now()
+            # 直接比较，忽略时区差异
+            time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
+            if time_diff > timedelta(minutes=5):
+                need_refresh = True
 
     if need_refresh:
         # 从API获取数据
@@ -1166,6 +1167,7 @@ def get_fund_history(fund_code):
     :param fund_code: 基金代码
     :return: 历史净值数据和近1个月涨幅
     """
+    from datetime import datetime, timedelta
     db = next(get_db())
     try:
         # 先尝试从数据库获取
@@ -1254,6 +1256,7 @@ def get_fund_complete_info(fund_code):
     :param fund_code: 基金代码
     :return: 基金完整信息
     """
+    from datetime import datetime, timedelta
     db = next(get_db())
     try:
         # 并行获取数据
@@ -1387,6 +1390,7 @@ def manage_watchlist():
     """
     管理自选基金
     """
+    from datetime import datetime
     db = next(get_db())
     try:
         if request.method == 'GET':
@@ -1603,6 +1607,7 @@ def manage_holding():
     GET: 获取持仓列表
     POST: 添加或更新持仓
     """
+    from datetime import datetime, timedelta
     try:
         logger.info("开始处理 /api/holding 请求")
         logger.info("获取数据库连接")
@@ -1945,7 +1950,6 @@ def manage_holding():
                 )
                 # 如果有买入日期，设置交易日期
                 if buy_date:
-                    from datetime import datetime
                     transaction.transaction_date = datetime.strptime(buy_date, '%Y-%m-%d')
                 db.add(transaction)
 
@@ -2007,7 +2011,6 @@ def manage_holding():
                 )
                 # 如果有卖出日期，设置交易日期
                 if sell_date:
-                    from datetime import datetime
                     transaction.transaction_date = datetime.strptime(sell_date, '%Y-%m-%d')
                 db.add(transaction)
 
@@ -2201,6 +2204,7 @@ def test_api():
     """
     测试API端点
     """
+    from datetime import datetime
     print(f"[{datetime.now()}] 收到 /api/test 请求")
     return jsonify({'message': '测试API正常工作', 'timestamp': datetime.now().isoformat()})
 
