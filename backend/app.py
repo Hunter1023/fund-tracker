@@ -539,16 +539,26 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         # 检查数据库中是否有实时数据
         realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
 
-        # 如果强制刷新或数据不存在或数据过期（超过10分钟），则需要刷新
+        # 如果强制刷新或数据不存在或数据过期（超过10分钟）或涨跌幅数据为0，则需要刷新
         need_refresh = force_refresh
         if not need_refresh and realtime_data:
+            # 检查数据是否有效 - 如果关键涨跌幅数据都是0，说明数据不完整，需要刷新
+            has_valid_data = (
+                (realtime_data.one_month_rate and realtime_data.one_month_rate != 0) or
+                (realtime_data.three_month_rate and realtime_data.three_month_rate != 0) or
+                (realtime_data.one_year_rate and realtime_data.one_year_rate != 0)
+            )
+            
+            # 检查是否过期
+            is_expired = False
             if realtime_data.updated_at:
-                # 使用当前时间，忽略时区差异
                 now = datetime.now()
-                # 直接比较，忽略时区差异
                 time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
                 if time_diff > timedelta(minutes=5):
-                    need_refresh = True
+                    is_expired = True
+            
+            if is_expired or not has_valid_data:
+                need_refresh = True
 
         if need_refresh:
             funds_to_refresh.append(fund_code)
