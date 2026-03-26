@@ -946,15 +946,27 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                 'three_month_rate': history_data.get('three_month_rate', 0),
                 'one_year_rate': history_data.get('one_year_rate', 0),
                 'daily_change_rate': history_data.get('daily_change_rate', 0),
-                'fsrq': history_data.get('fsrq', ''),
-                'net_values': json.dumps(history_data.get('net_values', []))
+                'fsrq': history_data.get('fsrq', '')
             }
+
+            # 只有需要完整历史数据时才更新 net_values，否则保留数据库中的值
+            if need_history_data:
+                data['net_values'] = json.dumps(history_data.get('net_values', []))
+            elif realtime_data and realtime_data.net_values:
+                # 不需要完整历史数据但数据库中有值时，保留原值
+                data['net_values'] = realtime_data.net_values
+            else:
+                # 数据库中也没有值时，设置为空数组
+                data['net_values'] = json.dumps([])
 
             # 更新或创建数据库记录
             if not skip_db_write:
                 if realtime_data:
                     for key, value in data.items():
                         if key != 'fund_code' and key != 'fund_name':
+                            # 只有需要完整历史数据时才更新 net_values
+                            if key == 'net_values' and not need_history_data:
+                                continue
                             setattr(realtime_data, key, value)
                 else:
                     realtime_data = FundRealtimeData(
@@ -1293,9 +1305,17 @@ def get_fund_complete_info(fund_code):
             if fund and fund.realtime_data and fund.realtime_data.net_values:
                 # 检查数据是否过期（超过1天）
                 updated_at = fund.realtime_data.updated_at
-                if updated_at and (datetime.now() - updated_at.replace(tzinfo=None)) < timedelta(days=1):
-                    # 数据未过期，直接返回数据库中的数据
-                    net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
+                net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
+
+                # 检查数据是否过期或者 net_values 为空数组
+                data_is_valid = (
+                    updated_at and
+                    (datetime.now() - updated_at.replace(tzinfo=None)) < timedelta(days=1) and
+                    len(net_values) > 0
+                )
+
+                if data_is_valid:
+                    # 数据未过期且 net_values 不为空，直接返回数据库中的数据
                     return {
                         'fund_code': fund_code,
                         'net_values': net_values,
@@ -1307,8 +1327,10 @@ def get_fund_complete_info(fund_code):
                         'unit_net_value': fund.realtime_data.unit_net_value or 0
                     }
 
-            # 数据不存在或已过期，从第三方接口获取
+            # 数据不存在、已过期或 net_values 为空，从第三方接口获取
+            logger.info(f"从第三方接口获取基金 {fund_code} 的历史数据")
             history_data = DataFetcher.get_fund_history(fund_code)
+            logger.info(f"从第三方获取到的历史数据中 net_values 数量: {len(history_data.get('net_values', []))}")
 
             # 保存到数据库
             if fund:
@@ -1323,6 +1345,7 @@ def get_fund_complete_info(fund_code):
                 fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
                 fund.realtime_data.updated_at = datetime.now()
                 db.commit()
+                logger.info(f"已保存基金 {fund_code} 的历史数据到数据库，net_values 数量: {len(history_data.get('net_values', []))}")
 
             return history_data
 
@@ -1792,13 +1815,20 @@ def manage_holding():
 
             # 获取平台参数
             platform = data.get('platform', '其他')
+            # 确保平台名称正确处理
+            if platform == '默认':
+                platform = '默认'
+            elif not platform:
+                platform = '其他'
             logger.info(f"收到的平台参数: {platform}")
 
-            # 检查是否已有持仓（同时检查fund_id和platform）
+            # 检查是否已有对应平台的持仓
             fund_holding = db.query(FundHolding).filter(
                 FundHolding.fund_id == fund.id,
                 FundHolding.platform == platform
             ).first()
+
+            actual_platform = platform
             logger.info(f"查询持仓: fund_id={fund.id}, platform={platform}, 结果: {fund_holding is not None}")
 
             # 获取当前价格（根据日期获取净值）
@@ -1946,7 +1976,7 @@ def manage_holding():
                     db.add(fund_holding)
 
                 # 查询 platform_id
-                platform_obj = db.query(Platform).filter(Platform.name == platform).first()
+                platform_obj = db.query(Platform).filter(Platform.name == actual_platform).first()
                 platform_id = platform_obj.id if platform_obj else None
 
                 # 记录交易
@@ -2009,7 +2039,7 @@ def manage_holding():
                     fund_holding.avg_cost = fund_holding.cost / fund_holding.shares
 
                 # 查询 platform_id
-                platform_obj = db.query(Platform).filter(Platform.name == platform).first()
+                platform_obj = db.query(Platform).filter(Platform.name == actual_platform).first()
                 platform_id = platform_obj.id if platform_obj else None
 
                 # 记录交易
