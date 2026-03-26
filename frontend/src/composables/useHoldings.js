@@ -15,6 +15,10 @@ export function useHoldings() {
     try {
       const response = await platformApi.get();
       const platformNames = response.data.map((p) => p.name);
+      // 确保"默认"平台被添加到平台列表中
+      if (!platformNames.includes("默认")) {
+        platformNames.unshift("默认");
+      }
       platforms.value = platformNames;
       // 平台列表加载后自动选择第一个平台
       if (platformNames.length > 0) {
@@ -26,6 +30,7 @@ export function useHoldings() {
     } catch (error) {
       console.error("加载平台列表失败:", error);
       // 加载失败时使用默认平台
+      platforms.value = ["默认"];
       selectedPlatform.value = "默认";
     }
   }
@@ -110,11 +115,7 @@ export function useHoldings() {
   const sortedHoldings = computed(() => {
     const filteredHoldings = holdings.value.filter((h) => {
       const holdingPlatform = h.platform || "其他";
-      // 如果选择的是默认平台，则匹配所有持仓
-      if (selectedPlatform.value === "默认") {
-        return true;
-      }
-      // 否则匹配平台名称
+      // 严格匹配平台名称
       return holdingPlatform === selectedPlatform.value;
     });
     return sortFunds(filteredHoldings, sortField.value, sortDirection.value);
@@ -129,11 +130,7 @@ export function useHoldings() {
 
     const filteredHoldings = holdings.value.filter((h) => {
       const holdingPlatform = h.platform || "其他";
-      // 如果选择的是默认平台，则匹配所有持仓
-      if (selectedPlatform.value === "默认") {
-        return true;
-      }
-      // 否则匹配平台名称
+      // 严格匹配平台名称
       return holdingPlatform === selectedPlatform.value;
     });
 
@@ -185,7 +182,6 @@ export function useHoldings() {
 
   function addHolding(data) {
     // 前端先本地更新，展示添加效果
-    // 使用与当前选中平台一致的平台值，确保新添加的持仓能立即显示
     const platform = data.platform || selectedPlatform.value || "其他";
 
     if (data.type === "sync") {
@@ -210,94 +206,115 @@ export function useHoldings() {
         platform: platform,
       };
       updateHoldingLocally(newHolding);
-    } else if (data.type === "buy") {
-      // 加仓操作，更新现有持仓
-      const existingHolding = holdings.value.find(
+    } else if (data.type === "buy" || data.type === "sell") {
+      // 加仓或减仓操作，优先查找对应平台的持仓，如果找不到则找该基金的第一个持仓
+      let existingHolding = holdings.value.find(
         (h) =>
           h.fund_code === data.fund_code && (h.platform || "其他") === platform,
       );
-      if (existingHolding) {
-        // 计算更新后的当前价值
-        const newCurrentValue =
-          existingHolding.current_value + (data.cost || 0);
-        // 计算更新后的今日收益
-        const estimateChangeRate =
-          parseFloat(existingHolding.estimate_change_rate) || 0;
-        const newEstimateProfit = (estimateChangeRate * newCurrentValue) / 100;
 
-        // 更新现有持仓
-        const updatedHolding = {
-          ...existingHolding,
-          cost: existingHolding.cost + (data.cost || 0),
-          shares:
-            existingHolding.shares +
-            ((data.cost || 0) / existingHolding.avg_cost || 0),
-          avg_cost:
-            (existingHolding.cost + (data.cost || 0)) /
-              (existingHolding.shares +
-                ((data.cost || 0) / existingHolding.avg_cost || 0)) || 0,
-          current_value: newCurrentValue,
-          profit_loss: existingHolding.profit_loss,
-          estimate_profit: newEstimateProfit,
-        };
-        updateHoldingLocally(updatedHolding);
-      } else {
-        // 创建新持仓
-        const newHolding = {
-          fund_code: data.fund_code,
-          fund_name: data.fund_name,
-          cost: data.cost || 0,
-          shares: data.cost || 0,
-          avg_cost: 1,
-          current_value: data.cost || 0,
-          profit_loss: 0,
-          profit_loss_rate: 0,
-          estimate_change_rate: "0.00",
-          estimate_profit: 0,
-          daily_change_rate: "-",
-          fsrq: "",
-          one_month_rate: 0,
-          tags: "",
-          platform: platform,
-        };
-        updateHoldingLocally(newHolding);
+      // 如果找不到对应平台的持仓，尝试查找该基金的任意一个持仓
+      if (!existingHolding) {
+        existingHolding = holdings.value.find(
+          (h) => h.fund_code === data.fund_code,
+        );
       }
-    } else if (data.type === "sell") {
-      // 减仓操作，更新现有持仓
-      const existingHolding = holdings.value.find(
-        (h) =>
-          h.fund_code === data.fund_code && (h.platform || "其他") === platform,
-      );
+
       if (existingHolding) {
-        // 计算减仓后的持仓
-        const sellRatio = (data.shares || 0) / existingHolding.shares;
-        const updatedHolding = {
-          ...existingHolding,
-          cost: existingHolding.cost * (1 - sellRatio),
-          shares: existingHolding.shares - (data.shares || 0),
-          current_value: existingHolding.current_value * (1 - sellRatio),
-          profit_loss: existingHolding.profit_loss * (1 - sellRatio),
-        };
-        if (updatedHolding.shares <= 0.01) {
-          // 如果份额为0，从持仓列表中移除
-          const index = holdings.value.findIndex(
-            (h) =>
-              h.fund_code === data.fund_code &&
-              (h.platform || "其他") === platform,
-          );
-          if (index !== -1) {
-            holdings.value.splice(index, 1);
-          }
-        } else {
+        if (data.type === "buy") {
+          // 加仓操作
+          const newCurrentValue =
+            existingHolding.current_value + (data.cost || 0);
+          const estimateChangeRate =
+            parseFloat(existingHolding.estimate_change_rate) || 0;
+          const newEstimateProfit =
+            (estimateChangeRate * newCurrentValue) / 100;
+
+          const updatedHolding = {
+            ...existingHolding,
+            cost: existingHolding.cost + (data.cost || 0),
+            shares:
+              existingHolding.shares +
+              ((data.cost || 0) / existingHolding.avg_cost || 0),
+            avg_cost:
+              (existingHolding.cost + (data.cost || 0)) /
+                (existingHolding.shares +
+                  ((data.cost || 0) / existingHolding.avg_cost || 0)) || 0,
+            current_value: newCurrentValue,
+            profit_loss: existingHolding.profit_loss,
+            estimate_profit: newEstimateProfit,
+          };
           updateHoldingLocally(updatedHolding);
+        } else if (data.type === "sell") {
+          // 减仓操作
+          const sellRatio = (data.shares || 0) / existingHolding.shares;
+          const updatedHolding = {
+            ...existingHolding,
+            cost: existingHolding.cost * (1 - sellRatio),
+            shares: existingHolding.shares - (data.shares || 0),
+            current_value: existingHolding.current_value * (1 - sellRatio),
+            profit_loss: existingHolding.profit_loss * (1 - sellRatio),
+          };
+
+          if (updatedHolding.shares <= 0.01) {
+            const index = holdings.value.findIndex(
+              (h) =>
+                h.fund_code === data.fund_code &&
+                (h.platform || "其他") === (existingHolding.platform || "其他"),
+            );
+            if (index !== -1) {
+              holdings.value.splice(index, 1);
+            }
+          } else {
+            updateHoldingLocally(updatedHolding);
+          }
+        }
+      } else {
+        // 如果是加仓且找不到现有持仓，创建新持仓
+        if (data.type === "buy") {
+          const newHolding = {
+            fund_code: data.fund_code,
+            fund_name: data.fund_name,
+            cost: data.cost || 0,
+            shares: data.cost || 0,
+            avg_cost: 1,
+            current_value: data.cost || 0,
+            profit_loss: 0,
+            profit_loss_rate: 0,
+            estimate_change_rate: "0.00",
+            estimate_profit: 0,
+            daily_change_rate: "-",
+            fsrq: "",
+            one_month_rate: 0,
+            tags: "",
+            platform: platform,
+          };
+          updateHoldingLocally(newHolding);
         }
       }
     }
 
-    // 异步发送请求给后端，使用与本地更新一致的平台值
+    // 确定使用的平台：优先使用现有持仓的实际平台
+    let actualPlatform = platform;
+    if (data.type === "buy" || data.type === "sell") {
+      let existingHolding = holdings.value.find(
+        (h) =>
+          h.fund_code === data.fund_code && (h.platform || "其他") === platform,
+      );
+      if (!existingHolding) {
+        existingHolding = holdings.value.find(
+          (h) => h.fund_code === data.fund_code,
+        );
+      }
+      if (existingHolding) {
+        actualPlatform = existingHolding.platform || "其他";
+      }
+    }
+
+    // 异步发送请求给后端，使用实际平台值
     const requestData = {
       ...data,
-      platform: platform,
+      platform: actualPlatform,
     };
 
     holdingApi
@@ -313,11 +330,16 @@ export function useHoldings() {
             .then((fundResponse) => {
               const fundData = fundResponse.data;
               if (fundData) {
-                const currentHolding = holdings.value.find(
+                let currentHolding = holdings.value.find(
                   (h) =>
                     h.fund_code === data.fund_code &&
-                    (h.platform || "其他") === platform,
+                    (h.platform || "其他") === actualPlatform,
                 );
+                if (!currentHolding) {
+                  currentHolding = holdings.value.find(
+                    (h) => h.fund_code === data.fund_code,
+                  );
+                }
                 if (currentHolding) {
                   // 根据最新净值重新计算当前价值
                   const unitNetValue = parseFloat(fundData.unit_net_value) || 0;
@@ -399,11 +421,18 @@ export function useHoldings() {
   function updateHoldingLocally(updatedHolding) {
     if (!updatedHolding) return;
 
-    const index = holdings.value.findIndex(
+    let index = holdings.value.findIndex(
       (h) =>
         h.fund_code === updatedHolding.fund_code &&
         (h.platform || "其他") === (updatedHolding.platform || "其他"),
     );
+
+    // 如果找不到对应平台的持仓，尝试查找该基金的任意一个持仓
+    if (index === -1) {
+      index = holdings.value.findIndex(
+        (h) => h.fund_code === updatedHolding.fund_code,
+      );
+    }
 
     if (index !== -1) {
       // 使用 splice 方法更新数组元素，保持数组引用的稳定性
