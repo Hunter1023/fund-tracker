@@ -105,7 +105,7 @@ class DataFetcher:
         """
         url = f"{DATA_SOURCES['eastmoney']}ccmx_{fund_code}.html"
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             response.encoding = 'utf-8'
             soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -145,7 +145,7 @@ class DataFetcher:
         url = f"{DATA_SOURCES['tencent_stock']}{tencent_code}"
 
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             response.encoding = 'utf-8'
             data_str = response.text.split('=')[1].rstrip(';')
             data_list = data_str.split('~')
@@ -178,7 +178,7 @@ class DataFetcher:
         # 使用东方财富搜索API
         url = f"http://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key={fund_keyword}"
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             data = response.json()
             funds = []
             for item in data.get('Datas', []):
@@ -481,7 +481,7 @@ class DataFetcher:
             # 使用东方财富的FundBaseTypeInformation API获取涨跌幅数据
             url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
             try:
-                response = requests.get(url)
+                response = requests.get(url, timeout=5)
                 data = response.json()
 
                 # 解析涨跌幅数据
@@ -561,7 +561,7 @@ class DataFetcher:
                         "Referer": f"https://fundf10.eastmoney.com/jjjz_{fund_code}.html",
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
                     }
-                    net_values_response = requests.get(net_values_url, headers=headers)
+                    net_values_response = requests.get(net_values_url, headers=headers, timeout=10)
                     net_values_data = net_values_response.json()
 
                     # 解析历史净值数据

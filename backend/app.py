@@ -1828,7 +1828,7 @@ def manage_holding():
 
             # 如果没有指定日期或无法获取指定日期的净值，使用最新净值
             if not current_price:
-                fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True)
+                fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True, need_history_data=False)
                 if fund_data and fund_data.get('unit_net_value'):
                     current_price = float(fund_data.get('unit_net_value'))
                     logger.info(f"使用最新净值，基金代码: {fund_code}, 净值: {current_price}, 净值日期: {fund_data.get('fsrq', '')}")
@@ -1854,7 +1854,7 @@ def manage_holding():
                     return jsonify({'error': '持仓金额必须大于0'}), 400
 
                 # 获取最新净值数据
-                fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True)
+                fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True, need_history_data=False)
 
                 unit_net_value = None
                 if fund_data:
@@ -2035,7 +2035,7 @@ def manage_holding():
             # 对于加仓/减仓操作，返回更新后的持仓数据
             if transaction_type in ('buy', 'sell') and fund_holding:
                 # 获取基金实时数据
-                fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True)
+                fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True, need_history_data=False)
                 # 获取标签
                 watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id).first()
                 tags = watchlist_item.tags if watchlist_item else ''
