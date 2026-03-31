@@ -205,19 +205,19 @@ class DataFetcher:
         print(f"开始获取基金 {fund_code} 的涨跌幅数据")
         # 首先尝试使用东方财富的FundBaseTypeInformation API
         url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
-        
+
         # 增加请求头，模拟浏览器
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Referer': f'https://fundf10.eastmoney.com/jjjz_{fund_code}.html'
         }
-        
+
         one_month_rate = 0
         three_month_rate = 0
         one_year_rate = 0
         daily_change_rate = 0
         fsrq = ''
-        
+
         try:
             # 增加超时时间到10秒
             response = requests.get(url, headers=headers, timeout=10)
@@ -678,15 +678,8 @@ class DataFetcher:
                     results[fund_code] = data
                 except Exception as e:
                     print(f"获取基金 {fund_code} 数据失败: {e}")
-                    # 返回默认数据，避免阻塞其他基金
-                    results[fund_code] = {
-                        'fund_code': fund_code,
-                        'one_month_rate': 0,
-                        'three_month_rate': 0,
-                        'one_year_rate': 0,
-                        'daily_change_rate': 0,
-                        'fsrq': ''
-                    }
+                    # 不返回默认数据，让调用方决定如何处理
+                    results[fund_code] = None
 
         return results
 

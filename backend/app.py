@@ -544,9 +544,10 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         if not need_refresh and realtime_data:
             # 检查数据是否有效 - 如果关键涨跌幅数据都是0，说明数据不完整，需要刷新
             has_valid_data = (
-                (realtime_data.one_month_rate and realtime_data.one_month_rate != 0) or
-                (realtime_data.three_month_rate and realtime_data.three_month_rate != 0) or
-                (realtime_data.one_year_rate and realtime_data.one_year_rate != 0)
+                (realtime_data.one_month_rate is not None and realtime_data.one_month_rate != 0) or
+                (realtime_data.three_month_rate is not None and realtime_data.three_month_rate != 0) or
+                (realtime_data.one_year_rate is not None and realtime_data.one_year_rate != 0) or
+                (realtime_data.daily_change_rate is not None and realtime_data.daily_change_rate != 0)
             )
 
             # 检查是否过期
@@ -602,7 +603,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             fund_data = valuation_data_dict.get(fund_code)
             rates_data = rates_data_dict.get(fund_code)
 
-            if rates_data:
+            if rates_data and (rates_data.get('one_month_rate') != 0 or rates_data.get('three_month_rate') != 0 or rates_data.get('one_year_rate') != 0 or rates_data.get('daily_change_rate') != 0):
                 # 准备数据
                 net_value_date = ''
                 if fund_data:
@@ -701,22 +702,40 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                     'net_values': []
                 }
             else:
-                # API调用失败，返回基本信息
-                results[fund_code] = {
-                    'fund_code': fund_code,
-                    'fund_name': fund.fund_name,
-                    'net_value': '',
-                    'unit_net_value': None,
-                    'estimate_net_value': None,
-                    'estimate_change_rate': '-',
-                    'estimate_time': '',
-                    'one_month_rate': 0,
-                    'three_month_rate': 0,
-                    'one_year_rate': 0,
-                    'daily_change_rate': 0,
-                    'fsrq': '',
-                    'net_values': []
-                }
+                # API调用失败，尝试返回数据库中的旧数据
+                if realtime_data:
+                    results[fund_code] = {
+                        'fund_code': fund_code,
+                        'fund_name': fund.fund_name,
+                        'net_value': realtime_data.net_value_date if realtime_data else '',
+                        'unit_net_value': realtime_data.unit_net_value if realtime_data else None,
+                        'estimate_net_value': realtime_data.estimate_net_value if realtime_data else None,
+                        'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data and realtime_data.estimate_change_rate is not None else '-',
+                        'estimate_time': realtime_data.estimate_time if realtime_data else '',
+                        'one_month_rate': realtime_data.one_month_rate if realtime_data else 0,
+                        'three_month_rate': realtime_data.three_month_rate if realtime_data else 0,
+                        'one_year_rate': realtime_data.one_year_rate if realtime_data else 0,
+                        'daily_change_rate': realtime_data.daily_change_rate if realtime_data else 0,
+                        'fsrq': realtime_data.fsrq if realtime_data else '',
+                        'net_values': []
+                    }
+                else:
+                    # 如果数据库中也没有数据，返回基本信息
+                    results[fund_code] = {
+                        'fund_code': fund_code,
+                        'fund_name': fund.fund_name,
+                        'net_value': '',
+                        'unit_net_value': None,
+                        'estimate_net_value': None,
+                        'estimate_change_rate': '-',
+                        'estimate_time': '',
+                        'one_month_rate': 0,
+                        'three_month_rate': 0,
+                        'one_year_rate': 0,
+                        'daily_change_rate': 0,
+                        'fsrq': '',
+                        'net_values': []
+                    }
 
     # 合并数据库中的数据
     results.update(funds_from_db)
@@ -766,23 +785,23 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
             net_value_date = fund_data.get('net_value', '')
         elif rates_data:
             net_value_date = rates_data.get('fsrq', '')
-        
+
         unit_net_value = None
         if fund_data and fund_data.get('unit_net_value'):
             unit_net_value = float(fund_data.get('unit_net_value'))
-        
+
         estimate_net_value = None
         if fund_data and fund_data.get('estimate_net_value'):
             estimate_net_value = float(fund_data.get('estimate_net_value'))
-        
+
         estimate_change_rate = None
         if fund_data and fund_data.get('estimate_change_rate'):
             estimate_change_rate = float(fund_data.get('estimate_change_rate'))
-        
+
         estimate_time = ''
         if fund_data:
             estimate_time = fund_data.get('estimate_time', '')
-        
+
         one_month_rate = 0
         three_month_rate = 0
         one_year_rate = 0
@@ -794,7 +813,7 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
             one_year_rate = rates_data.get('one_year_rate', 0)
             daily_change_rate = rates_data.get('daily_change_rate', 0)
             fsrq = rates_data.get('fsrq', '')
-        
+
         data = {
             'fund_code': fund_code,
             'fund_name': fund_name,
