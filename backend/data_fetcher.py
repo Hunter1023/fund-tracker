@@ -194,7 +194,7 @@ class DataFetcher:
 
     @staticmethod
     @lru_cache(maxsize=512)
-    @retry_on_failure(max_retries=3, delay=1, backoff=2)
+    @retry_on_failure(max_retries=5, delay=2, backoff=2)
     def get_fund_rates(fund_code, timestamp=None):
         """
         只获取基金涨跌幅数据（不获取历史净值数组）
@@ -205,30 +205,37 @@ class DataFetcher:
         print(f"开始获取基金 {fund_code} 的涨跌幅数据")
         # 首先尝试使用东方财富的FundBaseTypeInformation API
         url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
+        
+        # 增加请求头，模拟浏览器
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Referer': f'https://fundf10.eastmoney.com/jjjz_{fund_code}.html'
+        }
+        
+        one_month_rate = 0
+        three_month_rate = 0
+        one_year_rate = 0
+        daily_change_rate = 0
+        fsrq = ''
+        
         try:
-            response = requests.get(url, timeout=5)  # 5秒超时
+            # 增加超时时间到10秒
+            response = requests.get(url, headers=headers, timeout=10)
             print(f"东方财富API响应状态码: {response.status_code}")
             data = response.json()
             print(f"东方财富API返回数据: {data}")
 
             # 解析涨跌幅数据
-            one_month_rate = 0
-            three_month_rate = 0
-            one_year_rate = 0
-            daily_change_rate = 0
-
-            # 提取FSRQ（净值日期）
-            fsrq = ''
             if data.get('Datas'):
                 fsrq = data['Datas'].get('FSRQ', '')
                 print(f"基金 {fund_code} 的FSRQ: {fsrq}")
                 # 尝试使用不同的字段名称组合
                 # 常见的字段名称组合
                 field_mappings = {
-                    'one_month': ['SYL_Y', 'syl_y', '近1月', 'OneMonth', 'syly', 'SYLY', '1y', '1Y', 'oneyear', 'OneYear'],
-                    'three_month': ['SYL_3Y', 'syl_3y', '近3月', 'ThreeMonth', 'syl3y', 'SYL3Y', '3m', '3M', 'threemonth', 'ThreeMonth'],
-                    'one_year': ['SYL_1N', 'syl_1n', '近1年', 'OneYear', 'syl1n', 'SYL1N', '1y', '1Y', 'oneyear', 'OneYear'],
-                    'daily': ['RZDF', 'rzdf', '日涨跌幅', 'DailyChange', 'rdf', 'RDF', 'daily_change', 'DAILY_CHANGE', 'zdf', 'ZDF']
+                    'one_month': ['SYL_1M', 'syl_1m', 'SYL_Y', 'syl_y', '近1月', 'OneMonth', 'syly', 'SYLY', '1m', '1M'],
+                    'three_month': ['SYL_3M', 'syl_3m', 'SYL_3Y', 'syl_3y', '近3月', 'ThreeMonth', 'syl3y', 'SYL3Y', '3m', '3M'],
+                    'one_year': ['SYL_1N', 'syl_1n', '近1年', 'OneYear', 'syl1n', 'SYL1N', '1y', '1Y'],
+                    'daily': ['JZZZL', 'jzzzl', 'RZDF', 'rzdf', '日涨跌幅', 'DailyChange', 'rdf', 'RDF', 'daily_change', 'DAILY_CHANGE', 'zdf', 'ZDF']
                 }
 
                 # 尝试获取近1月收益率
@@ -281,7 +288,7 @@ class DataFetcher:
                 # 天天基金API
                 url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js"
                 try:
-                    response = requests.get(url, timeout=5)
+                    response = requests.get(url, headers=headers, timeout=10)
                     print(f"天天基金API响应状态码: {response.status_code}")
                     response.encoding = 'utf-8'
                     content = response.text
@@ -349,13 +356,14 @@ class DataFetcher:
             }
         except Exception as e:
             print(f"获取基金涨跌幅数据失败: {e}")
+            # 即使失败，也尝试返回部分数据
             return {
                 'fund_code': fund_code,
-                'one_month_rate': 0,
-                'three_month_rate': 0,
-                'one_year_rate': 0,
-                'daily_change_rate': 0,
-                'fsrq': ''
+                'one_month_rate': one_month_rate,
+                'three_month_rate': three_month_rate,
+                'one_year_rate': one_year_rate,
+                'daily_change_rate': daily_change_rate,
+                'fsrq': fsrq
             }
 
     @staticmethod

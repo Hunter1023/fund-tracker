@@ -761,19 +761,53 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
     if fund_data or rates_data:
         # 准备数据
         fund_name = fund.fund_name if fund else fund_code
+        net_value_date = ''
+        if fund_data:
+            net_value_date = fund_data.get('net_value', '')
+        elif rates_data:
+            net_value_date = rates_data.get('fsrq', '')
+        
+        unit_net_value = None
+        if fund_data and fund_data.get('unit_net_value'):
+            unit_net_value = float(fund_data.get('unit_net_value'))
+        
+        estimate_net_value = None
+        if fund_data and fund_data.get('estimate_net_value'):
+            estimate_net_value = float(fund_data.get('estimate_net_value'))
+        
+        estimate_change_rate = None
+        if fund_data and fund_data.get('estimate_change_rate'):
+            estimate_change_rate = float(fund_data.get('estimate_change_rate'))
+        
+        estimate_time = ''
+        if fund_data:
+            estimate_time = fund_data.get('estimate_time', '')
+        
+        one_month_rate = 0
+        three_month_rate = 0
+        one_year_rate = 0
+        daily_change_rate = 0
+        fsrq = ''
+        if rates_data:
+            one_month_rate = rates_data.get('one_month_rate', 0)
+            three_month_rate = rates_data.get('three_month_rate', 0)
+            one_year_rate = rates_data.get('one_year_rate', 0)
+            daily_change_rate = rates_data.get('daily_change_rate', 0)
+            fsrq = rates_data.get('fsrq', '')
+        
         data = {
             'fund_code': fund_code,
             'fund_name': fund_name,
-            'net_value_date': fund_data.get('net_value') if fund_data else rates_data.get('fsrq', '') if rates_data else '',
-            'unit_net_value': float(fund_data.get('unit_net_value', 0)) if fund_data else None,
-            'estimate_net_value': float(fund_data.get('estimate_net_value', 0)) if fund_data else None,
-            'estimate_change_rate': float(fund_data.get('estimate_change_rate', 0)) if fund_data else None,
-            'estimate_time': fund_data.get('estimate_time', '') if fund_data else '',
-            'one_month_rate': rates_data.get('one_month_rate', 0) if rates_data else 0,
-            'three_month_rate': rates_data.get('three_month_rate', 0) if rates_data else 0,
-            'one_year_rate': rates_data.get('one_year_rate', 0) if rates_data else 0,
-            'daily_change_rate': rates_data.get('daily_change_rate', 0) if rates_data else 0,
-            'fsrq': rates_data.get('fsrq', '') if rates_data else '',
+            'net_value_date': net_value_date,
+            'unit_net_value': unit_net_value,
+            'estimate_net_value': estimate_net_value,
+            'estimate_change_rate': estimate_change_rate,
+            'estimate_time': estimate_time,
+            'one_month_rate': one_month_rate,
+            'three_month_rate': three_month_rate,
+            'one_year_rate': one_year_rate,
+            'daily_change_rate': daily_change_rate,
+            'fsrq': fsrq,
             'net_values': '[]'  # 不存储历史净值数组
         }
         print(f"准备更新基金 {fund_code} 数据: {data}")
