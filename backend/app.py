@@ -984,8 +984,8 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
             # 这里我们可以使用一个简化的API调用，只获取基本信息
             history_data = DataFetcher.get_fund_history_simple(fund_code)
 
-        # 即使fund_data为None，只要history_data有数据且数据不完整，就处理
-        if history_data and (history_data.get('one_month_rate') != 0 or history_data.get('three_month_rate') != 0 or history_data.get('one_year_rate') != 0 or history_data.get('daily_change_rate') != 0):
+        # 即使fund_data为None，只要history_data有数据，就处理
+        if history_data:
             # 准备数据
             data = {
                 'fund_code': fund_code,
@@ -1055,24 +1055,114 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                             db.rollback()
                             raise
         else:
-            # API调用失败，返回数据库中的旧数据（如果有）
-            if not realtime_data:
-                # 如果数据库中也没有数据，返回基本信息
+            # API调用失败，尝试使用 get_fund_rates 方法获取数据
+            print(f"基金 {fund_code} API调用失败，尝试使用 get_fund_rates 方法获取数据")
+            rates_data = DataFetcher.get_fund_rates(fund_code)
+            if rates_data and (rates_data.get('one_month_rate') != 0 or rates_data.get('three_month_rate') != 0 or rates_data.get('one_year_rate') != 0 or rates_data.get('daily_change_rate') != 0):
+                # 准备数据
+                data = {
+                    'fund_code': fund_code,
+                    'fund_name': fund.fund_name,
+                    'net_value_date': rates_data.get('fsrq', ''),
+                    'unit_net_value': None,
+                    'estimate_net_value': None,
+                    'estimate_change_rate': None,
+                    'estimate_time': '',
+                    'one_month_rate': rates_data.get('one_month_rate', 0),
+                    'three_month_rate': rates_data.get('three_month_rate', 0),
+                    'one_year_rate': rates_data.get('one_year_rate', 0),
+                    'daily_change_rate': rates_data.get('daily_change_rate', 0),
+                    'fsrq': rates_data.get('fsrq', '')
+                }
+
+                # 只有需要完整历史数据时才更新 net_values，否则保留数据库中的值
+                if need_history_data:
+                    data['net_values'] = json.dumps([])
+                elif realtime_data and realtime_data.net_values:
+                    # 不需要完整历史数据但数据库中有值时，保留原值
+                    data['net_values'] = realtime_data.net_values
+                else:
+                    # 数据库中也没有值时，设置为空数组
+                    data['net_values'] = json.dumps([])
+
+                # 更新或创建数据库记录
+                if not skip_db_write:
+                    if realtime_data:
+                        for key, value in data.items():
+                            if key != 'fund_code' and key != 'fund_name':
+                                # 只有需要完整历史数据时才更新 net_values
+                                if key == 'net_values' and not need_history_data:
+                                    continue
+                                setattr(realtime_data, key, value)
+                    else:
+                        realtime_data = FundRealtimeData(
+                            fund_id=fund.id,
+                            net_value_date=data['net_value_date'],
+                            unit_net_value=data['unit_net_value'],
+                            estimate_net_value=data['estimate_net_value'],
+                            estimate_change_rate=data['estimate_change_rate'],
+                            estimate_time=data['estimate_time'],
+                            one_month_rate=data['one_month_rate'],
+                            three_month_rate=data['three_month_rate'],
+                            one_year_rate=data['one_year_rate'],
+                            daily_change_rate=data['daily_change_rate'],
+                            fsrq=data['fsrq'],
+                            net_values=data['net_values']
+                        )
+                        db.add(realtime_data)
+
+                    # 添加死锁处理和重试机制
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            db.flush()
+                            db.refresh(realtime_data)
+                            break
+                        except Exception as e:
+                            if attempt < max_retries - 1:
+                                print(f"数据库更新失败，第{attempt + 1}次重试... 错误: {e}")
+                                db.rollback()
+                                time.sleep(0.1 * (attempt + 1))
+                            else:
+                                print(f"数据库更新失败，已达到最大重试次数{max_retries}次。错误: {e}")
+                                db.rollback()
+                                raise
+
+                # 返回格式化的数据
                 return {
                     'fund_code': fund_code,
                     'fund_name': fund.fund_name,
-                    'net_value': '',
-                    'unit_net_value': None,
-                    'estimate_net_value': None,
-                    'estimate_change_rate': '-',
-                    'estimate_time': '',
-                    'one_month_rate': 0,
-                    'three_month_rate': 0,
-                    'one_year_rate': 0,
-                    'daily_change_rate': 0,
-                    'fsrq': '',
-                    'net_values': []
+                    'net_value': data.get('net_value_date', ''),
+                    'unit_net_value': data.get('unit_net_value', None),
+                    'estimate_net_value': data.get('estimate_net_value', None),
+                    'estimate_change_rate': str(data.get('estimate_change_rate', 0)) if data.get('estimate_change_rate') is not None else '-',
+                    'estimate_time': data.get('estimate_time', ''),
+                    'one_month_rate': data.get('one_month_rate', 0),
+                    'three_month_rate': data.get('three_month_rate', 0),
+                    'one_year_rate': data.get('one_year_rate', 0),
+                    'daily_change_rate': data.get('daily_change_rate', 0),
+                    'fsrq': data.get('fsrq', ''),
+                    'net_values': json.loads(data.get('net_values', '[]'))
                 }
+            else:
+                # API调用失败，返回数据库中的旧数据（如果有）
+                if not realtime_data:
+                    # 如果数据库中也没有数据，返回基本信息
+                    return {
+                        'fund_code': fund_code,
+                        'fund_name': fund.fund_name,
+                        'net_value': '',
+                        'unit_net_value': None,
+                        'estimate_net_value': None,
+                        'estimate_change_rate': '-',
+                        'estimate_time': '',
+                        'one_month_rate': 0,
+                        'three_month_rate': 0,
+                        'one_year_rate': 0,
+                        'daily_change_rate': 0,
+                        'fsrq': '',
+                        'net_values': []
+                    }
     else:
         # 从数据库读取数据
         if not realtime_data:
