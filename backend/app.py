@@ -1058,7 +1058,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
             # API调用失败，尝试使用 get_fund_rates 方法获取数据
             print(f"基金 {fund_code} API调用失败，尝试使用 get_fund_rates 方法获取数据")
             rates_data = DataFetcher.get_fund_rates(fund_code)
-            if rates_data and (rates_data.get('one_month_rate') != 0 or rates_data.get('three_month_rate') != 0 or rates_data.get('one_year_rate') != 0 or rates_data.get('daily_change_rate') != 0):
+            if rates_data:
                 # 准备数据
                 data = {
                     'fund_code': fund_code,
@@ -1128,22 +1128,8 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                                 db.rollback()
                                 raise
 
-                # 返回格式化的数据
-                return {
-                    'fund_code': fund_code,
-                    'fund_name': fund.fund_name,
-                    'net_value': data.get('net_value_date', ''),
-                    'unit_net_value': data.get('unit_net_value', None),
-                    'estimate_net_value': data.get('estimate_net_value', None),
-                    'estimate_change_rate': str(data.get('estimate_change_rate', 0)) if data.get('estimate_change_rate') is not None else '-',
-                    'estimate_time': data.get('estimate_time', ''),
-                    'one_month_rate': data.get('one_month_rate', 0),
-                    'three_month_rate': data.get('three_month_rate', 0),
-                    'one_year_rate': data.get('one_year_rate', 0),
-                    'daily_change_rate': data.get('daily_change_rate', 0),
-                    'fsrq': data.get('fsrq', ''),
-                    'net_values': json.loads(data.get('net_values', '[]'))
-                }
+                # 不直接返回，而是继续执行，让函数统一处理返回逻辑
+                pass
             else:
                 # API调用失败，返回数据库中的旧数据（如果有）
                 if not realtime_data:
@@ -1200,7 +1186,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
         }
 
     # 返回格式化的数据
-    if need_refresh and (fund_data or history_data):
+    if need_refresh and ('data' in locals()):
         # 如果刚从API获取了数据，使用data变量
         return {
             'fund_code': fund_code,
