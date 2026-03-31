@@ -368,6 +368,7 @@ class DataFetcher:
 
     @staticmethod
     @lru_cache(maxsize=256)
+    @retry_on_failure(max_retries=5, delay=2, backoff=2)
     def get_fund_history_simple(fund_code, timestamp=None):
         """
         获取基金基本涨跌幅数据，不获取完整的历史净值
@@ -375,30 +376,41 @@ class DataFetcher:
         :param timestamp: 时间戳（用于缓存过期）
         :return: 涨跌幅数据
         """
+        print(f"开始获取基金 {fund_code} 的基本涨跌幅数据")
         # 使用东方财富的FundBaseTypeInformation API获取涨跌幅数据
         url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
+
+        # 增加请求头，模拟浏览器
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Referer': f'https://fundf10.eastmoney.com/jjjz_{fund_code}.html'
+        }
+
+        one_month_rate = 0
+        three_month_rate = 0
+        one_year_rate = 0
+        daily_change_rate = 0
+        unit_net_value = 0
+        fsrq = ''
+
         try:
-            response = requests.get(url, timeout=3)  # 3秒超时
+            # 增加超时时间到10秒
+            response = requests.get(url, headers=headers, timeout=10)
+            print(f"东方财富API响应状态码: {response.status_code}")
             data = response.json()
+            print(f"东方财富API返回数据: {data}")
 
             # 解析涨跌幅数据
-            one_month_rate = 0
-            three_month_rate = 0
-            one_year_rate = 0
-            daily_change_rate = 0
-            unit_net_value = 0
-
-            # 提取FSRQ（净值日期）
-            fsrq = ''
             if data.get('Datas'):
                 fsrq = data['Datas'].get('FSRQ', '')
+                print(f"基金 {fund_code} 的FSRQ: {fsrq}")
                 # 尝试使用不同的字段名称组合
                 # 常见的字段名称组合
                 field_mappings = {
-                    'one_month': ['SYL_Y', 'syl_y', '近1月', 'OneMonth'],
-                    'three_month': ['SYL_3Y', 'syl_3y', '近3月', 'ThreeMonth'],
-                    'one_year': ['SYL_1N', 'syl_1n', '近1年', 'OneYear'],
-                    'daily': ['RZDF', 'rzdf', '日涨跌幅', 'DailyChange'],
+                    'one_month': ['SYL_1M', 'syl_1m', 'SYL_Y', 'syl_y', '近1月', 'OneMonth', 'syly', 'SYLY', '1m', '1M'],
+                    'three_month': ['SYL_3M', 'syl_3m', 'SYL_3Y', 'syl_3y', '近3月', 'ThreeMonth', 'syl3y', 'SYL3Y', '3m', '3M'],
+                    'one_year': ['SYL_1N', 'syl_1n', '近1年', 'OneYear', 'syl1n', 'SYL1N', '1y', '1Y'],
+                    'daily': ['JZZZL', 'jzzzl', 'RZDF', 'rzdf', '日涨跌幅', 'DailyChange', 'rdf', 'RDF', 'daily_change', 'DAILY_CHANGE', 'zdf', 'ZDF'],
                     'unit_net_value': ['DWJZ', 'dwjz', '单位净值', 'UnitNetValue']
                 }
 
@@ -407,8 +419,10 @@ class DataFetcher:
                     if field in data['Datas']:
                         try:
                             one_month_rate = float(data['Datas'][field])
+                            print(f"使用字段 {field} 获取基金 {fund_code} 的近1月收益率: {one_month_rate}")
                             break
-                        except (ValueError, TypeError):
+                        except (ValueError, TypeError) as e:
+                            print(f"字段 {field} 转换失败: {e}")
                             continue
 
                 # 尝试获取近3月收益率
@@ -416,8 +430,10 @@ class DataFetcher:
                     if field in data['Datas']:
                         try:
                             three_month_rate = float(data['Datas'][field])
+                            print(f"使用字段 {field} 获取基金 {fund_code} 的近3月收益率: {three_month_rate}")
                             break
-                        except (ValueError, TypeError):
+                        except (ValueError, TypeError) as e:
+                            print(f"字段 {field} 转换失败: {e}")
                             continue
 
                 # 尝试获取近1年收益率
@@ -425,8 +441,10 @@ class DataFetcher:
                     if field in data['Datas']:
                         try:
                             one_year_rate = float(data['Datas'][field])
+                            print(f"使用字段 {field} 获取基金 {fund_code} 的近1年收益率: {one_year_rate}")
                             break
-                        except (ValueError, TypeError):
+                        except (ValueError, TypeError) as e:
+                            print(f"字段 {field} 转换失败: {e}")
                             continue
 
                 # 尝试获取日涨跌幅
@@ -434,8 +452,10 @@ class DataFetcher:
                     if field in data['Datas']:
                         try:
                             daily_change_rate = float(data['Datas'][field])
+                            print(f"使用字段 {field} 获取基金 {fund_code} 的日涨跌幅: {daily_change_rate}")
                             break
-                        except (ValueError, TypeError):
+                        except (ValueError, TypeError) as e:
+                            print(f"字段 {field} 转换失败: {e}")
                             continue
 
                 # 尝试获取单位净值
@@ -443,10 +463,86 @@ class DataFetcher:
                     if field in data['Datas']:
                         try:
                             unit_net_value = float(data['Datas'][field])
+                            print(f"使用字段 {field} 获取基金 {fund_code} 的单位净值: {unit_net_value}")
                             break
-                        except (ValueError, TypeError):
+                        except (ValueError, TypeError) as e:
+                            print(f"字段 {field} 转换失败: {e}")
                             continue
 
+            # 如果使用东方财富API没有获取到数据，尝试使用天天基金API
+            if one_month_rate == 0 and three_month_rate == 0 and one_year_rate == 0 and daily_change_rate == 0:
+                print(f"东方财富API未获取到基金 {fund_code} 的数据，尝试使用天天基金API")
+                # 天天基金API
+                url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js"
+                try:
+                    response = requests.get(url, headers=headers, timeout=10)
+                    print(f"天天基金API响应状态码: {response.status_code}")
+                    response.encoding = 'utf-8'
+                    content = response.text
+                    print(f"天天基金API返回数据长度: {len(content)}")
+
+                    # 提取涨跌幅数据
+                    import re
+                    # 提取日涨跌幅
+                    daily_match = re.search(r'var\s+rzdf\s*=\s*"([-+]?\d+\.\d+)"', content)
+                    if daily_match:
+                        try:
+                            daily_change_rate = float(daily_match.group(1))
+                            print(f"使用正则提取基金 {fund_code} 的日涨跌幅: {daily_change_rate}")
+                        except (ValueError, TypeError) as e:
+                            print(f"日涨跌幅转换失败: {e}")
+                            pass
+
+                    # 提取近1月收益率
+                    one_month_match = re.search(r'var\s+syly\s*=\s*"([-+]?\d+\.\d+)"', content)
+                    if one_month_match:
+                        try:
+                            one_month_rate = float(one_month_match.group(1))
+                            print(f"使用正则提取基金 {fund_code} 的近1月收益率: {one_month_rate}")
+                        except (ValueError, TypeError) as e:
+                            print(f"近1月收益率转换失败: {e}")
+                            pass
+
+                    # 提取近3月收益率
+                    three_month_match = re.search(r'var\s+syl3y\s*=\s*"([-+]?\d+\.\d+)"', content)
+                    if three_month_match:
+                        try:
+                            three_month_rate = float(three_month_match.group(1))
+                            print(f"使用正则提取基金 {fund_code} 的近3月收益率: {three_month_rate}")
+                        except (ValueError, TypeError) as e:
+                            print(f"近3月收益率转换失败: {e}")
+                            pass
+
+                    # 提取近1年收益率
+                    one_year_match = re.search(r'var\s+syl1n\s*=\s*"([-+]?\d+\.\d+)"', content)
+                    if one_year_match:
+                        try:
+                            one_year_rate = float(one_year_match.group(1))
+                            print(f"使用正则提取基金 {fund_code} 的近1年收益率: {one_year_rate}")
+                        except (ValueError, TypeError) as e:
+                            print(f"近1年收益率转换失败: {e}")
+                            pass
+
+                    # 提取净值日期
+                    fsrq_match = re.search(r'var\s+fsrq\s*=\s*"([\d-]+)"', content)
+                    if fsrq_match:
+                        fsrq = fsrq_match.group(1)
+                        print(f"使用正则提取基金 {fund_code} 的FSRQ: {fsrq}")
+
+                    # 提取单位净值
+                    unit_net_value_match = re.search(r'var\s+dwjz\s*=\s*"([-+]?\d+\.\d+)"', content)
+                    if unit_net_value_match:
+                        try:
+                            unit_net_value = float(unit_net_value_match.group(1))
+                            print(f"使用正则提取基金 {fund_code} 的单位净值: {unit_net_value}")
+                        except (ValueError, TypeError) as e:
+                            print(f"单位净值转换失败: {e}")
+                            pass
+
+                except Exception as e:
+                    print(f"使用天天基金API获取基金涨跌幅数据失败: {e}")
+
+            print(f"基金 {fund_code} 的最终涨跌幅数据: one_month_rate={one_month_rate}, three_month_rate={three_month_rate}, one_year_rate={one_year_rate}, daily_change_rate={daily_change_rate}, unit_net_value={unit_net_value}, fsrq={fsrq}")
             return {
                 'fund_code': fund_code,
                 'net_values': [],  # 空数组，不返回历史数据
@@ -459,13 +555,14 @@ class DataFetcher:
             }
         except Exception as e:
             print(f"获取基金涨跌幅数据失败: {e}")
+            # 即使失败，也尝试返回部分数据
             return {
                 'fund_code': fund_code,
                 'net_values': [],
-                'one_month_rate': 0,
-                'three_month_rate': 0,
-                'one_year_rate': 0,
-                'daily_change_rate': 0,
+                'one_month_rate': one_month_rate,
+                'three_month_rate': three_month_rate,
+                'one_year_rate': one_year_rate,
+                'daily_change_rate': daily_change_rate,
                 'fsrq': '',
                 'unit_net_value': 0
             }

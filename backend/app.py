@@ -984,8 +984,8 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
             # 这里我们可以使用一个简化的API调用，只获取基本信息
             history_data = DataFetcher.get_fund_history_simple(fund_code)
 
-        # 即使fund_data为None，只要history_data有数据，就处理
-        if history_data:
+        # 即使fund_data为None，只要history_data有数据且数据不完整，就处理
+        if history_data and (history_data.get('one_month_rate') != 0 or history_data.get('three_month_rate') != 0 or history_data.get('one_year_rate') != 0 or history_data.get('daily_change_rate') != 0):
             # 准备数据
             data = {
                 'fund_code': fund_code,
