@@ -543,13 +543,13 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         # 如果强制刷新或数据不存在，则需要刷新
         need_refresh = force_refresh
         if not need_refresh and realtime_data:
-            # 检查数据是否有效 - 只要有数据存在且不为0，就认为有效
-            has_valid_data = (
+            # 检查涨跌幅数据是否有效 - 只检查涨跌幅数据，不包括估算数据
+            # 估算数据是单独刷新的，不应该作为涨跌幅数据有效性的判断依据
+            rates_valid = (
                 (realtime_data.one_month_rate is not None and realtime_data.one_month_rate != 0) or
                 (realtime_data.three_month_rate is not None and realtime_data.three_month_rate != 0) or
                 (realtime_data.one_year_rate is not None and realtime_data.one_year_rate != 0) or
-                (realtime_data.daily_change_rate is not None and realtime_data.daily_change_rate != 0) or
-                (realtime_data.estimate_change_rate is not None)
+                (realtime_data.daily_change_rate is not None and realtime_data.daily_change_rate != 0)
             )
 
             # 检查是否需要刷新不同类型的数据
@@ -576,8 +576,8 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 # 非交易日或非交易时间，不需要刷新估算涨幅
                 need_refresh_estimate = False
 
-            # 如果任何一种数据需要刷新，就整体刷新
-            if need_refresh_rates or need_refresh_estimate or not has_valid_data:
+            # 如果涨跌幅数据无效，或者需要刷新涨跌幅，或者需要刷新估算，就整体刷新
+            if need_refresh_rates or need_refresh_estimate or not rates_valid:
                 need_refresh = True
 
         if need_refresh:
@@ -1022,6 +1022,15 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
     fund_data = None
     history_data = None
     if not need_refresh and realtime_data:
+        # 检查涨跌幅数据是否有效 - 只检查涨跌幅数据，不包括估算数据
+        # 估算数据是单独刷新的，不应该作为涨跌幅数据有效性的判断依据
+        rates_valid = (
+            (realtime_data.one_month_rate is not None and realtime_data.one_month_rate != 0) or
+            (realtime_data.three_month_rate is not None and realtime_data.three_month_rate != 0) or
+            (realtime_data.one_year_rate is not None and realtime_data.one_year_rate != 0) or
+            (realtime_data.daily_change_rate is not None and realtime_data.daily_change_rate != 0)
+        )
+
         # 检查是否需要刷新不同类型的数据
         need_refresh_rates = False  # 最新涨幅、近1月、3月、1年的涨幅
         need_refresh_estimate = False  # 估算涨幅
@@ -1046,8 +1055,8 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
             # 非交易日或非交易时间，不需要刷新估算涨幅
             need_refresh_estimate = False
 
-        # 如果任何一种数据需要刷新，就整体刷新
-        if need_refresh_rates or need_refresh_estimate:
+        # 如果涨跌幅数据无效，或者需要刷新涨跌幅，或者需要刷新估算，就整体刷新
+        if need_refresh_rates or need_refresh_estimate or not rates_valid:
             need_refresh = True
 
     if need_refresh:
