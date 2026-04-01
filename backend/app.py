@@ -530,6 +530,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
     # 分离需要刷新的基金和不需要刷新的基金
     funds_to_refresh = []
     funds_from_db = {}
+    funds_to_get_estimate = []
 
     for fund_code in fund_codes:
         fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
@@ -539,26 +540,44 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         # 检查数据库中是否有实时数据
         realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
 
-        # 如果强制刷新或数据不存在或数据过期（超过10分钟）或涨跌幅数据为0，则需要刷新
+        # 如果强制刷新或数据不存在，则需要刷新
         need_refresh = force_refresh
         if not need_refresh and realtime_data:
-            # 检查数据是否有效 - 如果关键涨跌幅数据都是0，说明数据不完整，需要刷新
+            # 检查数据是否有效 - 只要有数据存在且不为0，就认为有效
             has_valid_data = (
                 (realtime_data.one_month_rate is not None and realtime_data.one_month_rate != 0) or
                 (realtime_data.three_month_rate is not None and realtime_data.three_month_rate != 0) or
                 (realtime_data.one_year_rate is not None and realtime_data.one_year_rate != 0) or
-                (realtime_data.daily_change_rate is not None and realtime_data.daily_change_rate != 0)
+                (realtime_data.daily_change_rate is not None and realtime_data.daily_change_rate != 0) or
+                (realtime_data.estimate_change_rate is not None)
             )
 
-            # 检查是否过期
-            is_expired = False
+            # 检查是否需要刷新不同类型的数据
+            need_refresh_rates = False  # 最新涨幅、近1月、3月、1年的涨幅
+            need_refresh_estimate = False  # 估算涨幅
+
+            # 检查最新涨幅、近1月、3月、1年的涨幅是否需要刷新（24小时）
             if realtime_data.updated_at:
                 now = datetime.now()
                 time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                if time_diff > timedelta(minutes=5):
-                    is_expired = True
+                if time_diff > timedelta(hours=24):
+                    need_refresh_rates = True
 
-            if is_expired or not has_valid_data:
+            # 检查估算涨幅是否需要刷新（交易日的交易时间内5分钟）
+            now = datetime.now()
+            is_trading_day = now.weekday() < 5  # 周一到周五
+            is_trading_hours = now.hour >= 9 and now.hour < 15  # 9:00-15:00
+            if is_trading_day and is_trading_hours:
+                if realtime_data.updated_at:
+                    time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
+                    if time_diff > timedelta(minutes=5):
+                        need_refresh_estimate = True
+            else:
+                # 非交易日或非交易时间，不需要刷新估算涨幅
+                need_refresh_estimate = False
+
+            # 如果任何一种数据需要刷新，就整体刷新
+            if need_refresh_rates or need_refresh_estimate or not has_valid_data:
                 need_refresh = True
 
         if need_refresh:
@@ -571,7 +590,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 'net_value': realtime_data.net_value_date,
                 'unit_net_value': realtime_data.unit_net_value,
                 'estimate_net_value': realtime_data.estimate_net_value,
-                'estimate_change_rate': realtime_data.estimate_change_rate,
+                'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data.estimate_change_rate is not None else '-',
                 'estimate_time': realtime_data.estimate_time,
                 'one_month_rate': realtime_data.one_month_rate,
                 'three_month_rate': realtime_data.three_month_rate,
@@ -580,17 +599,22 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 'fsrq': realtime_data.fsrq,
                 'net_values': []
             }
+            # 总是获取最新估值数据
+            funds_to_get_estimate.append(fund_code)
         else:
             # 数据库中没有数据，也需要刷新
             funds_to_refresh.append(fund_code)
 
-    # 并发获取需要刷新的基金数据
-    if funds_to_refresh:
-        # 使用分钟级时间戳作为缓存键，每5分钟更新一次
-        cache_key = int(time.time() / (5 * 60))
+    # 并发获取估值数据（即使其他数据不刷新，估值数据也总是获取最新的）
+    cache_key = int(time.time() / (5 * 60))
+    valuation_data_dict = {}
+    all_funds_for_estimate = funds_to_refresh + funds_to_get_estimate
+    if all_funds_for_estimate:
+        valuation_data_dict = DataFetcher.get_fund_valuation_batch(all_funds_for_estimate, cache_key)
 
-        # 并发获取估值数据
-        valuation_data_dict = DataFetcher.get_fund_valuation_batch(funds_to_refresh, cache_key)
+    # 并发获取需要刷新的基金数据
+    rates_data_dict = {}
+    if funds_to_refresh:
         # 并发获取涨跌幅数据
         rates_data_dict = DataFetcher.get_fund_rates_batch(funds_to_refresh, cache_key)
 
@@ -603,7 +627,21 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             fund_data = valuation_data_dict.get(fund_code)
             rates_data = rates_data_dict.get(fund_code)
 
-            if rates_data and (rates_data.get('one_month_rate') != 0 or rates_data.get('three_month_rate') != 0 or rates_data.get('one_year_rate') != 0 or rates_data.get('daily_change_rate') != 0):
+            # 如果 rates_data 为 None 或所有涨跌幅数据都为 0，尝试使用 get_fund_history_simple 获取数据
+            if not rates_data or (rates_data.get('one_month_rate') == 0 and rates_data.get('three_month_rate') == 0 and rates_data.get('one_year_rate') == 0 and rates_data.get('daily_change_rate') == 0):
+                print(f"基金 {fund_code} 使用 get_fund_rates 获取数据失败，尝试使用 get_fund_history_simple")
+                history_data = DataFetcher.get_fund_history_simple(fund_code)
+                if history_data:
+                    rates_data = {
+                        'fund_code': fund_code,
+                        'one_month_rate': history_data.get('one_month_rate', 0),
+                        'three_month_rate': history_data.get('three_month_rate', 0),
+                        'one_year_rate': history_data.get('one_year_rate', 0),
+                        'daily_change_rate': history_data.get('daily_change_rate', 0),
+                        'fsrq': history_data.get('fsrq', '')
+                    }
+
+            if rates_data:
                 # 准备数据
                 net_value_date = ''
                 if fund_data:
@@ -612,15 +650,17 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                     net_value_date = rates_data.get('fsrq', '')
 
                 unit_net_value = None
-                if fund_data and fund_data.get('unit_net_value'):
+                if fund_data and fund_data.get('unit_net_value') is not None and fund_data.get('unit_net_value') != '':
                     unit_net_value = float(fund_data.get('unit_net_value'))
+                elif rates_data and 'unit_net_value' in rates_data:
+                    unit_net_value = rates_data.get('unit_net_value')
 
                 estimate_net_value = None
-                if fund_data and fund_data.get('estimate_net_value'):
+                if fund_data and fund_data.get('estimate_net_value') is not None and fund_data.get('estimate_net_value') != '':
                     estimate_net_value = float(fund_data.get('estimate_net_value'))
 
                 estimate_change_rate = None
-                if fund_data and fund_data.get('estimate_change_rate'):
+                if fund_data and fund_data.get('estimate_change_rate') is not None and fund_data.get('estimate_change_rate') != '':
                     estimate_change_rate = float(fund_data.get('estimate_change_rate'))
 
                 estimate_time = ''
@@ -740,6 +780,26 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
     # 合并数据库中的数据
     results.update(funds_from_db)
 
+    # 用最新的API估值数据更新结果
+    for fund_code in funds_to_get_estimate:
+        if fund_code in valuation_data_dict and fund_code in results:
+            fund_data = valuation_data_dict[fund_code]
+            if fund_data:
+                # 更新估值数据
+                estimate_net_value = None
+                if fund_data.get('estimate_net_value') is not None and fund_data.get('estimate_net_value') != '':
+                    estimate_net_value = float(fund_data.get('estimate_net_value'))
+
+                estimate_change_rate = None
+                if fund_data.get('estimate_change_rate') is not None and fund_data.get('estimate_change_rate') != '':
+                    estimate_change_rate = float(fund_data.get('estimate_change_rate'))
+
+                estimate_time = fund_data.get('estimate_time', '')
+
+                results[fund_code]['estimate_net_value'] = estimate_net_value
+                results[fund_code]['estimate_change_rate'] = str(estimate_change_rate) if estimate_change_rate is not None else '-'
+                results[fund_code]['estimate_time'] = estimate_time
+
     return results
 
 def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
@@ -787,15 +847,15 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
             net_value_date = rates_data.get('fsrq', '')
 
         unit_net_value = None
-        if fund_data and fund_data.get('unit_net_value'):
+        if fund_data and fund_data.get('unit_net_value') is not None and fund_data.get('unit_net_value') != '':
             unit_net_value = float(fund_data.get('unit_net_value'))
 
         estimate_net_value = None
-        if fund_data and fund_data.get('estimate_net_value'):
+        if fund_data and fund_data.get('estimate_net_value') is not None and fund_data.get('estimate_net_value') != '':
             estimate_net_value = float(fund_data.get('estimate_net_value'))
 
         estimate_change_rate = None
-        if fund_data and fund_data.get('estimate_change_rate'):
+        if fund_data and fund_data.get('estimate_change_rate') is not None and fund_data.get('estimate_change_rate') != '':
             estimate_change_rate = float(fund_data.get('estimate_change_rate'))
 
         estimate_time = ''
@@ -957,19 +1017,38 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
     # 检查数据库中是否有实时数据
     realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
 
-    # 如果强制刷新或数据不存在或数据过期（超过10分钟），则从API获取
+    # 如果强制刷新或数据不存在，则从API获取
     need_refresh = force_refresh
     fund_data = None
     history_data = None
     if not need_refresh and realtime_data:
-        # 检查数据是否过期（10分钟）
+        # 检查是否需要刷新不同类型的数据
+        need_refresh_rates = False  # 最新涨幅、近1月、3月、1年的涨幅
+        need_refresh_estimate = False  # 估算涨幅
+
+        # 检查最新涨幅、近1月、3月、1年的涨幅是否需要刷新（24小时）
         if realtime_data.updated_at:
-            # 使用带有时区信息的当前时间
             now = datetime.now()
-            # 直接比较，忽略时区差异
             time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-            if time_diff > timedelta(minutes=5):
-                need_refresh = True
+            if time_diff > timedelta(hours=24):
+                need_refresh_rates = True
+
+        # 检查估算涨幅是否需要刷新（交易日的交易时间内5分钟）
+        now = datetime.now()
+        is_trading_day = now.weekday() < 5  # 周一到周五
+        is_trading_hours = now.hour >= 9 and now.hour < 15  # 9:00-15:00
+        if is_trading_day and is_trading_hours:
+            if realtime_data.updated_at:
+                time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
+                if time_diff > timedelta(minutes=5):
+                    need_refresh_estimate = True
+        else:
+            # 非交易日或非交易时间，不需要刷新估算涨幅
+            need_refresh_estimate = False
+
+        # 如果任何一种数据需要刷新，就整体刷新
+        if need_refresh_rates or need_refresh_estimate:
+            need_refresh = True
 
     if need_refresh:
         # 从API获取数据
@@ -1791,33 +1870,12 @@ def manage_holding():
                 logger.error(f"获取持仓列表失败: {e}")
                 return jsonify({'error': '获取持仓列表失败'}), 500
 
-            # 批量获取所有基金的实时数据（并发优化）
+            # 批量获取所有基金的实时数据（使用与自选基金相同的批量方法）
             fund_codes = [holding.fund.fund_code for holding in holdings]
             logger.info(f"基金代码: {fund_codes}")
 
-            # 使用线程池执行数据获取，设置超时
-            fund_data_dict = {}
-            try:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                    # 为每个基金代码创建一个任务
-                    future_to_fund = {executor.submit(get_fund_realtime_rates, db, fund_code): fund_code for fund_code in fund_codes}
-
-                    # 处理完成的任务，设置超时
-                    for future in concurrent.futures.as_completed(future_to_fund, timeout=20):
-                        fund_code = future_to_fund[future]
-                        try:
-                            data = future.result()
-                            if data:
-                                fund_data_dict[fund_code] = data
-                                logger.info(f"获取基金 {fund_code} 数据成功: {data}")
-                            else:
-                                logger.warning(f"获取基金 {fund_code} 数据返回空")
-                        except Exception as e:
-                            logger.error(f"获取基金 {fund_code} 数据失败: {e}")
-            except concurrent.futures.TimeoutError:
-                logger.warning("获取基金数据超时，使用部分数据")
-            except Exception as e:
-                logger.error(f"获取基金数据失败: {e}")
+            # 使用批量并发方法获取所有持仓基金数据，与自选基金保持一致
+            fund_data_dict = get_fund_realtime_rates_batch(db, fund_codes, force_refresh=False)
 
             logger.info(f"获取到的基金数据: {fund_data_dict}")
 
