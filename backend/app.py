@@ -545,23 +545,27 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         if not need_refresh and realtime_data:
             # 检查涨跌幅数据是否有效 - 只检查涨跌幅数据，不包括估算数据
             # 估算数据是单独刷新的，不应该作为涨跌幅数据有效性的判断依据
-            rates_valid = (
-                (realtime_data.one_month_rate is not None and realtime_data.one_month_rate != 0) or
-                (realtime_data.three_month_rate is not None and realtime_data.three_month_rate != 0) or
-                (realtime_data.one_year_rate is not None and realtime_data.one_year_rate != 0) or
-                (realtime_data.daily_change_rate is not None and realtime_data.daily_change_rate != 0)
+            rates_all_zero = (
+                (realtime_data.one_month_rate is None or realtime_data.one_month_rate == 0) and
+                (realtime_data.three_month_rate is None or realtime_data.three_month_rate == 0) and
+                (realtime_data.one_year_rate is None or realtime_data.one_year_rate == 0) and
+                (realtime_data.daily_change_rate is None or realtime_data.daily_change_rate == 0)
             )
 
             # 检查是否需要刷新不同类型的数据
             need_refresh_rates = False  # 最新涨幅、近1月、3月、1年的涨幅
             need_refresh_estimate = False  # 估算涨幅
 
-            # 检查最新涨幅、近1月、3月、1年的涨幅是否需要刷新（24小时）
+            # 检查最新涨幅、近1月、3月、1年的涨幅是否需要刷新
             if realtime_data.updated_at:
                 now = datetime.now()
                 time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                if time_diff > timedelta(hours=24):
+                # 如果所有涨跌幅都是0，或者超过24小时，就刷新
+                if rates_all_zero or time_diff > timedelta(hours=24):
                     need_refresh_rates = True
+            else:
+                # 如果没有更新时间，也需要刷新
+                need_refresh_rates = True
 
             # 检查估算涨幅是否需要刷新（交易日的交易时间内5分钟）
             now = datetime.now()
@@ -576,8 +580,8 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 # 非交易日或非交易时间，不需要刷新估算涨幅
                 need_refresh_estimate = False
 
-            # 如果涨跌幅数据无效，或者需要刷新涨跌幅，或者需要刷新估算，就整体刷新
-            if need_refresh_rates or need_refresh_estimate or not rates_valid:
+            # 如果涨跌幅数据全为0，或者需要刷新涨跌幅，或者需要刷新估算，就整体刷新
+            if rates_all_zero or need_refresh_rates or need_refresh_estimate:
                 need_refresh = True
 
         if need_refresh:
