@@ -2479,7 +2479,6 @@ def delete_holding(fund_code):
         db.close()
 
 @app.route('/api/holding/<fund_code>', methods=['PUT'])
-@retry_db_operation()
 def update_holding(fund_code):
     """
     更新持仓信息
