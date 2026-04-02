@@ -1002,7 +1002,6 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
                 'net_values': []
             }
 
-@retry_db_operation()
 def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, need_history_data=True, skip_db_write=False):
     """
     获取基金实时数据，优先从数据库读取
