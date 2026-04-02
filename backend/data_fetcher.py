@@ -217,6 +217,7 @@ class DataFetcher:
         one_year_rate = 0
         daily_change_rate = 0
         fsrq = ''
+        unit_net_value = 0
 
         try:
             # 增加超时时间到10秒
@@ -235,8 +236,20 @@ class DataFetcher:
                     'one_month': ['SYL_1M', 'syl_1m', 'SYL_Y', 'syl_y', '近1月', 'OneMonth', 'syly', 'SYLY', '1m', '1M'],
                     'three_month': ['SYL_3M', 'syl_3m', 'SYL_3Y', 'syl_3y', '近3月', 'ThreeMonth', 'syl3y', 'SYL3Y', '3m', '3M'],
                     'one_year': ['SYL_1N', 'syl_1n', '近1年', 'OneYear', 'syl1n', 'SYL1N', '1y', '1Y'],
-                    'daily': ['JZZZL', 'jzzzl', 'RZDF', 'rzdf', '日涨跌幅', 'DailyChange', 'rdf', 'RDF', 'daily_change', 'DAILY_CHANGE', 'zdf', 'ZDF']
+                    'daily': ['JZZZL', 'jzzzl', 'RZDF', 'rzdf', '日涨跌幅', 'DailyChange', 'rdf', 'RDF', 'daily_change', 'DAILY_CHANGE', 'zdf', 'ZDF'],
+                    'unit_net_value': ['DWJZ', 'dwjz', '单位净值', 'UnitNetValue']
                 }
+
+                # 尝试获取单位净值
+                for field in field_mappings['unit_net_value']:
+                    if field in data['Datas']:
+                        try:
+                            unit_net_value = float(data['Datas'][field])
+                            print(f"使用字段 {field} 获取基金 {fund_code} 的单位净值: {unit_net_value}")
+                            break
+                        except (ValueError, TypeError) as e:
+                            print(f"字段 {field} 转换失败: {e}")
+                            continue
 
                 # 尝试获取近1月收益率
                 for field in field_mappings['one_month']:
@@ -342,17 +355,27 @@ class DataFetcher:
                         fsrq = fsrq_match.group(1)
                         print(f"使用正则提取基金 {fund_code} 的FSRQ: {fsrq}")
 
+                    # 提取单位净值
+                    unit_net_value_match = re.search(r'var\s+dwjz\s*=\s*"([-+]?\d+\.\d+)"', content)
+                    if unit_net_value_match:
+                        try:
+                            unit_net_value = float(unit_net_value_match.group(1))
+                            print(f"使用正则提取基金 {fund_code} 的单位净值: {unit_net_value}")
+                        except (ValueError, TypeError):
+                            pass
+
                 except Exception as e:
                     print(f"使用天天基金API获取基金涨跌幅数据失败: {e}")
 
-            print(f"基金 {fund_code} 的最终涨跌幅数据: one_month_rate={one_month_rate}, three_month_rate={three_month_rate}, one_year_rate={one_year_rate}, daily_change_rate={daily_change_rate}, fsrq={fsrq}")
+            print(f"基金 {fund_code} 的最终涨跌幅数据: one_month_rate={one_month_rate}, three_month_rate={three_month_rate}, one_year_rate={one_year_rate}, daily_change_rate={daily_change_rate}, fsrq={fsrq}, unit_net_value={unit_net_value}")
             return {
                 'fund_code': fund_code,
                 'one_month_rate': one_month_rate,
                 'three_month_rate': three_month_rate,
                 'one_year_rate': one_year_rate,
                 'daily_change_rate': daily_change_rate,
-                'fsrq': fsrq
+                'fsrq': fsrq,
+                'unit_net_value': unit_net_value
             }
         except Exception as e:
             print(f"获取基金涨跌幅数据失败: {e}")
@@ -363,7 +386,8 @@ class DataFetcher:
                 'three_month_rate': three_month_rate,
                 'one_year_rate': one_year_rate,
                 'daily_change_rate': daily_change_rate,
-                'fsrq': fsrq
+                'fsrq': fsrq,
+                'unit_net_value': unit_net_value
             }
 
     @staticmethod
@@ -583,80 +607,18 @@ class DataFetcher:
         # 内部函数，用于缓存
         @lru_cache(maxsize=128)
         def _get_fund_history(fund_code, timestamp):
-            # 使用东方财富的FundBaseTypeInformation API获取涨跌幅数据
-            url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
+            # 首先使用 get_fund_rates 方法获取涨跌幅数据（这个方法已经有完整的回退机制）
+            rates_data = DataFetcher.get_fund_rates(fund_code, timestamp)
+            one_month_rate = rates_data.get('one_month_rate', 0)
+            three_month_rate = rates_data.get('three_month_rate', 0)
+            one_year_rate = rates_data.get('one_year_rate', 0)
+            daily_change_rate = rates_data.get('daily_change_rate', 0)
+            fsrq = rates_data.get('fsrq', '')
+            unit_net_value = rates_data.get('unit_net_value', 0)
+
+            # 获取历史净值数据（用单独的 try-except，避免影响涨跌幅数据）
+            net_values = []
             try:
-                response = requests.get(url, timeout=5)
-                data = response.json()
-
-                # 解析涨跌幅数据
-                one_month_rate = 0
-                three_month_rate = 0
-                one_year_rate = 0
-                daily_change_rate = 0
-
-                # 提取FSRQ（净值日期）
-                fsrq = ''
-                unit_net_value = 0
-                if data.get('Datas'):
-                    fsrq = data['Datas'].get('FSRQ', '')
-                    # 尝试使用不同的字段名称组合
-                    # 常见的字段名称组合
-                    field_mappings = {
-                        'one_month': ['SYL_Y', 'syl_y', '近1月', 'OneMonth'],
-                        'three_month': ['SYL_3Y', 'syl_3y', '近3月', 'ThreeMonth'],
-                        'one_year': ['SYL_1N', 'syl_1n', '近1年', 'OneYear'],
-                        'daily': ['RZDF', 'rzdf', '日涨跌幅', 'DailyChange'],
-                        'unit_net_value': ['DWJZ', 'dwjz', '单位净值', 'UnitNetValue']
-                    }
-
-                    # 尝试获取单位净值
-                    for field in field_mappings['unit_net_value']:
-                        if field in data['Datas']:
-                            try:
-                                unit_net_value = float(data['Datas'][field])
-                                break
-                            except (ValueError, TypeError):
-                                continue
-
-                    # 尝试获取近1月收益率
-                    for field in field_mappings['one_month']:
-                        if field in data['Datas']:
-                            try:
-                                one_month_rate = float(data['Datas'][field])
-                                break
-                            except (ValueError, TypeError):
-                                continue
-
-                    # 尝试获取近3月收益率
-                    for field in field_mappings['three_month']:
-                        if field in data['Datas']:
-                            try:
-                                three_month_rate = float(data['Datas'][field])
-                                break
-                            except (ValueError, TypeError):
-                                continue
-
-                    # 尝试获取近1年收益率
-                    for field in field_mappings['one_year']:
-                        if field in data['Datas']:
-                            try:
-                                one_year_rate = float(data['Datas'][field])
-                                break
-                            except (ValueError, TypeError):
-                                continue
-
-                    # 尝试获取日涨跌幅
-                    for field in field_mappings['daily']:
-                        if field in data['Datas']:
-                            try:
-                                daily_change_rate = float(data['Datas'][field])
-                                break
-                            except (ValueError, TypeError):
-                                continue
-
-                # 同时获取历史净值数据
-                net_values = []
                 page_index = 1
                 page_size = 100
 
@@ -680,6 +642,12 @@ class DataFetcher:
                                     'cumulative_net_value': item.get('LJJZ'),
                                     'change_rate': item.get('JZZZL')
                                 })
+                                # 从历史数据中获取单位净值
+                                if unit_net_value == 0:
+                                    try:
+                                        unit_net_value = float(item.get('DWJZ'))
+                                    except (ValueError, TypeError):
+                                        pass
 
                         # 检查是否还有更多数据
                         total_count = net_values_data.get('TotalCount', 0)
@@ -688,29 +656,19 @@ class DataFetcher:
                         page_index += 1
                     else:
                         break
-
-                return {
-                    'fund_code': fund_code,
-                    'net_values': net_values,
-                    'one_month_rate': one_month_rate,
-                    'three_month_rate': three_month_rate,
-                    'one_year_rate': one_year_rate,
-                    'daily_change_rate': daily_change_rate,
-                    'fsrq': fsrq,
-                    'unit_net_value': unit_net_value
-                }
             except Exception as e:
-                print(f"获取基金历史净值失败: {e}")
-                return {
-                    'fund_code': fund_code,
-                    'net_values': [],
-                    'one_month_rate': 0,
-                    'three_month_rate': 0,
-                    'one_year_rate': 0,
-                    'daily_change_rate': 0,
-                    'fsrq': '',
-                    'unit_net_value': 0
-                }
+                print(f"获取基金历史净值失败，但涨跌幅数据仍可用: {e}")
+
+            return {
+                'fund_code': fund_code,
+                'net_values': net_values,
+                'one_month_rate': one_month_rate,
+                'three_month_rate': three_month_rate,
+                'one_year_rate': one_year_rate,
+                'daily_change_rate': daily_change_rate,
+                'fsrq': fsrq,
+                'unit_net_value': unit_net_value
+            }
 
         # 调用内部函数
         return _get_fund_history(fund_code, timestamp)
