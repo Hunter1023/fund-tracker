@@ -244,12 +244,16 @@ async function loadWatchlistAndHoldings() {
 
   isLoadingData = true;
   try {
-    // 加载持仓基金 - 只用于搜索结果显示，不触发组件的loadHoldings
-    const holdingsResponse = await holdingApi.get();
-    holdingsFunds.value = holdingsResponse.data || [];
-    
+    // 优先从Holdings组件获取持仓数据，避免重复请求
+    if (holdingsRef.value && holdingsRef.value.holdings) {
+      holdingsFunds.value = holdingsRef.value.holdings;
+    }
+
     // 只有在当前显示的是自选标签或watchlistRef已挂载时才加载自选基金
-    if (activeTab.value === "watchlist" || (watchlistRef.value && watchlistRef.value.funds)) {
+    if (
+      activeTab.value === "watchlist" ||
+      (watchlistRef.value && watchlistRef.value.funds)
+    ) {
       if (watchlistRef.value && watchlistRef.value.funds) {
         watchlistFunds.value = watchlistRef.value.funds;
       } else {
@@ -476,11 +480,15 @@ function handleClickOutside(event) {
 // 初始化加载默认标签的数据
 onMounted(async () => {
   await nextTick();
-  // 加载自选和持仓数据，用于搜索结果显示
+  // 页面加载时只加载自选数据，持仓数据由Holdings组件负责
   try {
-    await loadWatchlistAndHoldings();
+    // 只加载自选数据，避免重复请求持仓
+    if (activeTab.value === "watchlist") {
+      const watchlistResponse = await watchlistApi.get();
+      watchlistFunds.value = watchlistResponse.data || [];
+    }
   } catch (error) {
-    console.error("加载自选和持仓数据失败:", error);
+    console.error("加载自选数据失败:", error);
   }
   document.addEventListener("click", handleClickOutside);
 });
@@ -515,6 +523,17 @@ watch(activeTab, async (newTab) => {
     }
   }
 });
+
+// 监听 Holdings 组件的 isLoaded 变化，同步持仓数据
+watch(
+  () => holdingsRef.value?.isLoaded,
+  async (newValue) => {
+    if (newValue && holdingsRef.value?.holdings) {
+      holdingsFunds.value = holdingsRef.value.holdings;
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <style scoped>
