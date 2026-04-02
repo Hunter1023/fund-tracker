@@ -673,6 +673,8 @@ function formatAmount(amount) {
 defineExpose({
   loadHoldings,
   loadPlatforms,
+  holdings,
+  isLoaded,
 });
 </script>
 
