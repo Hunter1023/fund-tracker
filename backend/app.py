@@ -1912,9 +1912,10 @@ def manage_holding():
                     daily_change_rate = fund_data.get('daily_change_rate', '-')
                     estimate_change_rate = fund_data.get('estimate_change_rate', '-')
 
-                    if unit_net_value:
-                        current_value = holding.shares * float(unit_net_value)
+                    # 使用数据库中保存的 current_value
+                    current_value = holding.current_value or holding.cost
 
+                    if unit_net_value:
                         # 检查最新涨幅是否已更新（fsrq是否为今日）
                         today = datetime.now().strftime('%Y-%m-%d')
                         is_today = (fsrq == today)
@@ -1923,13 +1924,10 @@ def manage_holding():
                         # 1. 最新涨幅已更新（is_today为true），优先使用最新涨幅计算
                         # 2. 最新涨幅未更新，使用估算涨幅计算
                         if is_today and daily_change_rate != '-' and daily_change_rate is not None and daily_change_rate != 0:
-                            # 最新涨幅已更新，使用最新涨幅计算今日收益和持仓金额
+                            # 最新涨幅已更新，使用最新涨幅计算今日收益
                             change_rate = float(daily_change_rate)
-                            # 今日持仓金额 = 昨日持仓金额 × (1 + 涨幅%)
-                            # 昨日持仓金额 = 当前持仓金额（因为单位净值是昨天的）
-                            today_value = current_value * (1 + change_rate / 100)
-                            estimate_profit = today_value - current_value
-                            current_value = today_value
+                            # 今日收益 = 持仓金额 × 涨幅%
+                            estimate_profit = current_value * (change_rate / 100)
                         elif estimate_change_rate != '-' and estimate_change_rate is not None:
                             # 最新涨幅未更新，使用估算涨幅计算今日收益
                             change_rate = float(estimate_change_rate)
@@ -1939,12 +1937,11 @@ def manage_holding():
                             estimate_profit = None
                             estimate_change_rate = None
                     else:
-                        current_value = holding.cost
                         estimate_profit = 0
 
-                    # 实时计算持有收益和持仓金额
-                    profit_loss = current_value - holding.cost
-                    profit_loss_rate = (profit_loss / holding.cost * 100) if holding.cost > 0 else 0
+                    # 使用数据库中保存的 profit_loss 和 profit_loss_rate
+                    profit_loss = holding.profit_loss if holding.profit_loss is not None else (current_value - holding.cost)
+                    profit_loss_rate = holding.profit_loss_rate if holding.profit_loss_rate is not None else ((profit_loss / holding.cost * 100) if holding.cost > 0 else 0)
 
                     holding_list.append({
                         'fund_code': holding.fund.fund_code,

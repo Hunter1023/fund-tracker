@@ -324,7 +324,7 @@ export function useHoldings() {
           // 如果后端失败，重新加载持仓列表
           loadHoldings();
         } else {
-          // 后端成功后，异步获取基金最新数据并更新本地持仓
+          // 后端成功后，异步获取基金最新数据并更新本地持仓（不重新计算current_value和profit_loss）
           fundApi
             .get(data.fund_code)
             .then((fundResponse) => {
@@ -341,10 +341,6 @@ export function useHoldings() {
                   );
                 }
                 if (currentHolding) {
-                  // 根据最新净值重新计算当前价值
-                  const unitNetValue = parseFloat(fundData.unit_net_value) || 0;
-                  let newCurrentValue = currentHolding.shares * unitNetValue;
-
                   // 检查最新涨幅是否已更新（fsrq是否为今日）
                   const fsrq = fundData.fsrq || "";
                   const today = getCurrentDate();
@@ -362,36 +358,26 @@ export function useHoldings() {
                   ) {
                     // 有估算数据，使用估算涨幅计算今日收益
                     const changeRate = parseFloat(estimateChangeRate) || 0;
-                    estimateProfit = (changeRate * newCurrentValue) / 100;
+                    estimateProfit =
+                      (changeRate * currentHolding.current_value) / 100;
                   } else if (
                     isToday &&
                     dailyChangeRate != null &&
                     dailyChangeRate !== "-" &&
                     dailyChangeRate !== 0
                   ) {
-                    // 最新涨幅已更新，使用最新涨幅计算今日收益和持仓金额
+                    // 最新涨幅已更新，使用最新涨幅计算今日收益
                     const changeRate = parseFloat(dailyChangeRate) || 0;
-                    // 今日持仓金额 = 昨日持仓金额 × (1 + 涨幅%)
-                    const todayValue = newCurrentValue * (1 + changeRate / 100);
-                    estimateProfit = todayValue - newCurrentValue;
-                    newCurrentValue = todayValue;
+                    estimateProfit =
+                      currentHolding.current_value * (changeRate / 100);
                   } else {
                     // 没有估算数据且最新涨幅未更新，不显示今日收益
                     estimateProfit = null;
                   }
 
-                  // 重新计算持有收益
-                  const profitLoss = newCurrentValue - currentHolding.cost;
-                  const profitLossRate =
-                    currentHolding.cost > 0
-                      ? (profitLoss / currentHolding.cost) * 100
-                      : 0;
-
+                  // 保持数据库中保存的 current_value、profit_loss 和 profit_loss_rate 不变
                   const updatedHolding = {
                     ...currentHolding,
-                    current_value: newCurrentValue,
-                    profit_loss: profitLoss,
-                    profit_loss_rate: profitLossRate,
                     daily_change_rate: fundData.daily_change_rate || "-",
                     estimate_change_rate:
                       fundData.estimate_change_rate || "0.00",
