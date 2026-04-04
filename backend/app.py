@@ -1660,6 +1660,13 @@ def manage_watchlist():
                     watchlist_fund_codes.append(item.fund.fund_code)
                     watchlist_fund_ids.add(item.fund.id)
 
+            # 判断是否是交易日和交易时间
+            from datetime import datetime, timedelta
+            now = datetime.now()
+            is_trading_day = now.weekday() < 5  # 周一到周五
+            is_trading_hours = now.hour >= 9 and now.hour < 15  # 9:00-15:00
+            is_active_trading = is_trading_day and is_trading_hours
+
             # 构建返回结果
             import time
             # 使用批量并发方法获取所有自选基金数据
@@ -1676,7 +1683,9 @@ def manage_watchlist():
 
                 if fund_data:
                     fund_data['tags'] = item.tags
-                    # 保留估算数据，无论净值日期是否为今天
+                    # 非交易日或非交易时间，估算涨幅显示为"-"
+                    if not is_active_trading:
+                        fund_data['estimate_change_rate'] = '-'
                     funds.append(fund_data)
                 else:
                     # 即使数据获取失败，也要返回基本信息
@@ -1727,7 +1736,9 @@ def manage_watchlist():
 
                     if fund_data:
                         fund_data['tags'] = ''
-                        # 保留估算数据，无论净值日期是否为今天
+                        # 非交易日或非交易时间，估算涨幅显示为"-"
+                        if not is_active_trading:
+                            fund_data['estimate_change_rate'] = '-'
                         funds.append(fund_data)
                         added_fund_codes.add(fund_code)
                     else:
@@ -1897,6 +1908,12 @@ def manage_holding():
             tags_dict = {item.fund_id: item.tags for item in watchlist_items}
 
             holding_list = []
+            # 判断是否是交易日和交易时间
+            now = datetime.now()
+            is_trading_day = now.weekday() < 5  # 周一到周五
+            is_trading_hours = now.hour >= 9 and now.hour < 15  # 9:00-15:00
+            is_active_trading = is_trading_day and is_trading_hours
+
             for holding in holdings:
                 # 检查请求时间是否超时
                 if datetime.now().timestamp() - start_time > MAX_REQUEST_TIME:
@@ -1915,7 +1932,11 @@ def manage_holding():
                     # 使用数据库中保存的 current_value
                     current_value = holding.current_value or holding.cost
 
-                    if unit_net_value:
+                    if not is_active_trading:
+                        # 非交易日或非交易时间，估算涨幅和今日收益显示为"-"
+                        estimate_change_rate = '-'
+                        estimate_profit = None
+                    elif unit_net_value:
                         # 检查最新涨幅是否已更新（fsrq是否为今日）
                         today = datetime.now().strftime('%Y-%m-%d')
                         is_today = (fsrq == today)
