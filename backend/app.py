@@ -1660,12 +1660,10 @@ def manage_watchlist():
                     watchlist_fund_codes.append(item.fund.fund_code)
                     watchlist_fund_ids.add(item.fund.id)
 
-            # 判断是否是交易日和交易时间
+            # 判断是否是交易日（周一到周五）
             from datetime import datetime, timedelta
             now = datetime.now()
             is_trading_day = now.weekday() < 5  # 周一到周五
-            is_trading_hours = now.hour >= 9 and now.hour < 15  # 9:00-15:00
-            is_active_trading = is_trading_day and is_trading_hours
 
             # 构建返回结果
             import time
@@ -1683,8 +1681,8 @@ def manage_watchlist():
 
                 if fund_data:
                     fund_data['tags'] = item.tags
-                    # 非交易日或非交易时间，估算涨幅显示为"-"
-                    if not is_active_trading:
+                    # 非交易日（周末），估算涨幅显示为"-"
+                    if not is_trading_day:
                         fund_data['estimate_change_rate'] = '-'
                     funds.append(fund_data)
                 else:
@@ -1736,8 +1734,8 @@ def manage_watchlist():
 
                     if fund_data:
                         fund_data['tags'] = ''
-                        # 非交易日或非交易时间，估算涨幅显示为"-"
-                        if not is_active_trading:
+                        # 非交易日（周末），估算涨幅显示为"-"
+                        if not is_trading_day:
                             fund_data['estimate_change_rate'] = '-'
                         funds.append(fund_data)
                         added_fund_codes.add(fund_code)
@@ -1908,11 +1906,9 @@ def manage_holding():
             tags_dict = {item.fund_id: item.tags for item in watchlist_items}
 
             holding_list = []
-            # 判断是否是交易日和交易时间
+            # 判断是否是交易日（周一到周五）
             now = datetime.now()
             is_trading_day = now.weekday() < 5  # 周一到周五
-            is_trading_hours = now.hour >= 9 and now.hour < 15  # 9:00-15:00
-            is_active_trading = is_trading_day and is_trading_hours
 
             for holding in holdings:
                 # 检查请求时间是否超时
@@ -1932,8 +1928,8 @@ def manage_holding():
                     # 使用数据库中保存的 current_value
                     current_value = holding.current_value or holding.cost
 
-                    if not is_active_trading:
-                        # 非交易日或非交易时间，估算涨幅和今日收益显示为"-"
+                    if not is_trading_day:
+                        # 非交易日（周末），估算涨幅和今日收益显示为"-"
                         estimate_change_rate = '-'
                         estimate_profit = None
                     elif unit_net_value:
@@ -1954,7 +1950,7 @@ def manage_holding():
                             change_rate = float(estimate_change_rate)
                             estimate_profit = current_value * (change_rate / 100)
                         else:
-                            # 没有估算数据且不是交易日，设置为None表示不显示
+                            # 没有估算数据，设置为None表示不显示
                             estimate_profit = None
                             estimate_change_rate = None
                     else:
