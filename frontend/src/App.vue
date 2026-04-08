@@ -1,13 +1,25 @@
 <template>
   <div class="app-container">
     <div class="header-section">
+      <div class="header-placeholder"></div>
       <div class="header-content">
         <h1 class="app-title">🐥叽咕宝</h1>
         <p class="app-subtitle">实时基金估值工具</p>
       </div>
+      <button
+        class="refresh-btn"
+        @click="handleManualRefresh"
+        :disabled="loading"
+        title="刷新数据"
+      >
+        <i
+          class="bi bi-arrow-clockwise"
+          :class="{ spinning: isManualRefresh && loading }"
+        ></i>
+      </button>
     </div>
 
-    <div v-if="loading" class="spinner-overlay">
+    <div v-if="isManualRefresh && loading" class="spinner-overlay">
       <div class="spinner-content">
         <div class="spinner-border text-primary" role="status">
           <span class="visually-hidden">加载中...</span>
@@ -194,14 +206,15 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import FundDetailModal from "./components/FundDetailModal.vue";
 import Holdings from "./components/Holdings.vue";
 import Watchlist from "./components/Watchlist.vue";
-import { fundApi, holdingApi, tagsApi, watchlistApi } from "./services/api";
+import { fundApi, tagsApi, watchlistApi } from "./services/api";
 
 const activeTab = ref("holding");
 const loading = ref(false);
+const isManualRefresh = ref(false);
 const searchKeyword = ref("");
 const searchResults = ref([]);
 const showSearchDropdown = ref(false);
@@ -209,6 +222,7 @@ const watchlistRef = ref(null);
 const holdingsRef = ref(null);
 const watchlistFunds = ref([]);
 const holdingsFunds = ref([]);
+let globalRefreshInterval = null;
 
 // 基金详情模态框
 const showFundDetailModal = ref(false);
@@ -534,6 +548,57 @@ watch(
   },
   { immediate: true },
 );
+
+// 全局刷新函数
+function startGlobalRefresh() {
+  stopGlobalRefresh();
+  globalRefreshInterval = setInterval(
+    async () => {
+      if (activeTab.value === "holding" && holdingsRef.value?.loadHoldings) {
+        await holdingsRef.value.loadHoldings();
+      } else if (
+        activeTab.value === "watchlist" &&
+        watchlistRef.value?.loadWatchlist
+      ) {
+        await watchlistRef.value.loadWatchlist();
+      }
+    },
+    5 * 60 * 1000,
+  );
+}
+
+function stopGlobalRefresh() {
+  if (globalRefreshInterval) {
+    clearInterval(globalRefreshInterval);
+    globalRefreshInterval = null;
+  }
+}
+
+async function handleManualRefresh() {
+  isManualRefresh.value = true;
+  showLoading();
+  try {
+    if (activeTab.value === "holding" && holdingsRef.value?.loadHoldings) {
+      await holdingsRef.value.loadHoldings();
+    } else if (
+      activeTab.value === "watchlist" &&
+      watchlistRef.value?.loadWatchlist
+    ) {
+      await watchlistRef.value.loadWatchlist();
+    }
+  } finally {
+    hideLoading();
+    isManualRefresh.value = false;
+  }
+}
+
+onMounted(() => {
+  startGlobalRefresh();
+});
+
+onUnmounted(() => {
+  stopGlobalRefresh();
+});
 </script>
 
 <style scoped>
@@ -550,12 +615,66 @@ watch(
   text-align: center;
   margin-bottom: 30px;
   padding: 20px 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  position: relative;
+}
+
+.header-placeholder {
+  display: none;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+  position: absolute;
+  top: 20px;
+  right: 0;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.refresh-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-btn .spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .header-content {
   display: inline-block;
   text-align: right;
-  max-width: 100%;
 }
 
 .app-title {
@@ -564,7 +683,7 @@ watch(
   color: #fff;
   margin: 0 0 10px 0;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  text-align: center;
+  text-align: right;
   margin-bottom: 10px;
 }
 

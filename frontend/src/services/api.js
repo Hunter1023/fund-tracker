@@ -82,7 +82,7 @@ export const fundApi = {
 };
 
 export const watchlistApi = {
-  get: () => api.get("/watchlist"),
+  get: () => api.get("/watchlist", { params: { _t: Date.now() } }),
   add: (fundCode, tags = "") =>
     api.post("/watchlist", { fund_code: fundCode, tags }),
   remove: (fundCode) =>
@@ -92,7 +92,7 @@ export const watchlistApi = {
 };
 
 export const holdingApi = {
-  get: () => api.get("/holding"),
+  get: () => api.get("/holding", { params: { _t: Date.now() } }),
   getCodes: () => api.get("/holding/codes"),
   add: (data) => api.post("/holding", data),
   update: (fundCode, data) => api.put(`/holding/${fundCode}`, data),

@@ -10,6 +10,7 @@ export function useHoldings() {
   const transactionType = ref("sync");
   const selectedPlatform = ref("默认");
   const platforms = ref([]);
+  let refreshInterval = null;
 
   async function loadPlatforms() {
     try {
@@ -475,6 +476,20 @@ export function useHoldings() {
     return numRate > 0 ? "#dc3545" : "#28a745";
   }
 
+  function startAutoRefresh(intervalMs = 30000) {
+    stopAutoRefresh();
+    refreshInterval = setInterval(async () => {
+      await loadHoldings();
+    }, intervalMs);
+  }
+
+  function stopAutoRefresh() {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+  }
+
   return {
     holdings,
     loading,
@@ -495,5 +510,7 @@ export function useHoldings() {
     handleSort,
     getCurrentDate,
     getChangeRateColor,
+    startAutoRefresh,
+    stopAutoRefresh,
   };
 }

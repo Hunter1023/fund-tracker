@@ -213,24 +213,29 @@
                     </div>
                   </td>
                   <td>
-                    <div
-                      class="rate-value"
-                      :style="{
-                        color:
+                    <div class="rate-cell">
+                      <div
+                        class="rate-value"
+                        :style="{
+                          color:
+                            holding.estimate_change_rate !== null &&
+                            holding.estimate_change_rate !== undefined &&
+                            holding.estimate_change_rate !== '-'
+                              ? getChangeRateColor(holding.estimate_change_rate)
+                              : '#6c757d',
+                        }"
+                      >
+                        {{
                           holding.estimate_change_rate !== null &&
                           holding.estimate_change_rate !== undefined &&
-                          holding.estimate_change_rate !== '-'
-                            ? getChangeRateColor(holding.estimate_change_rate)
-                            : '#6c757d',
-                      }"
-                    >
-                      {{
-                        holding.estimate_change_rate !== null &&
-                        holding.estimate_change_rate !== undefined &&
-                        holding.estimate_change_rate !== "-"
-                          ? holding.estimate_change_rate + "%"
-                          : "-"
-                      }}
+                          holding.estimate_change_rate !== "-"
+                            ? holding.estimate_change_rate + "%"
+                            : "-"
+                        }}
+                      </div>
+                      <div v-if="holding.estimate_time" class="rate-date">
+                        {{ formatEstimateTime(holding.estimate_time) }}
+                      </div>
                     </div>
                   </td>
                   <td>
@@ -644,6 +649,22 @@ function getMonthDay(dateStr) {
     return `${dateParts[1]}-${dateParts[2]}`;
   }
   return "";
+}
+
+function formatEstimateTime(timeStr) {
+  if (!timeStr) return "";
+  // 如果时间格式是 "YYYY-MM-DD HH:mm:ss"，去掉年份
+  if (timeStr.includes("-") && timeStr.includes(":")) {
+    const parts = timeStr.split(" ");
+    if (parts.length >= 2) {
+      const dateParts = parts[0].split("-");
+      if (dateParts.length >= 3) {
+        return `${dateParts[1]}-${dateParts[2]} ${parts[1]}`;
+      }
+    }
+  }
+  // 如果是其他格式，直接返回
+  return timeStr;
 }
 
 function calculateProfit(holding) {
