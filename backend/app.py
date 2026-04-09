@@ -1958,22 +1958,30 @@ def manage_holding():
                         today = datetime.now().strftime('%Y-%m-%d')
                         is_today = (fsrq == today)
 
+                        # 检查估算涨幅日期是否为今日
+                        estimate_time = fund_data.get('estimate_time', '')
+                        estimate_is_today = False
+                        if estimate_time:
+                            estimate_date = estimate_time.split(' ')[0] if ' ' in estimate_time else estimate_time
+                            estimate_is_today = (estimate_date == today)
+
                         # 逻辑：
                         # 1. 最新涨幅已更新（is_today为true），优先使用最新涨幅计算
-                        # 2. 最新涨幅未更新，使用估算涨幅计算
+                        # 2. 最新涨幅未更新但估算涨幅是今日的，使用估算涨幅计算
+                        # 3. 估算涨幅不是今日的，今日收益显示为"-"
                         if is_today and daily_change_rate != '-' and daily_change_rate is not None and daily_change_rate != 0:
                             # 最新涨幅已更新，使用最新涨幅计算今日收益
                             change_rate = float(daily_change_rate)
-                            # 今日收益 = 持仓金额 × 涨幅%
                             estimate_profit = current_value * (change_rate / 100)
-                        elif estimate_change_rate != '-' and estimate_change_rate is not None:
-                            # 最新涨幅未更新，使用估算涨幅计算今日收益
+                        elif estimate_is_today and estimate_change_rate != '-' and estimate_change_rate is not None:
+                            # 估算涨幅是今日的，使用估算涨幅计算今日收益
                             change_rate = float(estimate_change_rate)
                             estimate_profit = current_value * (change_rate / 100)
                         else:
-                            # 没有估算数据，设置为None表示不显示
+                            # 估算涨幅不是今日的，今日收益显示为"-"
                             estimate_profit = None
-                            estimate_change_rate = None
+                            if not estimate_is_today:
+                                estimate_change_rate = '-'
                     else:
                         estimate_profit = 0
 
@@ -2319,25 +2327,32 @@ def manage_holding():
                         today = datetime.now().strftime('%Y-%m-%d')
                         is_today = (fsrq == today)
 
+                        # 检查估算涨幅日期是否为今日
+                        estimate_time = fund_data.get('estimate_time', '')
+                        estimate_is_today = False
+                        if estimate_time:
+                            estimate_date = estimate_time.split(' ')[0] if ' ' in estimate_time else estimate_time
+                            estimate_is_today = (estimate_date == today)
+
                         # 逻辑：
                         # 1. 最新涨幅已更新（is_today为true），优先使用最新涨幅计算
-                        # 2. 最新涨幅未更新，使用估算涨幅计算
+                        # 2. 最新涨幅未更新但估算涨幅是今日的，使用估算涨幅计算
+                        # 3. 估算涨幅不是今日的，今日收益显示为"-"
                         if is_today and daily_change_rate != '-' and daily_change_rate is not None and daily_change_rate != 0:
                             # 最新涨幅已更新，使用最新涨幅计算今日收益和持仓金额
                             change_rate = float(daily_change_rate)
-                            # 今日持仓金额 = 昨日持仓金额 × (1 + 涨幅%)
-                            # 昨日持仓金额 = 当前持仓金额（因为单位净值是昨天的）
                             today_value = current_value * (1 + change_rate / 100)
                             estimate_profit = today_value - current_value
                             current_value = today_value
-                        elif estimate_change_rate != '-' and estimate_change_rate is not None:
-                            # 最新涨幅未更新，使用估算涨幅计算今日收益
+                        elif estimate_is_today and estimate_change_rate != '-' and estimate_change_rate is not None:
+                            # 估算涨幅是今日的，使用估算涨幅计算今日收益
                             change_rate = float(estimate_change_rate)
                             estimate_profit = current_value * (change_rate / 100)
                         else:
-                            # 没有估算数据且不是交易日，设置为None表示不显示
+                            # 估算涨幅不是今日的，今日收益显示为"-"
                             estimate_profit = None
-                            estimate_change_rate = None
+                            if not estimate_is_today:
+                                estimate_change_rate = '-'
                     else:
                         current_value = fund_holding.cost
                         estimate_profit = 0
