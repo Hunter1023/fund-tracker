@@ -567,6 +567,18 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 # 如果没有更新时间，也需要刷新
                 need_refresh_rates = True
 
+            # 检查fsrq（净值日期）是否过期：工作日且fsrq不是今天也不是昨天，说明数据滞后
+            now = datetime.now()
+            is_weekday = now.weekday() < 5
+            if is_weekday and realtime_data.fsrq:
+                today_str = now.strftime('%Y-%m-%d')
+                if now.weekday() == 0:
+                    yesterday_str = (now - timedelta(days=3)).strftime('%Y-%m-%d')
+                else:
+                    yesterday_str = (now - timedelta(days=1)).strftime('%Y-%m-%d')
+                if realtime_data.fsrq != today_str and realtime_data.fsrq != yesterday_str:
+                    need_refresh_rates = True
+
             # 检查估算涨幅是否需要刷新（交易日的交易时间内5分钟）
             now = datetime.now()
             is_trading_day = now.weekday() < 5  # 周一到周五
@@ -1045,6 +1057,18 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
             if time_diff > timedelta(hours=24):
                 need_refresh_rates = True
 
+        # 检查fsrq（净值日期）是否过期：工作日且fsrq不是今天也不是昨天，说明数据滞后
+        now = datetime.now()
+        is_weekday = now.weekday() < 5
+        if is_weekday and realtime_data.fsrq:
+            today_str = now.strftime('%Y-%m-%d')
+            if now.weekday() == 0:
+                yesterday_str = (now - timedelta(days=3)).strftime('%Y-%m-%d')
+            else:
+                yesterday_str = (now - timedelta(days=1)).strftime('%Y-%m-%d')
+            if realtime_data.fsrq != today_str and realtime_data.fsrq != yesterday_str:
+                need_refresh_rates = True
+
         # 检查估算涨幅是否需要刷新（交易日的交易时间内5分钟）
         now = datetime.now()
         is_trading_day = now.weekday() < 5  # 周一到周五
@@ -1068,11 +1092,8 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
 
         # 只在需要时获取历史数据
         if need_history_data:
-            # 只获取必要的涨跌幅数据，不获取完整的历史净值数组
             history_data = DataFetcher.get_fund_history(fund_code)
         else:
-            # 不需要历史数据时，只获取涨跌幅数据
-            # 这里我们可以使用一个简化的API调用，只获取基本信息
             history_data = DataFetcher.get_fund_history_simple(fund_code)
 
         # 即使fund_data为None，只要history_data有数据，就处理
