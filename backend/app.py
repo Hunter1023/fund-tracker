@@ -2339,11 +2339,9 @@ def manage_holding():
                         # 2. 最新涨幅未更新但估算涨幅是今日的，使用估算涨幅计算
                         # 3. 估算涨幅不是今日的，今日收益显示为"-"
                         if is_today and daily_change_rate != '-' and daily_change_rate is not None and daily_change_rate != 0:
-                            # 最新涨幅已更新，使用最新涨幅计算今日收益和持仓金额
+                            # 最新涨幅已更新，unit_net_value已是今日净值，current_value已包含今日涨幅
                             change_rate = float(daily_change_rate)
-                            today_value = current_value * (1 + change_rate / 100)
-                            estimate_profit = today_value - current_value
-                            current_value = today_value
+                            estimate_profit = current_value * (change_rate / (100 + change_rate))
                         elif estimate_is_today and estimate_change_rate != '-' and estimate_change_rate is not None:
                             # 估算涨幅是今日的，使用估算涨幅计算今日收益
                             change_rate = float(estimate_change_rate)
