@@ -1,21 +1,21 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from config import DATABASE_URL, CONNECT_ARGS
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import uuid
 
 Base = declarative_base()
 
-# 尝试创建数据库连接
 try:
     engine = create_engine(DATABASE_URL, echo=False, connect_args=CONNECT_ARGS)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     print("数据库连接成功")
 except Exception as e:
     print(f"数据库连接失败: {e}")
-    # 创建一个模拟的数据库引擎和会话
+
     class MockEngine:
         def execute(self, *args, **kwargs):
             pass
@@ -52,6 +52,27 @@ except Exception as e:
     engine = MockEngine()
     SessionLocal = lambda: MockSession()
     print("使用模拟数据库会话，应用程序将继续运行")
+
+
+class User(Base):
+    __tablename__ = 'user'
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, nullable=True, index=True)
+    username = Column(String(100), unique=True, nullable=True, index=True)
+    password_hash = Column(String(255), nullable=True)
+    github_id = Column(String(100), unique=True, nullable=True, index=True)
+    github_username = Column(String(100), nullable=True)
+    github_avatar = Column(String(500), nullable=True)
+    nickname = Column(String(100), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    holdings = relationship("FundHolding", back_populates="user")
+    watchlist = relationship("Watchlist", back_populates="user")
+    transactions = relationship("Transaction", back_populates="user")
+    platforms = relationship("Platform", back_populates="user")
 
 class Fund(Base):
     """基金信息表"""
@@ -100,39 +121,39 @@ class FundRealtimeData(Base):
     fund = relationship("Fund", back_populates="realtime_data")
 
 class FundHolding(Base):
-    """基金持仓表"""
     __tablename__ = 'fund_holding'
 
     id = Column(Integer, primary_key=True, index=True)
     fund_id = Column(Integer, ForeignKey('fund.id'), nullable=False)
-    cost = Column(Float, nullable=False)  # 持仓成本
-    shares = Column(Float, nullable=False)  # 持仓份额
-    avg_cost = Column(Float, nullable=False)  # 平均成本
-    current_value = Column(Float)  # 当前价值（持仓金额）
-    profit_loss = Column(Float)  # 盈亏金额
-    profit_loss_rate = Column(Float)  # 盈亏比例
-    platform = Column(String(50), default='其他')  # 平台（如：支付宝、理财通等）
+    user_id = Column(Integer, ForeignKey('user.id'), nullable=True, index=True)
+    cost = Column(Float, nullable=False)
+    shares = Column(Float, nullable=False)
+    avg_cost = Column(Float, nullable=False)
+    current_value = Column(Float)
+    profit_loss = Column(Float)
+    profit_loss_rate = Column(Float)
+    platform = Column(String(50), default='其他')
     updated_at = Column(DateTime(timezone=False), server_default=func.now(), onupdate=func.now())
 
-    # 关系
     fund = relationship("Fund", back_populates="holdings")
+    user = relationship("User", back_populates="holdings")
     profit_histories = relationship("HoldingProfitHistory", backref="holding", cascade="all, delete-orphan")
 
 class Transaction(Base):
-    """交易记录表"""
     __tablename__ = 'transaction'
 
     id = Column(Integer, primary_key=True, index=True)
     fund_id = Column(Integer, ForeignKey('fund.id'), nullable=False)
-    platform_id = Column(Integer, ForeignKey('platform.id'), nullable=True)  # 平台ID外键
-    transaction_type = Column(String(10), nullable=False)  # buy: 买入, sell: 卖出
-    amount = Column(Float, nullable=False)  # 交易金额
-    shares = Column(Float, nullable=False)  # 交易份额
-    price = Column(Float, nullable=False)  # 交易价格
+    user_id = Column(Integer, ForeignKey('user.id'), nullable=True, index=True)
+    platform_id = Column(Integer, ForeignKey('platform.id'), nullable=True)
+    transaction_type = Column(String(10), nullable=False)
+    amount = Column(Float, nullable=False)
+    shares = Column(Float, nullable=False)
+    price = Column(Float, nullable=False)
     transaction_date = Column(DateTime(timezone=True), server_default=func.now())
 
-    # 关系
     fund = relationship("Fund", back_populates="transactions")
+    user = relationship("User", back_populates="transactions")
 
 class HoldingProfitHistory(Base):
     """持仓收益历史记录表"""
@@ -159,29 +180,80 @@ class HoldingProfitHistory(Base):
     recorded_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 class Watchlist(Base):
-    """自选基金表"""
     __tablename__ = 'watchlist'
 
     id = Column(Integer, primary_key=True, index=True)
-    fund_id = Column(Integer, ForeignKey('fund.id'), unique=True, nullable=False)
-    tags = Column(String(255), default='')  # 标签列表，逗号分隔，默认为空
+    fund_id = Column(Integer, ForeignKey('fund.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('user.id'), nullable=True, index=True)
+    tags = Column(String(255), default='')
     added_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # 关系
     fund = relationship("Fund", back_populates="watchlist")
+    user = relationship("User", back_populates="watchlist")
+
+    __table_args__ = (
+        UniqueConstraint('fund_id', 'user_id', name='uq_watchlist_fund_user'),
+    )
 
 class Platform(Base):
-    """平台表"""
     __tablename__ = 'platform'
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(50), unique=True, nullable=False)  # 平台名称，如：支付宝、理财通
-    order_num = Column(Integer, default=0)  # 排序顺序
+    name = Column(String(50), nullable=False)
+    user_id = Column(Integer, ForeignKey('user.id'), nullable=True, index=True)
+    order_num = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    user = relationship("User", back_populates="platforms")
+
+    __table_args__ = (
+        UniqueConstraint('name', 'user_id', name='uq_platform_name_user'),
+    )
+
 # 创建表
+def migrate_add_user_columns():
+    with engine.connect() as conn:
+        result = conn.execute(
+            __import__('sqlalchemy').text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'user'"
+            )
+        )
+        user_table_exists = result.rowcount > 0
+
+        if not user_table_exists:
+            print("迁移: user 表不存在，将由 create_tables 创建")
+            return
+
+        tables_user_id = {
+            'watchlist': 'user_id',
+            'fund_holding': 'user_id',
+            'transaction': 'user_id',
+            'platform': 'user_id',
+        }
+
+        for table, column in tables_user_id.items():
+            try:
+                result = conn.execute(
+                    __import__('sqlalchemy').text(
+                        f"SELECT column_name FROM information_schema.columns "
+                        f"WHERE table_name = '{table}' AND column_name = '{column}'"
+                    )
+                )
+                if result.rowcount == 0:
+                    conn.execute(
+                        __import__('sqlalchemy').text(
+                            f"ALTER TABLE {table} ADD COLUMN {column} INTEGER REFERENCES \"user\"(id)"
+                        )
+                    )
+                    conn.commit()
+                    print(f"迁移: 已为 {table} 表添加 {column} 列")
+            except Exception as e:
+                print(f"迁移: {table}.{column} 跳过 ({e})")
+
+
 def create_tables():
     try:
+        migrate_add_user_columns()
         Base.metadata.create_all(bind=engine)
         print("数据库表创建成功")
     except Exception as e:

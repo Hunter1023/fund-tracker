@@ -1,8 +1,11 @@
 Flask
 Flask-Cors
 Flask-SQLAlchemy
+Flask-JWT-Extended
 requests
 beautifulsoup4
 SQLAlchemy
 APScheduler
 psycopg2-binary
+Authlib
+python-dotenv

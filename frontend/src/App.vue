@@ -6,17 +6,54 @@
         <h1 class="app-title">🐥叽咕宝</h1>
         <p class="app-subtitle">实时基金估值工具</p>
       </div>
-      <button
-        class="refresh-btn"
-        @click="handleManualRefresh"
-        :disabled="loading"
-        title="刷新数据"
-      >
-        <i
-          class="bi bi-arrow-clockwise"
-          :class="{ spinning: isManualRefresh && loading }"
-        ></i>
-      </button>
+      <div class="header-actions">
+        <button
+          class="refresh-btn"
+          @click="handleManualRefresh"
+          :disabled="loading"
+          title="刷新数据"
+        >
+          <i
+            class="bi bi-arrow-clockwise"
+            :class="{ spinning: isManualRefresh && loading }"
+          ></i>
+        </button>
+        <button
+          v-if="!currentUser"
+          class="auth-btn login-btn"
+          @click="showAuthModal = true"
+          title="登录"
+        >
+          <i class="bi bi-person"></i>
+          <span class="auth-btn-text">登录</span>
+        </button>
+        <div v-else class="user-menu-wrapper">
+          <button
+            class="auth-btn user-btn"
+            @click="showUserMenu = !showUserMenu"
+          >
+            <img
+              v-if="currentUser.github_avatar"
+              :src="currentUser.github_avatar"
+              class="user-avatar"
+              alt=""
+            />
+            <i v-else class="bi bi-person-circle"></i>
+            <span class="auth-btn-text">{{
+              currentUser.nickname || currentUser.username || "用户"
+            }}</span>
+          </button>
+          <div v-if="showUserMenu" class="user-dropdown">
+            <div class="user-info">
+              <div class="user-email">{{ currentUser.email }}</div>
+            </div>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" @click="handleLogout">
+              <i class="bi bi-box-arrow-right"></i> 退出登录
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div v-if="isManualRefresh && loading" class="spinner-overlay">
@@ -81,18 +118,28 @@
             </div>
             <div class="dropdown-item-actions">
               <button
-                v-if="!isInWatchlist(fund.fund_code)"
+                v-if="!isInWatchlist(fund.fund_code) && currentUser"
                 class="action-btn btn-watchlist"
                 @click.stop="openTagsModal(fund, 'watchlist')"
               >
                 加入自选
               </button>
               <button
-                v-if="!isInHoldings(fund.fund_code)"
+                v-if="!isInHoldings(fund.fund_code) && currentUser"
                 class="action-btn btn-holding"
                 @click.stop="openFundDetailForHolding(fund)"
               >
                 同步持仓
+              </button>
+              <button
+                v-if="!currentUser"
+                class="action-btn btn-login-prompt"
+                @click.stop="
+                  showAuthModal = true;
+                  showSearchDropdown = false;
+                "
+              >
+                登录后操作
               </button>
             </div>
           </div>
@@ -102,6 +149,7 @@
 
     <div class="tabs-section">
       <button
+        v-if="currentUser"
         class="tab-btn"
         :class="{ active: activeTab === 'holding' }"
         @click="activeTab = 'holding'"
@@ -118,8 +166,22 @@
     </div>
 
     <div class="content-section">
-      <Watchlist v-show="activeTab === 'watchlist'" ref="watchlistRef" />
-      <Holdings v-show="activeTab === 'holding'" ref="holdingsRef" />
+      <Watchlist
+        v-show="activeTab === 'watchlist'"
+        ref="watchlistRef"
+        :is-logged-in="!!currentUser"
+      />
+      <Holdings
+        v-if="currentUser"
+        v-show="activeTab === 'holding'"
+        ref="holdingsRef"
+      />
+      <div v-if="!currentUser" class="guest-notice">
+        <p>登录后可使用持仓管理、自选基金管理等功能</p>
+        <button class="btn btn-primary" @click="showAuthModal = true">
+          立即登录
+        </button>
+      </div>
     </div>
 
     <!-- 标签输入模态框 -->
@@ -202,17 +264,37 @@
       :holding-data="currentHolding"
       @confirm="handleDetailConfirm"
     />
+
+    <!-- 登录/注册模态框 -->
+    <AuthModal
+      v-if="showAuthModal"
+      @close="showAuthModal = false"
+      @login-success="handleLoginSuccess"
+    />
   </div>
 </template>
 
 <script setup>
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import AuthModal from "./components/AuthModal.vue";
 import FundDetailModal from "./components/FundDetailModal.vue";
 import Holdings from "./components/Holdings.vue";
 import Watchlist from "./components/Watchlist.vue";
-import { fundApi, tagsApi, watchlistApi } from "./services/api";
+import {
+  authApi,
+  clearAuthData,
+  fundApi,
+  getStoredToken,
+  getStoredUser,
+  setAuthData,
+  tagsApi,
+  watchlistApi,
+} from "./services/api";
 
-const activeTab = ref("holding");
+const currentUser = ref(null);
+const showAuthModal = ref(false);
+const showUserMenu = ref(false);
+const activeTab = ref("watchlist");
 const loading = ref(false);
 const isManualRefresh = ref(false);
 const searchKeyword = ref("");
@@ -248,6 +330,89 @@ function showLoading() {
 
 function hideLoading() {
   loading.value = false;
+}
+
+async function initAuth() {
+  const token = getStoredToken();
+  const storedUser = getStoredUser();
+  if (token && storedUser) {
+    currentUser.value = storedUser;
+    activeTab.value = "holding";
+    try {
+      const res = await authApi.getMe();
+      if (res.data.user) {
+        currentUser.value = res.data.user;
+        localStorage.setItem("auth_user", JSON.stringify(res.data.user));
+      } else {
+        currentUser.value = null;
+        clearAuthData();
+      }
+    } catch {
+      currentUser.value = null;
+      clearAuthData();
+    }
+  } else {
+    currentUser.value = null;
+    activeTab.value = "watchlist";
+  }
+
+  await handleGithubCallback();
+}
+
+async function handleGithubCallback() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const code = urlParams.get("code");
+  if (!code) return;
+
+  try {
+    const response = await authApi.githubAuth(code);
+    const { token, user } = response.data;
+    setAuthData(token, user);
+    currentUser.value = user;
+    activeTab.value = "holding";
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } catch (err) {
+    console.error("GitHub登录失败:", err);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
+
+function handleLoginSuccess(user) {
+  currentUser.value = user;
+  showAuthModal.value = false;
+  activeTab.value = "holding";
+  nextTick(() => {
+    if (holdingsRef.value?.loadHoldings) {
+      holdingsRef.value.loadHoldings();
+      holdingsRef.value.loadPlatforms();
+    }
+    if (watchlistRef.value?.loadWatchlist) {
+      watchlistRef.value.loadWatchlist();
+    }
+  });
+}
+
+function handleLogout() {
+  clearAuthData();
+  currentUser.value = null;
+  showUserMenu.value = false;
+  activeTab.value = "watchlist";
+  watchlistFunds.value = [];
+  holdingsFunds.value = [];
+  nextTick(() => {
+    if (watchlistRef.value?.loadWatchlist) {
+      watchlistRef.value.loadWatchlist();
+    }
+  });
+}
+
+function handleAuthChanged(event) {
+  if (event.detail) {
+    currentUser.value = event.detail;
+  } else {
+    currentUser.value = null;
+    activeTab.value = "watchlist";
+  }
 }
 
 // 避免重复请求的标志
@@ -491,20 +656,32 @@ function handleClickOutside(event) {
   }
 }
 
+function handleOutsideClickForUserMenu(event) {
+  const wrapper = event.target.closest(".user-menu-wrapper");
+  if (!wrapper) {
+    showUserMenu.value = false;
+  }
+}
+
 // 初始化加载默认标签的数据
 onMounted(async () => {
+  await initAuth();
+  window.addEventListener("auth-changed", handleAuthChanged);
+  document.addEventListener("click", handleClickOutside);
+  document.addEventListener("click", handleOutsideClickForUserMenu);
+
   await nextTick();
-  // 页面加载时只加载自选数据，持仓数据由Holdings组件负责
   try {
-    // 只加载自选数据，避免重复请求持仓
     if (activeTab.value === "watchlist") {
       const watchlistResponse = await watchlistApi.get();
       watchlistFunds.value = watchlistResponse.data || [];
+      if (watchlistRef.value && watchlistRef.value.loadWatchlist) {
+        await watchlistRef.value.loadWatchlist();
+      }
     }
   } catch (error) {
     console.error("加载自选数据失败:", error);
   }
-  document.addEventListener("click", handleClickOutside);
 });
 
 // 监听标签切换，只在切换时加载数据
@@ -598,6 +775,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopGlobalRefresh();
+  window.removeEventListener("auth-changed", handleAuthChanged);
+  document.removeEventListener("click", handleClickOutside);
+  document.removeEventListener("click", handleOutsideClickForUserMenu);
 });
 </script>
 
@@ -625,6 +805,119 @@ onUnmounted(() => {
   display: none;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  top: 20px;
+  right: 0;
+}
+
+.auth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  color: white;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+  white-space: nowrap;
+}
+
+.auth-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.user-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user-menu-wrapper {
+  position: relative;
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  min-width: 180px;
+  z-index: 1001;
+  padding: 8px;
+  animation: modalFadeIn 0.2s ease;
+}
+
+.user-dropdown .user-info {
+  padding: 10px 12px;
+}
+
+.user-dropdown .user-email {
+  font-size: 0.85rem;
+  color: #6b7280;
+  word-break: break-all;
+}
+
+.user-dropdown .dropdown-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 4px 0;
+}
+
+.user-dropdown .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.2s;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+
+.user-dropdown .dropdown-item:hover {
+  background: #f3f4f6;
+}
+
+.guest-notice {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b7280;
+}
+
+.guest-notice p {
+  margin: 0 0 16px 0;
+  font-size: 0.95rem;
+}
+
+.guest-notice .btn {
+  padding: 10px 28px;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 480px) {
+  .auth-btn-text {
+    display: none;
+  }
+}
+
 .refresh-btn {
   display: flex;
   align-items: center;
@@ -640,9 +933,6 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   backdrop-filter: blur(10px);
-  position: absolute;
-  top: 20px;
-  right: 0;
 }
 
 .refresh-btn:hover:not(:disabled) {
@@ -882,6 +1172,16 @@ onUnmounted(() => {
 
 .btn-holding:hover {
   background-color: #047857;
+  transform: translateY(-1px);
+}
+
+.btn-login-prompt {
+  background-color: #6b7280;
+  color: #fff;
+}
+
+.btn-login-prompt:hover {
+  background-color: #4b5563;
   transform: translateY(-1px);
 }
 

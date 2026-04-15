@@ -192,6 +192,7 @@
               <template v-else-if="column.key === 'action'">
                 <div class="action-cell">
                   <button
+                    v-if="isLoggedIn"
                     class="action-btn btn-delete"
                     @click="confirmRemoveFromWatchlist(fund)"
                   >
@@ -226,6 +227,13 @@ import { useHoldings } from "../composables/useHoldings";
 import { useWatchlist } from "../composables/useWatchlist";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import FundDetailModal from "./FundDetailModal.vue";
+
+const props = defineProps({
+  isLoggedIn: {
+    type: Boolean,
+    default: false,
+  },
+});
 
 const {
   funds,

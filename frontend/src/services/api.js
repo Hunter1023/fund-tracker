@@ -9,7 +9,26 @@ const api = axios.create({
   },
 });
 
-// 缓存管理
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("auth_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("auth_user");
+      window.dispatchEvent(new CustomEvent("auth-changed", { detail: null }));
+    }
+    return Promise.reject(error);
+  },
+);
+
 const cache = {
   platforms: {
     data: null,
@@ -23,13 +42,64 @@ const cache = {
     data: {},
     timestamp: {},
   },
-  // 缓存有效期（毫秒）
-  expiry: 3600000, // 1小时
+  expiry: 3600000,
 };
 
-// 检查缓存是否有效
 function isCacheValid(cacheItem) {
   return cacheItem.data && Date.now() - cacheItem.timestamp < cache.expiry;
+}
+
+export function clearAllCache() {
+  cache.platforms.data = null;
+  cache.tags.data = null;
+  cache.fundHistory.data = {};
+  cache.fundHistory.timestamp = {};
+}
+
+export const authApi = {
+  register: (username, password) =>
+    api.post("/auth/register", { username, password }),
+
+  login: (username, password) =>
+    api.post("/auth/login", { username, password }),
+
+  sendEmailCode: (email) => api.post("/auth/email/send-code", { email }),
+
+  emailLogin: (email, code) => api.post("/auth/email/login", { email, code }),
+
+  githubAuth: (code) => api.post("/auth/github", { code }),
+
+  getMe: () => api.get("/auth/me"),
+
+  getGithubConfig: () => api.get("/auth/github/config"),
+
+  getEmailConfig: () => api.get("/auth/email/config"),
+};
+
+export function getStoredUser() {
+  try {
+    const user = localStorage.getItem("auth_user");
+    return user ? JSON.parse(user) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredToken() {
+  return localStorage.getItem("auth_token");
+}
+
+export function setAuthData(token, user) {
+  localStorage.setItem("auth_token", token);
+  localStorage.setItem("auth_user", JSON.stringify(user));
+  window.dispatchEvent(new CustomEvent("auth-changed", { detail: user }));
+}
+
+export function clearAuthData() {
+  localStorage.removeItem("auth_token");
+  localStorage.removeItem("auth_user");
+  clearAllCache();
+  window.dispatchEvent(new CustomEvent("auth-changed", { detail: null }));
 }
 
 export const fundApi = {
@@ -39,28 +109,23 @@ export const fundApi = {
   getChart: (fundCode) => api.get(`/fund/${fundCode}/chart`),
   getHistory: async (fundCode) => {
     const now = Date.now();
-    // 检查缓存
     if (
       cache.fundHistory.data[fundCode] &&
       now - cache.fundHistory.timestamp[fundCode] < cache.expiry
     ) {
       return { data: cache.fundHistory.data[fundCode] };
     }
-    // 缓存无效，请求新数据
     const response = await api.get(`/fund/${fundCode}/history`);
-    // 更新缓存
     cache.fundHistory.data[fundCode] = response.data;
     cache.fundHistory.timestamp[fundCode] = now;
     return response;
   },
   getCompleteInfo: async (fundCode) => {
     const now = Date.now();
-    // 检查缓存
     if (
       cache.fundHistory.data[fundCode] &&
       now - cache.fundHistory.timestamp[fundCode] < cache.expiry
     ) {
-      // 如果已有历史数据缓存，直接使用
       return {
         data: {
           fund_info: null,
@@ -69,9 +134,7 @@ export const fundApi = {
         },
       };
     }
-    // 缓存无效，请求新数据
     const response = await api.get(`/fund/${fundCode}/complete`);
-    // 更新缓存
     if (response.data.history_data) {
       cache.fundHistory.data[fundCode] = response.data.history_data;
       cache.fundHistory.timestamp[fundCode] = now;
@@ -115,25 +178,21 @@ export const platformApi = {
   },
   add: async (name) => {
     const response = await api.post("/platform", { name });
-    // 清除缓存，下次需要重新获取
     cache.platforms.data = null;
     return response;
   },
   update: async (id, name) => {
     const response = await api.put(`/platform/${id}`, { name });
-    // 清除缓存，下次需要重新获取
     cache.platforms.data = null;
     return response;
   },
   delete: async (id) => {
     const response = await api.delete(`/platform/${id}`);
-    // 清除缓存，下次需要重新获取
     cache.platforms.data = null;
     return response;
   },
   updateOrder: async (orderData) => {
     const response = await api.put("/platform/order", { order: orderData });
-    // 清除缓存，下次需要重新获取
     cache.platforms.data = null;
     return response;
   },

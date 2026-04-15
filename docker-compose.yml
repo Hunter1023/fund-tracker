@@ -33,6 +33,17 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=fund_tracker
+      # JWT密钥配置
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
+      # GitHub OAuth配置
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      # SMTP邮件配置
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
     networks:
       - fund-network
     ports:

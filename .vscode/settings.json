@@ -50,5 +50,8 @@
   "code-runner.fileDirectoryAsCwd": false,
   "code-runner.showExecutionMessage": true,
   "code-runner.respectShebang": false,
-  "code-runner.terminalRoot": "/mnt/"
+  "code-runner.terminalRoot": "/mnt/",
+
+  "python.terminal.useEnvFile": true,
+  "python.envFile": "${workspaceFolder}/.env"
 }

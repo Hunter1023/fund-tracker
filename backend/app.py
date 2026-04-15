@@ -1,8 +1,10 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
 from data_fetcher import DataFetcher
-from models import Fund, FundHolding, Transaction, Watchlist, FundRealtimeData, HoldingProfitHistory, Platform, create_tables, get_db
+from models import Fund, FundHolding, Transaction, Watchlist, FundRealtimeData, HoldingProfitHistory, Platform, User, create_tables, get_db
+from auth import register_auth_routes, get_current_user_id
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import decimal
@@ -15,22 +17,25 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import threading
 from sqlalchemy.exc import OperationalError, IntegrityError
 import random
-from config import DATABASE_URL
+from config import DATABASE_URL, JWT_SECRET_KEY, JWT_ACCESS_TOKEN_EXPIRES, DEFAULT_PUBLIC_FUNDS
 import concurrent.futures
 import traceback
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# 强制启用调试模式以查看详细错误信息
 app.config['DEBUG'] = True
-# 数据库连接池配置
-app.config['SQLALCHEMY_POOL_SIZE'] = 10  # 连接池大小
-app.config['SQLALCHEMY_MAX_OVERFLOW'] = 20  # 最大溢出连接数
-app.config['SQLALCHEMY_POOL_TIMEOUT'] = 30  # 连接超时时间（秒）
-app.config['SQLALCHEMY_POOL_RECYCLE'] = 1800  # 连接回收时间（秒）
+app.config['SQLALCHEMY_POOL_SIZE'] = 10
+app.config['SQLALCHEMY_MAX_OVERFLOW'] = 20
+app.config['SQLALCHEMY_POOL_TIMEOUT'] = 30
+app.config['SQLALCHEMY_POOL_RECYCLE'] = 1800
+app.config['JWT_SECRET_KEY'] = JWT_SECRET_KEY
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = JWT_ACCESS_TOKEN_EXPIRES
 db = SQLAlchemy(app)
-CORS(app)
+CORS(app, supports_credentials=True)
+jwt = JWTManager(app)
+
+register_auth_routes(app)
 
 # 配置日志
 logging.basicConfig(
@@ -67,15 +72,10 @@ def retry_db_operation(max_retries=3, base_delay=0.1):
 
 # 初始化默认平台
 def init_default_platform():
-    """
-    初始化默认平台，如果不存在则创建
-    """
     db = next(get_db())
     try:
-        # 检查是否已存在"默认"平台
         existing_platform = db.query(Platform).filter(Platform.name == '默认').first()
         if not existing_platform:
-            # 创建默认平台
             default_platform = Platform(
                 name='默认',
                 order_num=0
@@ -91,6 +91,56 @@ def init_default_platform():
     finally:
         db.close()
 
+def init_default_user():
+    db = next(get_db())
+    try:
+        admin_user = db.query(User).filter(User.email == 'hspecial@163.com').first()
+        if not admin_user:
+            admin_user = User(
+                email='hspecial@163.com',
+                username='hspecial',
+                nickname='hspecial',
+                is_active=True,
+            )
+            db.add(admin_user)
+            db.commit()
+            db.refresh(admin_user)
+            print(f"已创建默认管理员用户: {admin_user.email} (ID: {admin_user.id})")
+        else:
+            print(f"默认管理员用户已存在: {admin_user.email} (ID: {admin_user.id})")
+
+        orphan_watchlist = db.query(Watchlist).filter(Watchlist.user_id == None).all()
+        orphan_holdings = db.query(FundHolding).filter(FundHolding.user_id == None).all()
+        orphan_transactions = db.query(Transaction).filter(Transaction.user_id == None).all()
+        orphan_platforms = db.query(Platform).filter(Platform.user_id == None).all()
+
+        migrated = 0
+        for item in orphan_watchlist:
+            item.user_id = admin_user.id
+            migrated += 1
+        for item in orphan_holdings:
+            item.user_id = admin_user.id
+            migrated += 1
+        for item in orphan_transactions:
+            item.user_id = admin_user.id
+            migrated += 1
+        for item in orphan_platforms:
+            item.user_id = admin_user.id
+            migrated += 1
+
+        if migrated > 0:
+            db.commit()
+            print(f"已迁移 {migrated} 条无主数据到管理员用户")
+        else:
+            print("无需迁移数据")
+    except Exception as e:
+        db.rollback()
+        print(f"初始化默认用户时出错: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        db.close()
+
 # 尝试创建数据库表
 try:
     create_tables()
@@ -103,6 +153,11 @@ try:
     init_default_platform()
 except Exception as e:
     print(f"初始化默认平台失败: {e}")
+
+try:
+    init_default_user()
+except Exception as e:
+    print(f"初始化默认用户失败: {e}")
 
 # 创建定时任务调度器
 scheduler = BackgroundScheduler()
@@ -1490,11 +1545,8 @@ def get_fund_history(fund_code):
         db.close()
 
 @app.route('/api/fund/preload-history', methods=['POST'])
+@jwt_required()
 def trigger_preload_history():
-    """
-    手动触发预加载所有基金的历史净值数据
-    :return: 预加载结果
-    """
     try:
         # 在后台线程中执行预加载，避免阻塞请求
         def run_preload():
@@ -1659,17 +1711,79 @@ def add_fund():
     finally:
         db.close()
 
+def _get_public_watchlist(db):
+    from datetime import datetime
+    fund_codes = DEFAULT_PUBLIC_FUNDS
+    if not fund_codes:
+        return jsonify([])
+
+    for fund_code in fund_codes:
+        fund_code = fund_code.strip()
+        if not fund_code:
+            continue
+        existing = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+        if not existing:
+            search_results = DataFetcher.search_fund(fund_code)
+            fund_name = fund_code
+            if search_results:
+                for item in search_results:
+                    if item.get('fund_code') == fund_code:
+                        fund_name = item.get('fund_name', fund_code)
+                        break
+            new_fund = Fund(
+                fund_code=fund_code,
+                fund_name=fund_name
+            )
+            db.add(new_fund)
+            db.commit()
+            print(f"公开自选: 已自动创建基金 {fund_code} - {fund_name}")
+
+    now = datetime.now()
+    is_trading_day = now.weekday() < 5
+
+    funds_data_dict = get_fund_realtime_rates_batch(db, fund_codes, force_refresh=False)
+    funds = []
+    for fund_code in fund_codes:
+        fund_code = fund_code.strip()
+        if not fund_code:
+            continue
+        fund_data = funds_data_dict.get(fund_code)
+        if fund_data:
+            fund_data['tags'] = ''
+            if not is_trading_day:
+                fund_data['estimate_change_rate'] = '-'
+            funds.append(fund_data)
+        else:
+            fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+            funds.append({
+                'fund_code': fund_code,
+                'fund_name': fund.fund_name if fund else fund_code,
+                'net_value': '',
+                'unit_net_value': '',
+                'estimate_net_value': '',
+                'estimate_change_rate': None,
+                'estimate_time': '',
+                'one_month_rate': 0,
+                'three_month_rate': 0,
+                'one_year_rate': 0,
+                'daily_change_rate': '-',
+                'tags': ''
+            })
+    return jsonify(funds)
+
 @app.route('/api/watchlist', methods=['GET', 'POST', 'DELETE'])
+@jwt_required(optional=True)
 def manage_watchlist():
-    """
-    管理自选基金
-    """
     from datetime import datetime
     db = next(get_db())
     try:
+        user_id = get_current_user_id()
+
         if request.method == 'GET':
-            # 获取自选基金列表
-            watchlist = db.query(Watchlist).all()
+            if not user_id:
+                return _get_public_watchlist(db)
+
+            watchlist = db.query(Watchlist).filter(Watchlist.user_id == user_id).all()
             funds = []
 
             # 收集所有自选基金的fund_code
@@ -1724,8 +1838,7 @@ def manage_watchlist():
                     }
                     funds.append(basic_fund_data)
 
-            # 获取持仓基金，添加不在自选列表中的持仓基金
-            holdings = db.query(FundHolding).all()
+            holdings = db.query(FundHolding).filter(FundHolding.user_id == user_id).all()
             holding_fund_codes = []
 
             for holding in holdings:
@@ -1781,7 +1894,9 @@ def manage_watchlist():
             return jsonify(funds)
 
         elif request.method == 'POST':
-            # 添加自选基金
+            if not user_id:
+                return jsonify({'error': '请先登录'}), 401
+
             data = request.json
             fund_code = data.get('fund_code')
             if not fund_code:
@@ -1790,14 +1905,12 @@ def manage_watchlist():
             fund = get_or_create_fund(db, fund_code)
             if not fund:
                 return jsonify({'error': '获取基金信息失败，请稍后重试'}), 400
-            # 检查是否已在自选列表
-            existing = db.query(Watchlist).filter(Watchlist.fund_id == fund.id).first()
+            existing = db.query(Watchlist).filter(Watchlist.fund_id == fund.id, Watchlist.user_id == user_id).first()
             if existing:
                 return jsonify({'error': '该基金已在自选列表中'}), 400
 
-            # 获取标签，默认为空
             tags = data.get('tags', '')
-            watchlist_item = Watchlist(fund_id=fund.id, tags=tags)
+            watchlist_item = Watchlist(fund_id=fund.id, user_id=user_id, tags=tags)
             db.add(watchlist_item)
             db.commit()
 
@@ -1825,7 +1938,9 @@ def manage_watchlist():
             return jsonify({'success': True, 'fund': fund_data})
 
         elif request.method == 'DELETE':
-            # 删除自选基金
+            if not user_id:
+                return jsonify({'error': '请先登录'}), 401
+
             data = request.json
             fund_code = data.get('fund_code')
             if not fund_code:
@@ -1833,7 +1948,7 @@ def manage_watchlist():
 
             fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
             if fund:
-                watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id).first()
+                watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id, Watchlist.user_id == user_id).first()
                 if watchlist_item:
                     db.delete(watchlist_item)
                     db.commit()
@@ -1849,64 +1964,25 @@ def manage_watchlist():
     finally:
         db.close()
 
-@app.route('/api/watchlist/tags', methods=['PUT'])
-def change_fund_tags():
-    """
-    修改基金标签
-    """
-    db = next(get_db())
-    try:
-        data = request.json
-        fund_code = data.get('fund_code')
-        tags = data.get('tags', '全部')
-
-        if not fund_code:
-            return jsonify({'error': '基金代码不能为空'}), 400
-
-        # 查找基金
-        fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
-        if not fund:
-            return jsonify({'error': '基金不存在'}), 404
-
-        # 查找自选记录
-        watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id).first()
-        if not watchlist_item:
-            return jsonify({'error': '该基金不在自选列表中'}), 404
-
-        # 更新标签
-        watchlist_item.tags = tags
-        db.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.rollback()
-        return jsonify({'error': str(e)}), 500
-    finally:
-        db.close()
-
 @app.route('/api/holding', methods=['GET', 'POST'])
+@jwt_required()
 def manage_holding():
-    """
-    管理持仓接口
-    GET: 获取持仓列表
-    POST: 添加或更新持仓
-    """
     from datetime import datetime, timedelta
     try:
         logger.info("开始处理 /api/holding 请求")
+        user_id = get_current_user_id()
         logger.info("获取数据库连接")
         db = next(get_db())
         logger.info("数据库连接获取成功")
 
         if request.method == 'GET':
             logger.info("处理 GET 请求")
-            # 设置请求超时控制
             start_time = datetime.now().timestamp()
-            MAX_REQUEST_TIME = 30  # 最大请求时间（秒）
+            MAX_REQUEST_TIME = 30
 
-            # 获取持仓列表
             logger.info("开始获取持仓列表")
             try:
-                holdings = db.query(FundHolding).all()
+                holdings = db.query(FundHolding).filter(FundHolding.user_id == user_id).all()
                 logger.info(f"获取到 {len(holdings)} 个持仓")
             except Exception as e:
                 logger.error(f"获取持仓列表失败: {e}")
@@ -1923,7 +1999,7 @@ def manage_holding():
 
             # 批量获取所有基金的标签（板块）
             fund_ids = [holding.fund.id for holding in holdings]
-            watchlist_items = db.query(Watchlist).filter(Watchlist.fund_id.in_(fund_ids)).all()
+            watchlist_items = db.query(Watchlist).filter(Watchlist.fund_id.in_(fund_ids), Watchlist.user_id == user_id).all()
             tags_dict = {item.fund_id: item.tags for item in watchlist_items}
 
             holding_list = []
@@ -2031,44 +2107,37 @@ def manage_holding():
             return jsonify(holding_list)
 
         elif request.method == 'POST':
-            # 添加或更新持仓
             data = request.json
             fund_code = data.get('fund_code')
-            transaction_type = data.get('type', 'buy')  # buy: 买入, sell: 卖出, sync: 同步持仓
+            transaction_type = data.get('type', 'buy')
             tags = data.get('tags', '')
 
             if not fund_code:
                 return jsonify({'error': '基金代码不能为空'}), 400
 
-            # 获取或创建基金
             fund = get_or_create_fund(db, fund_code)
 
             if not fund:
                 return jsonify({'error': '获取基金信息失败'}), 404
 
-            # 处理标签：如果有标签，检查基金是否在自选列表中，不在则添加
             if tags:
-                watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id).first()
+                watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id, Watchlist.user_id == user_id).first()
                 if not watchlist_item:
-                    # 创建新的自选记录并设置标签
-                    watchlist_item = Watchlist(fund_id=fund.id, tags=tags)
+                    watchlist_item = Watchlist(fund_id=fund.id, user_id=user_id, tags=tags)
                     db.add(watchlist_item)
                 else:
-                    # 更新现有自选记录的标签
                     watchlist_item.tags = tags
 
-            # 获取平台参数
             platform = data.get('platform', '其他')
-            # 确保平台名称正确处理
             if platform == '默认':
                 platform = '默认'
             elif not platform:
                 platform = '其他'
             logger.info(f"收到的平台参数: {platform}")
 
-            # 检查是否已有对应平台的持仓
             fund_holding = db.query(FundHolding).filter(
                 FundHolding.fund_id == fund.id,
+                FundHolding.user_id == user_id,
                 FundHolding.platform == platform
             ).first()
 
@@ -2179,9 +2248,9 @@ def manage_holding():
                     fund_holding.profit_loss_rate = profit_rate
                     fund_holding.platform = platform
                 else:
-                    # 创建新持仓
                     fund_holding = FundHolding(
                         fund_id=fund.id,
+                        user_id=user_id,
                         cost=cost,
                         shares=shares,
                         avg_cost=avg_cost,
@@ -2209,9 +2278,9 @@ def manage_holding():
                     fund_holding.shares = total_shares
                     fund_holding.avg_cost = total_cost / total_shares
                 else:
-                    # 创建新持仓
                     fund_holding = FundHolding(
                         fund_id=fund.id,
+                        user_id=user_id,
                         cost=cost,
                         shares=shares,
                         avg_cost=current_price,
@@ -2219,20 +2288,18 @@ def manage_holding():
                     )
                     db.add(fund_holding)
 
-                # 查询 platform_id
-                platform_obj = db.query(Platform).filter(Platform.name == actual_platform).first()
+                platform_obj = db.query(Platform).filter(Platform.name == actual_platform, Platform.user_id == user_id).first()
                 platform_id = platform_obj.id if platform_obj else None
 
-                # 记录交易
                 transaction = Transaction(
                     fund_id=fund.id,
+                    user_id=user_id,
                     platform_id=platform_id,
                     transaction_type=transaction_type,
                     amount=cost,
                     shares=shares,
                     price=current_price
                 )
-                # 如果有买入日期，设置交易日期
                 if buy_date:
                     transaction.transaction_date = datetime.strptime(buy_date, '%Y-%m-%d')
                 db.add(transaction)
@@ -2282,20 +2349,18 @@ def manage_holding():
                     # 重新计算平均成本（应该保持不变）
                     fund_holding.avg_cost = fund_holding.cost / fund_holding.shares
 
-                # 查询 platform_id
-                platform_obj = db.query(Platform).filter(Platform.name == actual_platform).first()
+                platform_obj = db.query(Platform).filter(Platform.name == actual_platform, Platform.user_id == user_id).first()
                 platform_id = platform_obj.id if platform_obj else None
 
-                # 记录交易
                 transaction = Transaction(
                     fund_id=fund.id,
+                    user_id=user_id,
                     platform_id=platform_id,
                     transaction_type=transaction_type,
                     amount=amount,
                     shares=shares,
                     price=current_price
                 )
-                # 如果有卖出日期，设置交易日期
                 if sell_date:
                     transaction.transaction_date = datetime.strptime(sell_date, '%Y-%m-%d')
                 db.add(transaction)
@@ -2416,19 +2481,16 @@ def manage_holding():
             db.close()
 
 @app.route('/api/transaction/<fund_code>', methods=['GET'])
+@jwt_required()
 def get_transaction_history(fund_code):
-    """
-    获取基金交易历史
-    :param fund_code: 基金代码
-    :return: 交易历史列表
-    """
     db = next(get_db())
     try:
+        user_id = get_current_user_id()
         fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
         if not fund:
             return jsonify({'error': '基金不存在'}), 404
 
-        transactions = db.query(Transaction).filter(Transaction.fund_id == fund.id).order_by(Transaction.transaction_date.desc()).all()
+        transactions = db.query(Transaction).filter(Transaction.fund_id == fund.id, Transaction.user_id == user_id).order_by(Transaction.transaction_date.desc()).all()
         transaction_list = []
         for transaction in transactions:
             transaction_list.append({
@@ -2446,19 +2508,16 @@ def get_transaction_history(fund_code):
         db.close()
 
 @app.route('/api/holding/<fund_code>/history', methods=['GET'])
+@jwt_required()
 def get_holding_profit_history(fund_code):
-    """
-    获取基金持仓收益历史记录
-    :param fund_code: 基金代码
-    :return: 持仓收益历史列表
-    """
     db = next(get_db())
     try:
+        user_id = get_current_user_id()
         fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
         if not fund:
             return jsonify({'error': '基金不存在'}), 404
 
-        holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id).first()
+        holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id).first()
         if not holding:
             return jsonify({'error': '持仓不存在'}), 404
 
@@ -2500,19 +2559,16 @@ def test_api():
     return jsonify({'message': '测试API正常工作', 'timestamp': datetime.now().isoformat()})
 
 @app.route('/api/holding/<fund_code>', methods=['DELETE'])
+@jwt_required()
 def delete_holding(fund_code):
-    """
-    删除持仓
-    :param fund_code: 基金代码
-    :return: 删除结果
-    """
     db = next(get_db())
     try:
+        user_id = get_current_user_id()
         fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
         if not fund:
             return jsonify({'error': '基金不存在'}), 404
 
-        fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id).first()
+        fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id).first()
         if not fund_holding:
             return jsonify({'error': '持仓不存在'}), 404
 
@@ -2528,14 +2584,11 @@ def delete_holding(fund_code):
         db.close()
 
 @app.route('/api/holding/<fund_code>', methods=['PUT'])
+@jwt_required()
 def update_holding(fund_code):
-    """
-    更新持仓信息
-    :param fund_code: 基金代码
-    :return: 更新结果
-    """
     db = next(get_db())
     try:
+        user_id = get_current_user_id()
         data = request.json
         current_value = data.get('current_value', 0)
         profit = data.get('profit', 0)
@@ -2573,9 +2626,9 @@ def update_holding(fund_code):
         if cost > 0:
             profit_rate = (profit / cost) * 100
 
-        # 检查是否已有持仓（同时检查fund_id和platform）
         fund_holding = db.query(FundHolding).filter(
             FundHolding.fund_id == fund.id,
+            FundHolding.user_id == user_id,
             FundHolding.platform == platform
         ).first()
         if not fund_holding:
@@ -2604,12 +2657,11 @@ def update_holding(fund_code):
         db.close()
 
 @app.route('/api/watchlist/tags', methods=['PUT'])
+@jwt_required()
 def update_watchlist_tags():
-    """
-    更新自选基金的板块标签
-    """
     db = next(get_db())
     try:
+        user_id = get_current_user_id()
         data = request.json
         fund_code = data.get('fund_code')
         tags = data.get('tags', '')
@@ -2617,19 +2669,15 @@ def update_watchlist_tags():
         if not fund_code:
             return jsonify({'error': '基金代码不能为空'}), 400
 
-        # 获取基金
         fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
         if not fund:
             return jsonify({'error': '基金不存在'}), 404
 
-        # 检查是否在自选列表中
-        watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id).first()
+        watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id, Watchlist.user_id == user_id).first()
         if not watchlist_item:
-            # 如果不在自选列表中，创建新记录
-            watchlist_item = Watchlist(fund_id=fund.id, tags=tags)
+            watchlist_item = Watchlist(fund_id=fund.id, user_id=user_id, tags=tags)
             db.add(watchlist_item)
         else:
-            # 更新现有记录的标签
             watchlist_item.tags = tags
 
         db.commit()
@@ -2644,12 +2692,11 @@ def update_watchlist_tags():
         db.close()
 
 @app.route('/api/holding/tags', methods=['PUT'])
+@jwt_required()
 def update_holding_tags():
-    """
-    更新持仓基金的板块标签
-    """
     db = next(get_db())
     try:
+        user_id = get_current_user_id()
         data = request.json
         fund_code = data.get('fund_code')
         tags = data.get('tags', '')
@@ -2657,19 +2704,15 @@ def update_holding_tags():
         if not fund_code:
             return jsonify({'error': '基金代码不能为空'}), 400
 
-        # 获取基金
         fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
         if not fund:
             return jsonify({'error': '基金不存在'}), 404
 
-        # 检查是否在自选列表中（因为持仓的标签是从自选列表中获取的）
-        watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id).first()
+        watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id, Watchlist.user_id == user_id).first()
         if not watchlist_item:
-            # 如果不在自选列表中，创建新记录
-            watchlist_item = Watchlist(fund_id=fund.id, tags=tags)
+            watchlist_item = Watchlist(fund_id=fund.id, user_id=user_id, tags=tags)
             db.add(watchlist_item)
         else:
-            # 更新现有记录的标签
             watchlist_item.tags = tags
 
         db.commit()
@@ -2684,13 +2727,14 @@ def update_holding_tags():
         db.close()
 
 @app.route('/api/holding/codes', methods=['GET'])
+@jwt_required(optional=True)
 def get_holding_codes():
-    """
-    获取所有持仓基金代码列表（轻量级接口，用于判断基金是否在持仓中）
-    """
     db = next(get_db())
     try:
-        holdings = db.query(FundHolding).all()
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'fund_codes': []})
+        holdings = db.query(FundHolding).filter(FundHolding.user_id == user_id).all()
         fund_codes = [holding.fund.fund_code for holding in holdings]
         return jsonify({'fund_codes': fund_codes})
     except Exception as e:
@@ -2700,23 +2744,19 @@ def get_holding_codes():
         db.close()
 
 @app.route('/api/tags', methods=['GET'])
+@jwt_required()
 def get_all_tags():
-    """
-    获取所有已存在的标签
-    """
     db = next(get_db())
     try:
-        # 从自选基金表中获取所有标签
-        watchlist_items = db.query(Watchlist).all()
+        user_id = get_current_user_id()
+        watchlist_items = db.query(Watchlist).filter(Watchlist.user_id == user_id).all()
         tags_set = set()
 
         for item in watchlist_items:
             if item.tags:
-                # 分割逗号分隔的标签
                 item_tags = [tag.strip() for tag in item.tags.split(',')]
                 tags_set.update(item_tags)
 
-        # 转换为列表并排序
         tags = sorted(list(tags_set))
         return jsonify({'tags': tags})
     except Exception as e:
@@ -2726,13 +2766,12 @@ def get_all_tags():
         db.close()
 
 @app.route('/api/platform', methods=['GET'])
+@jwt_required()
 def get_platforms():
-    """
-    获取平台列表
-    """
     db = next(get_db())
     try:
-        platforms = db.query(Platform).order_by(Platform.order_num, Platform.id).all()
+        user_id = get_current_user_id()
+        platforms = db.query(Platform).filter(Platform.user_id == user_id).order_by(Platform.order_num, Platform.id).all()
         platform_list = [{'id': p.id, 'name': p.name} for p in platforms]
         return jsonify(platform_list)
     except Exception as e:
@@ -2742,10 +2781,8 @@ def get_platforms():
         db.close()
 
 @app.route('/api/platform', methods=['POST'])
+@jwt_required()
 def add_platform():
-    """
-    添加平台
-    """
     data = request.json
     name = data.get('name')
     if not name:
@@ -2753,15 +2790,14 @@ def add_platform():
 
     db = next(get_db())
     try:
-        # 检查平台是否已存在
-        existing = db.query(Platform).filter(Platform.name == name).first()
+        user_id = get_current_user_id()
+        existing = db.query(Platform).filter(Platform.name == name, Platform.user_id == user_id).first()
         if existing:
             return jsonify({'error': '平台已存在'}), 400
 
-        # 获取当前最大的order_num值
-        max_order = db.query(Platform).with_entities(func.max(Platform.order_num)).scalar() or 0
+        max_order = db.query(Platform).filter(Platform.user_id == user_id).with_entities(func.max(Platform.order_num)).scalar() or 0
 
-        platform = Platform(name=name, order_num=max_order + 1)
+        platform = Platform(name=name, user_id=user_id, order_num=max_order + 1)
         db.add(platform)
         db.commit()
         db.refresh(platform)
@@ -2773,36 +2809,29 @@ def add_platform():
         db.close()
 
 @app.route('/api/platform/<int:platform_id>', methods=['PUT'])
+@jwt_required()
 def update_platform(platform_id):
-    """
-    更新平台
-    """
     db = next(get_db())
     try:
+        user_id = get_current_user_id()
         data = request.json
         name = data.get('name', '').strip()
 
         if not name:
             return jsonify({'error': '平台名称不能为空'}), 400
 
-        # 获取平台
-        platform = db.query(Platform).filter(Platform.id == platform_id).first()
+        platform = db.query(Platform).filter(Platform.id == platform_id, Platform.user_id == user_id).first()
         if not platform:
             return jsonify({'error': '平台不存在'}), 404
 
-        # 检查新名称是否与其他平台冲突
-        existing = db.query(Platform).filter(Platform.name == name, Platform.id != platform_id).first()
+        existing = db.query(Platform).filter(Platform.name == name, Platform.user_id == user_id, Platform.id != platform_id).first()
         if existing:
             return jsonify({'error': '平台名称已存在'}), 400
 
-        # 保存旧名称
         old_name = platform.name
-
-        # 更新平台
         platform.name = name
 
-        # 同步更新所有使用该平台名称的持仓记录
-        holdings = db.query(FundHolding).filter(FundHolding.platform == old_name).all()
+        holdings = db.query(FundHolding).filter(FundHolding.platform == old_name, FundHolding.user_id == user_id).all()
         for holding in holdings:
             holding.platform = name
 
@@ -2816,18 +2845,16 @@ def update_platform(platform_id):
         db.close()
 
 @app.route('/api/platform/<int:platform_id>', methods=['DELETE'])
+@jwt_required()
 def delete_platform(platform_id):
-    """
-    删除平台
-    """
     db = next(get_db())
     try:
-        platform = db.query(Platform).filter(Platform.id == platform_id).first()
+        user_id = get_current_user_id()
+        platform = db.query(Platform).filter(Platform.id == platform_id, Platform.user_id == user_id).first()
         if not platform:
             return jsonify({'error': '平台不存在'}), 404
 
-        # 检查是否有持仓使用该平台
-        holdings = db.query(FundHolding).filter(FundHolding.platform == platform.name).all()
+        holdings = db.query(FundHolding).filter(FundHolding.platform == platform.name, FundHolding.user_id == user_id).all()
         if holdings:
             return jsonify({'error': f'该平台下有{len(holdings)}个持仓，无法删除'}), 400
 
@@ -2841,10 +2868,8 @@ def delete_platform(platform_id):
         db.close()
 
 @app.route('/api/platform/order', methods=['PUT'])
+@jwt_required()
 def update_platform_order():
-    """
-    更新平台排序
-    """
     data = request.json
     order_data = data.get('order', [])
 
@@ -2853,12 +2878,13 @@ def update_platform_order():
 
     db = next(get_db())
     try:
+        user_id = get_current_user_id()
         for item in order_data:
             platform_id = item.get('id')
             order = item.get('order')
 
             if platform_id and order is not None:
-                platform = db.query(Platform).filter(Platform.id == platform_id).first()
+                platform = db.query(Platform).filter(Platform.id == platform_id, Platform.user_id == user_id).first()
                 if platform:
                     platform.order_num = order
 

@@ -36,6 +36,14 @@ services:
       - DB_NAME=fund_tracker_dev
       - FLASK_ENV=development  # 开发模式
       - FLASK_DEBUG=True  # 启用调试模式
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-key}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
     ports:
       - "5001:5000"  # 开发环境后端端口，避免与生产环境冲突
     networks:

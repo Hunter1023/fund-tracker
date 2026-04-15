@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# 进入项目目录
 cd "$(dirname "$0")"
 
-# 启动开发环境
+bash scripts/init-env.sh
+
 docker compose -f docker-compose.dev.yml down
 docker compose -f docker-compose.dev.yml up
