@@ -617,7 +617,6 @@ async function loadPlatforms() {
   try {
     const response = await platformApi.get();
     platforms.value = response.data;
-    console.log("Platforms loaded:", platforms.value);
     if (platforms.value.length === 0) {
       platforms.value = [{ id: null, name: "默认" }];
     }
@@ -913,7 +912,6 @@ function renderChart(data, transactions) {
   const transactionMap = new Map();
 
   if (transactions && transactions.length > 0) {
-    console.log("Transactions loaded:", transactions);
     transactions.forEach((transaction) => {
       // 处理交易记录：只显示当前平台的交易记录
       // 从平台列表中找到对应的平台名称
@@ -922,12 +920,6 @@ function renderChart(data, transactions) {
           (p) => Number(p.id) === Number(transaction.platform_id),
         )?.name || "默认";
 
-      // 调试信息
-      console.log("Transaction platform_id:", transaction.platform_id);
-      console.log("Platforms:", platforms.value);
-      console.log("Matched platformName:", platformName);
-      console.log("Props platform:", props.platform);
-
       if (platformName === props.platform || !props.platform) {
         const transactionDate = transaction.date.split(" ")[0];
         transactionDates.add(transactionDate);
@@ -935,14 +927,6 @@ function renderChart(data, transactions) {
         if (!transactionMap.has(transactionDate)) {
           transactionMap.set(transactionDate, transaction.type);
         }
-      } else {
-        console.log(
-          "Transaction skipped:",
-          transaction.platform_id,
-          platformName,
-          "!==",
-          props.platform,
-        );
       }
     });
   }

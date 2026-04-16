@@ -92,14 +92,8 @@ let currentRequest = null;
 
 watch(
   () => props.show,
-  async (newVal, oldVal) => {
-    console.log("SearchFundModal show changed:", {
-      oldVal,
-      newVal,
-      currentKeyword: searchKeyword.value,
-    });
+  async (newVal) => {
     if (newVal) {
-      console.log("Opening modal, clearing search keyword");
       searchKeyword.value = "";
       searchResults.value = [];
       await nextTick();
@@ -107,7 +101,6 @@ watch(
         searchInputRef.value.focus();
       }
     } else {
-      console.log("Closing modal, clearing search keyword");
       searchKeyword.value = "";
       searchResults.value = [];
     }
@@ -179,7 +172,6 @@ async function doImmediateSearch() {
       searchKeyword.value.trim(),
       controller.signal,
     );
-    console.log("doImmediateSearch response:", response && response.data);
     // 如果后端返回空结果，为便于测试回退到模拟数据
     if (response && response.data && response.data.length > 0) {
       searchResults.value = response.data;
@@ -187,7 +179,6 @@ async function doImmediateSearch() {
       const mockResults = [
         { fund_code: "018463", fund_name: "易方达科技创新混合C" },
       ];
-      console.log("doImmediateSearch: response empty, use mockResults");
       searchResults.value = mockResults;
     }
   } catch (error) {
@@ -201,23 +192,16 @@ async function doImmediateSearch() {
   } finally {
     searchLoading.value = false;
     currentRequest = null;
-    console.log(
-      "doImmediateSearch end, results length=",
-      searchResults.value.length,
-    );
   }
 }
 
 function handleFocus() {
-  console.log("handleFocus, keyword=", searchKeyword.value);
 }
 
 function handleWrapperClick() {
-  console.log("handleWrapperClick, keyword=", searchKeyword.value);
 }
 
 function handleWrapperMouseDown(e) {
-  console.log("handleWrapperMouseDown, keyword=", searchKeyword.value);
 }
 
 function handleOverlayClick() {

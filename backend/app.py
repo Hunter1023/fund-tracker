@@ -96,7 +96,6 @@ def init_default_platform():
                     Transaction.platform_id == bp.id
                 ).update({'platform_id': default_platform.id})
             db.delete(bp)
-            print(f"已清理错误平台: {bp.name} (用户ID: {bp.user_id})")
         if bad_platforms:
             db.commit()
 
@@ -114,14 +113,10 @@ def init_default_platform():
                     )
                     db.add(default_platform)
                     db.commit()
-                    print(f"已为用户 {user.username} 创建默认平台")
-                else:
-                    print(f"用户 {user.username} 已有 {len(user_platforms)} 个平台")
             except Exception as e:
                 db.rollback()
-                print(f"处理用户 {user.username} 的平台时出错: {e}")
     except Exception as e:
-        print(f"初始化默认平台时出错: {e}")
+        pass
     finally:
         db.close()
 
