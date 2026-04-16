@@ -1658,7 +1658,8 @@ def get_fund_complete_info(fund_code):
 
             # 通过fund_id查询交易记录
             transactions = db.query(Transaction).filter(
-                Transaction.fund_id == fund.id
+                Transaction.fund_id == fund.id,
+                Transaction.user_id == user_id
             ).order_by(Transaction.transaction_date.desc()).all()
 
             return [{
