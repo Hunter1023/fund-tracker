@@ -2268,7 +2268,7 @@ def manage_holding():
                 if cost <= 0:
                     return jsonify({'error': '金额不能为空且必须大于0'}), 400
 
-                shares = cost / current_price
+                shares = cost / unit_net_value
 
                 if fund_holding:
                     # 更新持仓
@@ -2283,7 +2283,7 @@ def manage_holding():
                         user_id=user_id,
                         cost=cost,
                         shares=shares,
-                        avg_cost=current_price,
+                        avg_cost=unit_net_value,
                         platform=platform
                     )
                     db.add(fund_holding)
