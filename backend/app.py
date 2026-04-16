@@ -2186,6 +2186,10 @@ def manage_holding():
                         current_price = 1.0
                         logger.warning(f"无法获取净值数据，基金代码: {fund_code}, 使用默认值: {current_price}")
 
+            # 为所有交易类型定义 unit_net_value
+            unit_net_value = current_price
+            logger.info(f"unit_net_value: {unit_net_value}")
+
             if transaction_type == 'sync':
                 # 同步持仓操作
                 # 从前端接收current_value和profit，结合最新净值计算份额
