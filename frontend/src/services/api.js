@@ -121,23 +121,10 @@ export const fundApi = {
     return response;
   },
   getCompleteInfo: async (fundCode) => {
-    const now = Date.now();
-    if (
-      cache.fundHistory.data[fundCode] &&
-      now - cache.fundHistory.timestamp[fundCode] < cache.expiry
-    ) {
-      return {
-        data: {
-          fund_info: null,
-          history_data: cache.fundHistory.data[fundCode],
-          transactions: [],
-        },
-      };
-    }
     const response = await api.get(`/fund/${fundCode}/complete`);
     if (response.data.history_data) {
       cache.fundHistory.data[fundCode] = response.data.history_data;
-      cache.fundHistory.timestamp[fundCode] = now;
+      cache.fundHistory.timestamp[fundCode] = Date.now();
     }
     return response;
   },
