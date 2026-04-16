@@ -1187,7 +1187,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                 'fund_code': fund_code,
                 'fund_name': fund.fund_name,
                 'net_value_date': fund_data.get('net_value') if fund_data else history_data.get('fsrq', ''),
-                'unit_net_value': float(fund_data.get('unit_net_value', 0)) if fund_data and fund_data.get('unit_net_value') else (float(history_data.get('unit_net_value', 0)) if history_data and history_data.get('unit_net_value') else None),
+                'unit_net_value': float(history_data.get('unit_net_value', 0)) if history_data and history_data.get('unit_net_value') else (float(fund_data.get('unit_net_value', 0)) if fund_data and fund_data.get('unit_net_value') else None),
                 'estimate_net_value': float(fund_data.get('estimate_net_value', 0)) if fund_data and fund_data.get('estimate_net_value') else None,
                 'estimate_change_rate': float(fund_data.get('estimate_change_rate', 0)) if fund_data and fund_data.get('estimate_change_rate') else None,
                 'estimate_time': fund_data.get('estimate_time', '') if fund_data else '',
