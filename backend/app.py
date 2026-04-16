@@ -2293,7 +2293,11 @@ def manage_holding():
                     db.add(fund_holding)
 
                 platform_obj = db.query(Platform).filter(Platform.name == actual_platform, Platform.user_id == user_id).first()
-                platform_id = platform_obj.id if platform_obj else None
+                if not platform_obj:
+                    platform_obj = Platform(name=actual_platform, user_id=user_id)
+                    db.add(platform_obj)
+                    db.flush()
+                platform_id = platform_obj.id
 
                 transaction = Transaction(
                     fund_id=fund.id,
@@ -2354,7 +2358,11 @@ def manage_holding():
                     fund_holding.avg_cost = fund_holding.cost / fund_holding.shares
 
                 platform_obj = db.query(Platform).filter(Platform.name == actual_platform, Platform.user_id == user_id).first()
-                platform_id = platform_obj.id if platform_obj else None
+                if not platform_obj:
+                    platform_obj = Platform(name=actual_platform, user_id=user_id)
+                    db.add(platform_obj)
+                    db.flush()
+                platform_id = platform_obj.id
 
                 transaction = Transaction(
                     fund_id=fund.id,
