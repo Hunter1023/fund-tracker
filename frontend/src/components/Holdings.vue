@@ -158,7 +158,7 @@
               <tbody>
                 <tr
                   v-for="holding in sortedHoldings"
-                  :key="`${holding.fund_code}-${holding.platform || '其他'}`"
+                  :key="`${holding.fund_code}-${holding.platform || '默认'}`"
                   class="table-row"
                 >
                   <td>

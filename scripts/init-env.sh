@@ -15,8 +15,8 @@ JWT_SECRET_KEY=${JWT_SECRET}
 
 # GitHub OAuth 配置
 # 请在部署环境中设置以下环境变量，或直接在此文件中填写
-GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
-GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID:-}
+OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET:-}
 
 # SMTP 邮件配置（用于发送邮箱验证码，不配置则隐藏邮箱登录）
 # 请在部署环境中设置以下环境变量，或直接在此文件中填写

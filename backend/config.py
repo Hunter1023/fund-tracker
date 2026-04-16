@@ -35,8 +35,8 @@ else:
 JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES', 86400))
 
 # GitHub OAuth配置
-GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID', '')
-GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET', '')
+OAUTH_CLIENT_ID = os.environ.get('OAUTH_CLIENT_ID', '')
+OAUTH_CLIENT_SECRET = os.environ.get('OAUTH_CLIENT_SECRET', '')
 
 # SMTP邮件配置（用于发送邮箱验证码）
 SMTP_HOST = os.environ.get('SMTP_HOST', '')

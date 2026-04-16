@@ -148,7 +148,7 @@ export const holdingApi = {
   update: (fundCode, data) => api.put(`/holding/${fundCode}`, data),
   updateTags: (fundCode, tags) =>
     api.put("/holding/tags", { fund_code: fundCode, tags }),
-  delete: (fundCode, platform = "其他") =>
+  delete: (fundCode, platform = "默认") =>
     api.delete(`/holding/${fundCode}`, { data: { platform } }),
   getTransactions: (fundCode) => api.get(`/transaction/${fundCode}`),
 };

@@ -251,9 +251,34 @@ def migrate_add_user_columns():
                 print(f"迁移: {table}.{column} 跳过 ({e})")
 
 
+def migrate_drop_old_platform_name_unique():
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(
+                __import__('sqlalchemy').text(
+                    "SELECT constraint_name FROM information_schema.table_constraints "
+                    "WHERE table_name = 'platform' AND constraint_type = 'UNIQUE'"
+                )
+            )
+            constraints = [row[0] for row in result]
+            if 'platform_name_key' in constraints:
+                conn.execute(
+                    __import__('sqlalchemy').text(
+                        "ALTER TABLE platform DROP CONSTRAINT platform_name_key"
+                    )
+                )
+                conn.commit()
+                print("迁移: 已删除 platform 表的旧 platform_name_key 唯一约束")
+            else:
+                print("迁移: platform 表无旧 platform_name_key 约束，跳过")
+        except Exception as e:
+            print(f"迁移: 删除 platform_name_key 约束失败 ({e})")
+
+
 def create_tables():
     try:
         migrate_add_user_columns()
+        migrate_drop_old_platform_name_unique()
         Base.metadata.create_all(bind=engine)
         print("数据库表创建成功")
     except Exception as e:

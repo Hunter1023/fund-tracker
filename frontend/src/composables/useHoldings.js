@@ -115,7 +115,7 @@ export function useHoldings() {
 
   const sortedHoldings = computed(() => {
     const filteredHoldings = holdings.value.filter((h) => {
-      const holdingPlatform = h.platform || "其他";
+      const holdingPlatform = h.platform || "默认";
       // 严格匹配平台名称
       return holdingPlatform === selectedPlatform.value;
     });
@@ -130,7 +130,7 @@ export function useHoldings() {
     let hasTradingDayData = false;
 
     const filteredHoldings = holdings.value.filter((h) => {
-      const holdingPlatform = h.platform || "其他";
+      const holdingPlatform = h.platform || "默认";
       // 严格匹配平台名称
       return holdingPlatform === selectedPlatform.value;
     });
@@ -183,7 +183,7 @@ export function useHoldings() {
 
   function addHolding(data) {
     // 前端先本地更新，展示添加效果
-    const platform = data.platform || selectedPlatform.value || "其他";
+    const platform = data.platform || selectedPlatform.value || "默认";
 
     if (data.type === "sync") {
       // 同步持仓操作，直接创建新的持仓对象
@@ -211,7 +211,7 @@ export function useHoldings() {
       // 加仓或减仓操作，优先查找对应平台的持仓，如果找不到则找该基金的第一个持仓
       let existingHolding = holdings.value.find(
         (h) =>
-          h.fund_code === data.fund_code && (h.platform || "其他") === platform,
+          h.fund_code === data.fund_code && (h.platform || "默认") === platform,
       );
 
       // 如果找不到对应平台的持仓，尝试查找该基金的任意一个持仓
@@ -261,7 +261,7 @@ export function useHoldings() {
             const index = holdings.value.findIndex(
               (h) =>
                 h.fund_code === data.fund_code &&
-                (h.platform || "其他") === (existingHolding.platform || "其他"),
+                (h.platform || "默认") === (existingHolding.platform || "默认"),
             );
             if (index !== -1) {
               holdings.value.splice(index, 1);
@@ -300,7 +300,7 @@ export function useHoldings() {
     if (data.type === "buy" || data.type === "sell") {
       let existingHolding = holdings.value.find(
         (h) =>
-          h.fund_code === data.fund_code && (h.platform || "其他") === platform,
+          h.fund_code === data.fund_code && (h.platform || "默认") === platform,
       );
       if (!existingHolding) {
         existingHolding = holdings.value.find(
@@ -308,7 +308,7 @@ export function useHoldings() {
         );
       }
       if (existingHolding) {
-        actualPlatform = existingHolding.platform || "其他";
+        actualPlatform = existingHolding.platform || "默认";
       }
     }
 
@@ -334,7 +334,7 @@ export function useHoldings() {
                 let currentHolding = holdings.value.find(
                   (h) =>
                     h.fund_code === data.fund_code &&
-                    (h.platform || "其他") === actualPlatform,
+                    (h.platform || "默认") === actualPlatform,
                 );
                 if (!currentHolding) {
                   currentHolding = holdings.value.find(
@@ -411,7 +411,7 @@ export function useHoldings() {
     let index = holdings.value.findIndex(
       (h) =>
         h.fund_code === updatedHolding.fund_code &&
-        (h.platform || "其他") === (updatedHolding.platform || "其他"),
+        (h.platform || "默认") === (updatedHolding.platform || "默认"),
     );
 
     // 如果找不到对应平台的持仓，尝试查找该基金的任意一个持仓

@@ -7,7 +7,7 @@ from flask import request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import User, get_db
-from config import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+from config import OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,15 @@ def register_auth_routes(app):
             db.add(user)
             db.commit()
             db.refresh(user)
+
+            # 为新用户创建默认平台
+            default_platform = Platform(
+                name='默认',
+                user_id=user.id,
+                order_num=0
+            )
+            db.add(default_platform)
+            db.commit()
 
             access_token = create_access_token(identity=str(user.id))
             return jsonify({
@@ -163,6 +172,15 @@ def register_auth_routes(app):
                 db.commit()
                 db.refresh(user)
 
+                # 为新用户创建默认平台
+                default_platform = Platform(
+                    name='默认',
+                    user_id=user.id,
+                    order_num=0
+                )
+                db.add(default_platform)
+                db.commit()
+
             if not user.is_active:
                 return jsonify({'error': '账号已被禁用'}), 403
 
@@ -186,15 +204,15 @@ def register_auth_routes(app):
         if not code:
             return jsonify({'error': '缺少授权码'}), 400
 
-        if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
+        if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
             return jsonify({'error': 'GitHub登录未配置'}), 500
 
         try:
             token_response = requests.post(
                 'https://github.com/login/oauth/access_token',
                 json={
-                    'client_id': GITHUB_CLIENT_ID,
-                    'client_secret': GITHUB_CLIENT_SECRET,
+                    'client_id': OAUTH_CLIENT_ID,
+                    'client_secret': OAUTH_CLIENT_SECRET,
                     'code': code,
                 },
                 headers={'Accept': 'application/json'},
@@ -255,9 +273,18 @@ def register_auth_routes(app):
                             nickname=github_user.get('name') or github_username,
                         )
                         db.add(user)
+                        db.commit()
+                        db.refresh(user)
 
-                    db.commit()
-                    db.refresh(user)
+                        # 为新用户创建默认平台
+                        default_platform = Platform(
+                            name='默认',
+                            user_id=user.id,
+                            order_num=0
+                        )
+                        db.add(default_platform)
+                        db.commit()
+                        db.refresh(user)
 
                 if not user.is_active:
                     return jsonify({'error': '账号已被禁用'}), 403
@@ -298,8 +325,8 @@ def register_auth_routes(app):
     @app.route('/api/auth/github/config', methods=['GET'])
     def github_config():
         return jsonify({
-            'client_id': GITHUB_CLIENT_ID,
-            'enabled': bool(GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET),
+            'client_id': OAUTH_CLIENT_ID,
+            'enabled': bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET),
         })
 
     @app.route('/api/auth/email/config', methods=['GET'])

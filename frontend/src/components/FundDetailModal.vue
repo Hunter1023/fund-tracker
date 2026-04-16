@@ -573,11 +573,11 @@ const sellShares = ref("");
 const sellDate = ref("");
 const editAmount = ref("");
 const editProfit = ref("");
-const editPlatform = ref("其他");
+const editPlatform = ref("默认");
 const addCurrentValue = ref("");
 const addProfit = ref("");
 const addTags = ref("");
-const addPlatform = ref(props.platform || "其他");
+const addPlatform = ref(props.platform || "默认");
 const tagsInput = ref("");
 const loading = ref(false);
 const chartLoading = ref(false);
@@ -617,14 +617,12 @@ async function loadPlatforms() {
   try {
     const response = await platformApi.get();
     platforms.value = response.data;
-    // 如果平台列表为空，添加默认的"其他"选项
     if (platforms.value.length === 0) {
-      platforms.value = [{ id: null, name: "其他" }];
+      platforms.value = [{ id: null, name: "默认" }];
     }
   } catch (error) {
     console.error("加载平台列表失败:", error);
-    // 加载失败时添加默认选项
-    platforms.value = [{ id: null, name: "其他" }];
+    platforms.value = [{ id: null, name: "默认" }];
   }
 }
 
@@ -650,7 +648,7 @@ watch(
       fundTags.value = props.fundData.tags || "";
 
       // 设置默认平台
-      addPlatform.value = props.platform || "其他";
+      addPlatform.value = props.platform || "默认";
 
       // 异步加载历史数据，不阻塞其他操作
       loadHistoryData();
@@ -921,7 +919,14 @@ function renderChart(data, transactions) {
       // 从平台列表中找到对应的平台名称
       const platformName =
         platforms.value.find((p) => p.id === transaction.platform_id)?.name ||
-        "其他";
+        "默认";
+
+      // 调试信息
+      console.log("Transaction platform_id:", transaction.platform_id);
+      console.log("Platforms:", platforms.value);
+      console.log("Matched platformName:", platformName);
+      console.log("Props platform:", props.platform);
+
       if (platformName === props.platform) {
         const transactionDate = transaction.date.split(" ")[0];
         transactionDates.add(transactionDate);
@@ -1106,7 +1111,7 @@ function showOperationArea(tab) {
       props.holdingData.current_value || props.holdingData.cost
     ).toString();
     editProfit.value = (props.holdingData.profit_loss || 0).toString();
-    editPlatform.value = props.holdingData.platform || "其他";
+    editPlatform.value = props.holdingData.platform || "默认";
   } else if (tab === "buy") {
     buyAmount.value = "";
   } else if (tab === "sell") {
@@ -1235,7 +1240,7 @@ async function confirm() {
         type: "buy",
         cost: amount,
         buy_date: buyDate.value,
-        platform: props.holdingData?.platform || props.platform || "其他",
+        platform: props.holdingData?.platform || props.platform || "默认",
       });
     } else {
       // 如果没有提供addHolding函数，通过emit事件通知父组件
@@ -1245,7 +1250,7 @@ async function confirm() {
         type: "buy",
         cost: amount,
         buy_date: buyDate.value,
-        platform: props.holdingData?.platform || props.platform || "其他",
+        platform: props.holdingData?.platform || props.platform || "默认",
       });
     }
   } else if (activeTab.value === "sell") {
@@ -1272,7 +1277,7 @@ async function confirm() {
         type: "sell",
         shares: shares,
         sell_date: sellDate.value,
-        platform: props.holdingData?.platform || props.platform || "其他",
+        platform: props.holdingData?.platform || props.platform || "默认",
       });
     } else {
       // 如果没有提供addHolding函数，通过emit事件通知父组件
@@ -1282,7 +1287,7 @@ async function confirm() {
         type: "sell",
         shares: shares,
         sell_date: sellDate.value,
-        platform: props.holdingData?.platform || props.platform || "其他",
+        platform: props.holdingData?.platform || props.platform || "默认",
       });
     }
   } else if (activeTab.value === "edit") {
@@ -1324,7 +1329,7 @@ async function confirm() {
   } else if (activeTab.value === "delete") {
     loading.value = true;
     try {
-      const platform = props.holdingData?.platform || props.platform || "其他";
+      const platform = props.holdingData?.platform || props.platform || "默认";
       await holdingApi.delete(props.fundData.fund_code, platform);
       emit("confirm");
       emit("update:show", false);

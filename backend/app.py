@@ -74,26 +74,53 @@ def retry_db_operation(max_retries=3, base_delay=0.1):
 def init_default_platform():
     db = next(get_db())
     try:
+        # 清理错误的备用平台数据（如"默认_2"、"平台_2"等）
+        bad_platforms = db.query(Platform).filter(
+            Platform.name.like('默认_%')
+        ).all()
+        bad_platforms += db.query(Platform).filter(
+            Platform.name.like('平台_%')
+        ).all()
+        for bp in bad_platforms:
+            # 将关联的持仓和交易记录迁移到"默认"平台
+            default_platform = db.query(Platform).filter(
+                Platform.name == '默认',
+                Platform.user_id == bp.user_id
+            ).first()
+            if default_platform:
+                db.query(FundHolding).filter(
+                    FundHolding.platform == bp.name,
+                    FundHolding.user_id == bp.user_id
+                ).update({'platform': '默认'})
+                db.query(Transaction).filter(
+                    Transaction.platform_id == bp.id
+                ).update({'platform_id': default_platform.id})
+            db.delete(bp)
+            print(f"已清理错误平台: {bp.name} (用户ID: {bp.user_id})")
+        if bad_platforms:
+            db.commit()
+
         # 查询所有用户
         users = db.query(User).all()
         for user in users:
-            existing_platform = db.query(Platform).filter(
-                Platform.name == '默认',
-                Platform.user_id == user.id
-            ).first()
-            if not existing_platform:
-                default_platform = Platform(
-                    name='默认',
-                    user_id=user.id,
-                    order_num=0
-                )
-                db.add(default_platform)
-                print(f"已为用户 {user.username} 创建默认平台")
-            else:
-                print(f"用户 {user.username} 的默认平台已存在")
-        db.commit()
+            try:
+                user_platforms = db.query(Platform).filter(Platform.user_id == user.id).all()
+
+                if not user_platforms:
+                    default_platform = Platform(
+                        name='默认',
+                        user_id=user.id,
+                        order_num=0
+                    )
+                    db.add(default_platform)
+                    db.commit()
+                    print(f"已为用户 {user.username} 创建默认平台")
+                else:
+                    print(f"用户 {user.username} 已有 {len(user_platforms)} 个平台")
+            except Exception as e:
+                db.rollback()
+                print(f"处理用户 {user.username} 的平台时出错: {e}")
     except Exception as e:
-        db.rollback()
         print(f"初始化默认平台时出错: {e}")
     finally:
         db.close()
@@ -2092,7 +2119,7 @@ def manage_holding():
                         'fsrq': fund_data.get('fsrq', ''),
                         'one_month_rate': fund_data.get('one_month_rate', 0),
                         'tags': tags,
-                        'platform': holding.platform or '其他'
+                        'platform': holding.platform or '默认'
                     })
                 else:
                     holding_list.append({
@@ -2111,7 +2138,7 @@ def manage_holding():
                         'fsrq': '',
                         'one_month_rate': 0,
                         'tags': tags,
-                        'platform': holding.platform or '其他'
+                        'platform': holding.platform or '默认'
                     })
 
             logger.info(f"返回 {len(holding_list)} 个持仓数据")
@@ -2139,11 +2166,9 @@ def manage_holding():
                 else:
                     watchlist_item.tags = tags
 
-            platform = data.get('platform', '其他')
-            if platform == '默认':
+            platform = data.get('platform', '默认')
+            if not platform:
                 platform = '默认'
-            elif not platform:
-                platform = '其他'
             logger.info(f"收到的平台参数: {platform}")
 
             fund_holding = db.query(FundHolding).filter(
@@ -2462,7 +2487,7 @@ def manage_holding():
                         'fsrq': fund_data.get('fsrq', ''),
                         'one_month_rate': fund_data.get('one_month_rate', 0),
                         'tags': tags,
-                        'platform': fund_holding.platform or '其他'
+                        'platform': fund_holding.platform or '默认'
                     }
                 else:
                     updated_holding = {
@@ -2480,7 +2505,7 @@ def manage_holding():
                         'fsrq': '',
                         'one_month_rate': 0,
                         'tags': tags,
-                        'platform': fund_holding.platform or '其他'
+                        'platform': fund_holding.platform or '默认'
                     }
 
                 return jsonify({
@@ -2615,7 +2640,7 @@ def update_holding(fund_code):
         data = request.json
         current_value = data.get('current_value', 0)
         profit = data.get('profit', 0)
-        platform = data.get('platform', '其他')
+        platform = data.get('platform', '默认')
 
         if current_value <= 0:
             return jsonify({'error': '持仓金额不能为空且必须大于0'}), 400
