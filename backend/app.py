@@ -74,17 +74,24 @@ def retry_db_operation(max_retries=3, base_delay=0.1):
 def init_default_platform():
     db = next(get_db())
     try:
-        existing_platform = db.query(Platform).filter(Platform.name == '默认').first()
-        if not existing_platform:
-            default_platform = Platform(
-                name='默认',
-                order_num=0
-            )
-            db.add(default_platform)
-            db.commit()
-            print("已创建默认平台")
-        else:
-            print("默认平台已存在")
+        # 查询所有用户
+        users = db.query(User).all()
+        for user in users:
+            existing_platform = db.query(Platform).filter(
+                Platform.name == '默认',
+                Platform.user_id == user.id
+            ).first()
+            if not existing_platform:
+                default_platform = Platform(
+                    name='默认',
+                    user_id=user.id,
+                    order_num=0
+                )
+                db.add(default_platform)
+                print(f"已为用户 {user.username} 创建默认平台")
+            else:
+                print(f"用户 {user.username} 的默认平台已存在")
+        db.commit()
     except Exception as e:
         db.rollback()
         print(f"初始化默认平台时出错: {e}")
