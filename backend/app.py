@@ -1174,11 +1174,19 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
         # 从API获取数据
         fund_data = DataFetcher.get_fund_valuation(fund_code, int(time.time()))
 
+        # 当force_refresh时，使用10分钟级时间戳绕过lru_cache，确保获取最新数据
+        # 当need_refresh但非force_refresh时，使用小时级时间戳
+        # 否则使用默认的天级缓存
+        if force_refresh:
+            history_timestamp = int(time.time() / 600)
+        else:
+            history_timestamp = int(time.time() / 3600)
+
         # 只在需要时获取历史数据
         if need_history_data:
-            history_data = DataFetcher.get_fund_history(fund_code)
+            history_data = DataFetcher.get_fund_history(fund_code, history_timestamp)
         else:
-            history_data = DataFetcher.get_fund_history_simple(fund_code)
+            history_data = DataFetcher.get_fund_history_simple(fund_code, history_timestamp)
 
         # 即使fund_data为None，只要history_data有数据，就处理
         if history_data:
@@ -1253,14 +1261,14 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
         else:
             # API调用失败，尝试使用 get_fund_rates 方法获取数据
             print(f"基金 {fund_code} API调用失败，尝试使用 get_fund_rates 方法获取数据")
-            rates_data = DataFetcher.get_fund_rates(fund_code)
+            rates_data = DataFetcher.get_fund_rates(fund_code, history_timestamp if need_refresh else None)
             if rates_data:
                 # 准备数据
                 data = {
                     'fund_code': fund_code,
                     'fund_name': fund.fund_name,
                     'net_value_date': rates_data.get('fsrq', ''),
-                    'unit_net_value': None,
+                    'unit_net_value': float(rates_data.get('unit_net_value', 0)) if rates_data.get('unit_net_value') else None,
                     'estimate_net_value': None,
                     'estimate_change_rate': None,
                     'estimate_time': '',
