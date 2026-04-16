@@ -1579,8 +1579,11 @@ def get_fund_complete_info(fund_code):
     :return: 基金完整信息
     """
     from datetime import datetime, timedelta
+    from flask_jwt_extended import get_current_user_id
     db = next(get_db())
     try:
+        # 获取当前用户ID（可选，未登录时返回None）
+        user_id = get_current_user_id(optional=True)
         # 并行获取数据
         from concurrent.futures import ThreadPoolExecutor
 
@@ -1657,10 +1660,10 @@ def get_fund_complete_info(fund_code):
                 return []
 
             # 通过fund_id查询交易记录
-            transactions = db.query(Transaction).filter(
-                Transaction.fund_id == fund.id,
-                Transaction.user_id == user_id
-            ).order_by(Transaction.transaction_date.desc()).all()
+            query = db.query(Transaction).filter(Transaction.fund_id == fund.id)
+            if user_id:
+                query = query.filter(Transaction.user_id == user_id)
+            transactions = query.order_by(Transaction.transaction_date.desc()).all()
 
             return [{
                 'id': t.id,
