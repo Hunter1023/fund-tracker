@@ -1599,6 +1599,7 @@ def trigger_preload_history():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/fund/<fund_code>/complete', methods=['GET'])
+@jwt_required(optional=True)
 def get_fund_complete_info(fund_code):
     """
     获取基金完整信息，包括基本信息、历史净值和交易记录
@@ -2547,7 +2548,8 @@ def get_transaction_history(fund_code):
                 'amount': transaction.amount,
                 'shares': transaction.shares,
                 'price': transaction.price,
-                'date': transaction.transaction_date.strftime('%Y-%m-%d %H:%M:%S')
+                'date': transaction.transaction_date.strftime('%Y-%m-%d %H:%M:%S'),
+                'platform_id': transaction.platform_id
             })
         return jsonify(transaction_list)
     except Exception as e:

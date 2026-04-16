@@ -629,15 +629,13 @@ async function loadPlatforms() {
 
 watch(
   () => props.show,
-  (newVal) => {
+  async (newVal) => {
     if (newVal) {
-      loadPlatforms();
-      loadExistingTags();
       activeTab.value = "buy";
       buyAmount.value = "";
-      buyDate.value = today.value; // 设置默认加仓日期为当天
+      buyDate.value = today.value;
       sellShares.value = "";
-      sellDate.value = today.value; // 设置默认减仓日期为当天
+      sellDate.value = today.value;
       editAmount.value = "";
       editProfit.value = "";
       addCurrentValue.value = "";
@@ -648,10 +646,10 @@ watch(
       showAddHoldingForm.value = false;
       fundTags.value = props.fundData.tags || "";
 
-      // 设置默认平台
       addPlatform.value = props.platform || "默认";
 
-      // 异步加载历史数据，不阻塞其他操作
+      await loadPlatforms();
+      loadExistingTags();
       loadHistoryData();
     }
   },
