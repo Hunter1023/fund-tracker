@@ -67,8 +67,9 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:2024.12.1
     restart: always
-    network_mode: host
-    command: tunnel --protocol http2 --url http://localhost:8080 run
+    networks:
+      - fund-network
+    command: tunnel --url http://frontend:80 run
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
       - TUNNEL_METRICS=0.0.0.0:20241
