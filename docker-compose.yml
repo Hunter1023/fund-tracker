@@ -69,7 +69,7 @@ services:
     restart: always
     networks:
       - fund-network
-    command: tunnel --url http://frontend:80 run
+    command: tunnel run
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
       - TUNNEL_METRICS=0.0.0.0:20241
