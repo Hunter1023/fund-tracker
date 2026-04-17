@@ -750,10 +750,10 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                     net_value_date = rates_data.get('fsrq', '')
 
                 unit_net_value = None
-                if fund_data and fund_data.get('unit_net_value') is not None and fund_data.get('unit_net_value') != '':
+                if rates_data and rates_data.get('unit_net_value') is not None and rates_data.get('unit_net_value') != '' and rates_data.get('unit_net_value') != 0:
+                    unit_net_value = float(rates_data.get('unit_net_value'))
+                elif fund_data and fund_data.get('unit_net_value') is not None and fund_data.get('unit_net_value') != '':
                     unit_net_value = float(fund_data.get('unit_net_value'))
-                elif rates_data and 'unit_net_value' in rates_data:
-                    unit_net_value = rates_data.get('unit_net_value')
 
                 estimate_net_value = None
                 if fund_data and fund_data.get('estimate_net_value') is not None and fund_data.get('estimate_net_value') != '':
@@ -787,9 +787,18 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
 
                 if realtime_data:
+                    should_update_rates = True
+                    if realtime_data.fsrq and data.get('fsrq', ''):
+                        today = datetime.now().strftime('%Y-%m-%d')
+                        if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
+                            should_update_rates = False
+
                     for key, value in data.items():
-                        if key != 'fund_code' and key != 'fund_name':
-                            setattr(realtime_data, key, value)
+                        if key in ('fund_code', 'fund_name'):
+                            continue
+                        if not should_update_rates and key in ('fsrq', 'daily_change_rate', 'unit_net_value', 'one_month_rate', 'three_month_rate', 'one_year_rate', 'net_value_date'):
+                            continue
+                        setattr(realtime_data, key, value)
                 else:
                     realtime_data = FundRealtimeData(
                         fund_id=fund.id,
@@ -1174,19 +1183,10 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
         # 从API获取数据
         fund_data = DataFetcher.get_fund_valuation(fund_code, int(time.time()))
 
-        # 当force_refresh时，使用10分钟级时间戳绕过lru_cache，确保获取最新数据
-        # 当need_refresh但非force_refresh时，使用小时级时间戳
-        # 否则使用默认的天级缓存
-        if force_refresh:
-            history_timestamp = int(time.time() / 600)
-        else:
-            history_timestamp = int(time.time() / 3600)
-
-        # 只在需要时获取历史数据
         if need_history_data:
-            history_data = DataFetcher.get_fund_history(fund_code, history_timestamp)
+            history_data = DataFetcher.get_fund_history(fund_code)
         else:
-            history_data = DataFetcher.get_fund_history_simple(fund_code, history_timestamp)
+            history_data = DataFetcher.get_fund_history_simple(fund_code)
 
         # 即使fund_data为None，只要history_data有数据，就处理
         if history_data:
@@ -1216,15 +1216,22 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                 # 数据库中也没有值时，设置为空数组
                 data['net_values'] = json.dumps([])
 
-            # 更新或创建数据库记录
             if not skip_db_write:
+                should_update_rates = True
+                if realtime_data and realtime_data.fsrq and data.get('fsrq', ''):
+                    today = datetime.now().strftime('%Y-%m-%d')
+                    if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
+                        should_update_rates = False
+
                 if realtime_data:
                     for key, value in data.items():
-                        if key != 'fund_code' and key != 'fund_name':
-                            # 只有需要完整历史数据时才更新 net_values
-                            if key == 'net_values' and not need_history_data:
-                                continue
-                            setattr(realtime_data, key, value)
+                        if key in ('fund_code', 'fund_name'):
+                            continue
+                        if key == 'net_values' and not need_history_data:
+                            continue
+                        if not should_update_rates and key in ('fsrq', 'daily_change_rate', 'unit_net_value', 'one_month_rate', 'three_month_rate', 'one_year_rate', 'net_value_date'):
+                            continue
+                        setattr(realtime_data, key, value)
                 else:
                     realtime_data = FundRealtimeData(
                         fund_id=fund.id,
@@ -1261,7 +1268,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
         else:
             # API调用失败，尝试使用 get_fund_rates 方法获取数据
             print(f"基金 {fund_code} API调用失败，尝试使用 get_fund_rates 方法获取数据")
-            rates_data = DataFetcher.get_fund_rates(fund_code, history_timestamp if need_refresh else None)
+            rates_data = DataFetcher.get_fund_rates(fund_code)
             if rates_data:
                 # 准备数据
                 data = {
@@ -1289,15 +1296,22 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                     # 数据库中也没有值时，设置为空数组
                     data['net_values'] = json.dumps([])
 
-                # 更新或创建数据库记录
                 if not skip_db_write:
+                    should_update_rates = True
+                    if realtime_data and realtime_data.fsrq and data.get('fsrq', ''):
+                        today = datetime.now().strftime('%Y-%m-%d')
+                        if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
+                            should_update_rates = False
+
                     if realtime_data:
                         for key, value in data.items():
-                            if key != 'fund_code' and key != 'fund_name':
-                                # 只有需要完整历史数据时才更新 net_values
-                                if key == 'net_values' and not need_history_data:
-                                    continue
-                                setattr(realtime_data, key, value)
+                            if key in ('fund_code', 'fund_name'):
+                                continue
+                            if key == 'net_values' and not need_history_data:
+                                continue
+                            if not should_update_rates and key in ('fsrq', 'daily_change_rate', 'unit_net_value', 'one_month_rate', 'three_month_rate', 'one_year_rate', 'net_value_date'):
+                                continue
+                            setattr(realtime_data, key, value)
                     else:
                         realtime_data = FundRealtimeData(
                             fund_id=fund.id,
