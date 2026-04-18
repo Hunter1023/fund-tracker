@@ -67,13 +67,10 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:2024.12.1
     restart: always
-    networks:
-      - fund-network
-    command: tunnel run
+    network_mode: host
+    command: tunnel --url http://localhost:8080 run
     environment:
       - TUNNEL_TOKEN=${TUNNEL_TOKEN}
-      - TUNNEL_METRICS=0.0.0.0:20241
-      - TUNNEL_LOGLEVEL=info
 
 # 自定义网络，保证前后端互通
 networks:
