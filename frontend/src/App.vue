@@ -366,8 +366,8 @@ async function handleGithubCallback() {
 
   try {
     const response = await authApi.githubAuth(code);
-    const { token, user } = response.data;
-    setAuthData(token, user);
+    const { token, refresh_token, user } = response.data;
+    setAuthData(token, user, refresh_token);
     currentUser.value = user;
     activeTab.value = "holding";
     window.history.replaceState({}, document.title, window.location.pathname);

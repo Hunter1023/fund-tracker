@@ -17,14 +17,88 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+function subscribeTokenRefresh(resolve) {
+  refreshSubscribers.push(resolve);
+}
+
+function onTokenRefreshed(newToken) {
+  refreshSubscribers.forEach((resolve) => resolve(newToken));
+  refreshSubscribers = [];
+}
+
+function onRefreshFailed() {
+  refreshSubscribers.forEach((resolve) => resolve(null));
+  refreshSubscribers = [];
+}
+
+async function tryRefreshToken() {
+  const refreshToken = localStorage.getItem("refresh_token");
+  if (!refreshToken) {
+    return null;
+  }
+
+  try {
+    const response = await axios.post(`${API_BASE_URL}/auth/refresh`, null, {
+      headers: {
+        Authorization: `Bearer ${refreshToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const { token, refresh_token, user } = response.data;
+    localStorage.setItem("auth_token", token);
+    localStorage.setItem("refresh_token", refresh_token);
+    localStorage.setItem("auth_user", JSON.stringify(user));
+    window.dispatchEvent(new CustomEvent("auth-changed", { detail: user }));
+    return token;
+  } catch {
+    return null;
+  }
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("auth_user");
-      window.dispatchEvent(new CustomEvent("auth-changed", { detail: null }));
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (
+      error.response &&
+      error.response.status === 401 &&
+      !originalRequest._retry
+    ) {
+      originalRequest._retry = true;
+
+      if (!isRefreshing) {
+        isRefreshing = true;
+        const newToken = await tryRefreshToken();
+        isRefreshing = false;
+
+        if (newToken) {
+          onTokenRefreshed(newToken);
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return api(originalRequest);
+        } else {
+          onRefreshFailed();
+          clearAuthData();
+          return Promise.reject(error);
+        }
+      }
+
+      return new Promise((resolve) => {
+        subscribeTokenRefresh((newToken) => {
+          if (newToken) {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            resolve(api(originalRequest));
+          } else {
+            resolve(Promise.reject(error));
+          }
+        });
+      });
     }
+
     return Promise.reject(error);
   },
 );
@@ -89,15 +163,19 @@ export function getStoredToken() {
   return localStorage.getItem("auth_token");
 }
 
-export function setAuthData(token, user) {
+export function setAuthData(token, user, refreshToken) {
   localStorage.setItem("auth_token", token);
   localStorage.setItem("auth_user", JSON.stringify(user));
+  if (refreshToken) {
+    localStorage.setItem("refresh_token", refreshToken);
+  }
   window.dispatchEvent(new CustomEvent("auth-changed", { detail: user }));
 }
 
 export function clearAuthData() {
   localStorage.removeItem("auth_token");
   localStorage.removeItem("auth_user");
+  localStorage.removeItem("refresh_token");
   clearAllCache();
   window.dispatchEvent(new CustomEvent("auth-changed", { detail: null }));
 }

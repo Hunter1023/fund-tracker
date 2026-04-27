@@ -290,8 +290,8 @@ async function handleEmailLogin() {
       email.value.trim(),
       emailCode.value.trim(),
     );
-    const { token, user } = response.data;
-    setAuthData(token, user);
+    const { token, refresh_token, user } = response.data;
+    setAuthData(token, user, refresh_token);
     emit("login-success", user);
   } catch (err) {
     if (err.response?.data?.error) {
@@ -318,8 +318,8 @@ async function handleAccountLogin() {
   submitting.value = true;
   try {
     const response = await authApi.login(username.value.trim(), password.value);
-    const { token, user } = response.data;
-    setAuthData(token, user);
+    const { token, refresh_token, user } = response.data;
+    setAuthData(token, user, refresh_token);
     emit("login-success", user);
   } catch (err) {
     if (err.response?.data?.error) {
@@ -357,8 +357,8 @@ async function handleAccountRegister() {
       username.value.trim(),
       password.value,
     );
-    const { token, user } = response.data;
-    setAuthData(token, user);
+    const { token, refresh_token, user } = response.data;
+    setAuthData(token, user, refresh_token);
     emit("login-success", user);
   } catch (err) {
     if (err.response?.data?.error) {

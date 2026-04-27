@@ -4,7 +4,7 @@ import logging
 
 import requests
 from flask import request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import User, get_db
 from config import OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET
@@ -56,8 +56,10 @@ def register_auth_routes(app):
             db.commit()
 
             access_token = create_access_token(identity=str(user.id))
+            refresh_token = create_refresh_token(identity=str(user.id))
             return jsonify({
                 'token': access_token,
+                'refresh_token': refresh_token,
                 'user': _user_to_dict(user),
             }), 201
         except Exception as e:
@@ -90,8 +92,10 @@ def register_auth_routes(app):
                 return jsonify({'error': '账号已被禁用'}), 403
 
             access_token = create_access_token(identity=str(user.id))
+            refresh_token = create_refresh_token(identity=str(user.id))
             return jsonify({
                 'token': access_token,
+                'refresh_token': refresh_token,
                 'user': _user_to_dict(user),
             })
         except Exception as e:
@@ -185,8 +189,10 @@ def register_auth_routes(app):
                 return jsonify({'error': '账号已被禁用'}), 403
 
             access_token = create_access_token(identity=str(user.id))
+            refresh_token = create_refresh_token(identity=str(user.id))
             return jsonify({
                 'token': access_token,
+                'refresh_token': refresh_token,
                 'user': _user_to_dict(user),
             })
         except Exception as e:
@@ -247,51 +253,45 @@ def register_auth_routes(app):
                     github_username = github_user.get('login', '')
                     github_email = github_user.get('email', '')
 
-                    existing_by_email = None
                     if github_email:
                         existing_by_email = db.query(User).filter(User.email == github_email).first()
+                        if existing_by_email:
+                            github_email = None
 
-                    if existing_by_email:
-                        user = existing_by_email
-                        user.github_id = github_id
-                        user.github_username = github_username
-                        user.github_avatar = github_user.get('avatar_url', '')
-                        if not user.nickname:
-                            user.nickname = github_user.get('name') or github_username
-                    else:
-                        username = github_username or f"github_{github_id}"
-                        existing = db.query(User).filter(User.username == username).first()
-                        if existing:
-                            username = f"{username}_{github_id}"
+                    username = github_username or f"github_{github_id}"
+                    existing = db.query(User).filter(User.username == username).first()
+                    if existing:
+                        username = f"{username}_{github_id}"
 
-                        user = User(
-                            github_id=github_id,
-                            github_username=github_username,
-                            github_avatar=github_user.get('avatar_url', ''),
-                            email=github_email or None,
-                            username=username,
-                            nickname=github_user.get('name') or github_username,
-                        )
-                        db.add(user)
-                        db.commit()
-                        db.refresh(user)
+                    user = User(
+                        github_id=github_id,
+                        github_username=github_username,
+                        github_avatar=github_user.get('avatar_url', ''),
+                        email=github_email or None,
+                        username=username,
+                        nickname=github_user.get('name') or github_username,
+                    )
+                    db.add(user)
+                    db.commit()
+                    db.refresh(user)
 
-                        # 为新用户创建默认平台
-                        default_platform = Platform(
-                            name='默认',
-                            user_id=user.id,
-                            order_num=0
-                        )
-                        db.add(default_platform)
-                        db.commit()
-                        db.refresh(user)
+                    default_platform = Platform(
+                        name='默认',
+                        user_id=user.id,
+                        order_num=0
+                    )
+                    db.add(default_platform)
+                    db.commit()
+                    db.refresh(user)
 
                 if not user.is_active:
                     return jsonify({'error': '账号已被禁用'}), 403
 
                 access_token = create_access_token(identity=str(user.id))
+                refresh_token = create_refresh_token(identity=str(user.id))
                 return jsonify({
                     'token': access_token,
+                    'refresh_token': refresh_token,
                     'user': _user_to_dict(user),
                 })
             except Exception as e:
@@ -304,6 +304,26 @@ def register_auth_routes(app):
         except requests.RequestException as e:
             logger.error(f"GitHub OAuth请求失败: {e}")
             return jsonify({'error': 'GitHub授权服务不可用'}), 503
+
+    @app.route('/api/auth/refresh', methods=['POST'])
+    @jwt_required(refresh=True)
+    def refresh_token():
+        user_id = get_jwt_identity()
+        db = next(get_db())
+        try:
+            user = db.query(User).filter(User.id == int(user_id)).first()
+            if not user or not user.is_active:
+                return jsonify({'error': '用户不存在或已被禁用'}), 401
+
+            access_token = create_access_token(identity=str(user.id))
+            refresh_token_new = create_refresh_token(identity=str(user.id))
+            return jsonify({
+                'token': access_token,
+                'refresh_token': refresh_token_new,
+                'user': _user_to_dict(user),
+            })
+        finally:
+            db.close()
 
     @app.route('/api/auth/me', methods=['GET'])
     @jwt_required(optional=True)
