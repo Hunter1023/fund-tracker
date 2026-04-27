@@ -427,6 +427,21 @@ def update_holding_profit():
                     daily_change_rate=float(daily_change_rate) if daily_change_rate != '-' else 0
                 )
                 db.add(history_record)
+
+                # 同时更新基金历史净值数据，确保历史走势图也更新到今日
+                from data_fetcher import DataFetcher
+                if fund.realtime_data:
+                    # 强制刷新历史数据
+                    history_data = DataFetcher.get_fund_history(fund_code)
+                    if history_data:
+                        fund.realtime_data.net_values = json.dumps(history_data.get('net_values', []))
+                        fund.realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
+                        fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
+                        fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
+                        fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
+                        fund.realtime_data.fsrq = history_data.get('fsrq', '')
+                        fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+                        fund.realtime_data.updated_at = datetime.now()
                 db.flush()
 
             update_holding_data()
@@ -2082,14 +2097,10 @@ def manage_holding():
                     today = datetime.now().strftime('%Y-%m-%d')
                     is_today = (fsrq == today)
 
-                    if is_today and unit_net_value and holding.shares and daily_change_rate not in ('-', None) and daily_change_rate != 0:
-                        current_value = holding.shares * float(unit_net_value)
-                        profit_loss = current_value - holding.cost
-                        profit_loss_rate = (profit_loss / holding.cost * 100) if holding.cost > 0 else 0
-                    else:
-                        current_value = holding.current_value or holding.cost
-                        profit_loss = holding.profit_loss if holding.profit_loss is not None else (current_value - holding.cost)
-                        profit_loss_rate = holding.profit_loss_rate if holding.profit_loss_rate is not None else ((profit_loss / holding.cost * 100) if holding.cost > 0 else 0)
+                    # 直接使用数据库中存储的值，尊重用户的手动编辑
+                    current_value = holding.current_value or holding.cost
+                    profit_loss = holding.profit_loss if holding.profit_loss is not None else (current_value - holding.cost)
+                    profit_loss_rate = holding.profit_loss_rate if holding.profit_loss_rate is not None else ((profit_loss / holding.cost * 100) if holding.cost > 0 else 0)
 
                     if not is_trading_day:
                         estimate_change_rate = '-'
