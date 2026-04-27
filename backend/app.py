@@ -17,7 +17,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import threading
 from sqlalchemy.exc import OperationalError, IntegrityError
 import random
-from config import DATABASE_URL, JWT_SECRET_KEY, JWT_ACCESS_TOKEN_EXPIRES, DEFAULT_PUBLIC_FUNDS
+from config import DATABASE_URL, JWT_SECRET_KEY, JWT_ACCESS_TOKEN_EXPIRES, JWT_REFRESH_TOKEN_EXPIRES, DEFAULT_PUBLIC_FUNDS
 import concurrent.futures
 import traceback
 
@@ -31,6 +31,7 @@ app.config['SQLALCHEMY_POOL_TIMEOUT'] = 30
 app.config['SQLALCHEMY_POOL_RECYCLE'] = 1800
 app.config['JWT_SECRET_KEY'] = JWT_SECRET_KEY
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = JWT_ACCESS_TOKEN_EXPIRES
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = JWT_REFRESH_TOKEN_EXPIRES
 db = SQLAlchemy(app)
 CORS(app, supports_credentials=True)
 jwt = JWTManager(app)

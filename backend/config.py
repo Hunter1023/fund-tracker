@@ -32,7 +32,8 @@ else:
     import secrets
     JWT_SECRET_KEY = secrets.token_urlsafe(32)
     print(f"[警告] JWT_SECRET_KEY 未设置，已自动生成随机密钥。重启后Token将失效，生产环境请设置环境变量！")
-JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES', 86400))
+JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES', 7200))
+JWT_REFRESH_TOKEN_EXPIRES = int(os.environ.get('JWT_REFRESH_TOKEN_EXPIRES', 2592000))
 
 # GitHub OAuth配置
 OAUTH_CLIENT_ID = os.environ.get('OAUTH_CLIENT_ID', '')
