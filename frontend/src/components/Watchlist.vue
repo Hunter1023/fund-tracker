@@ -236,7 +236,6 @@ const props = defineProps({
 
 const {
   funds,
-  loading,
   currentTag,
   sortField,
   sortDirection,

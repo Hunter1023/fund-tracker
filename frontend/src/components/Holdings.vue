@@ -103,14 +103,13 @@
           <button
             class="sync-btn"
             @click="showSearchModal = true"
-            :disabled="loading"
           >
             <i class="bi bi-plus-circle me-2"></i>添加持仓
           </button>
         </div>
       </div>
 
-      <div v-else>
+      <div v-show="sortedHoldings.length > 0">
         <div class="table-container">
           <div class="table-wrapper">
             <table class="custom-table">
@@ -285,7 +284,6 @@
             <button
               class="sync-btn"
               @click="showSearchModal = true"
-              :disabled="loading"
             >
               <i class="bi bi-plus-circle me-2"></i>添加持仓
             </button>
@@ -326,7 +324,6 @@ import SearchFundModal from "./SearchFundModal.vue";
 
 const {
   holdings,
-  loading,
   isLoaded,
   sortField,
   sortDirection,

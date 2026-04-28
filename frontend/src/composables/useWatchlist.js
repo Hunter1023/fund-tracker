@@ -3,7 +3,6 @@ import { fundApi, holdingApi, watchlistApi } from "../services/api";
 
 export function useWatchlist() {
   const funds = ref([]);
-  const loading = ref(false);
   const currentTag = ref("");
   const searchKeyword = ref("");
   const searchResults = ref([]);
@@ -312,7 +311,6 @@ export function useWatchlist() {
 
   return {
     funds,
-    loading,
     currentTag,
     searchKeyword,
     searchResults,

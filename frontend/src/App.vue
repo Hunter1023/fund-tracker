@@ -10,12 +10,12 @@
         <button
           class="refresh-btn"
           @click="handleManualRefresh"
-          :disabled="loading"
+          :disabled="isManualRefresh"
           title="刷新数据"
         >
           <i
             class="bi bi-arrow-clockwise"
-            :class="{ spinning: isManualRefresh && loading }"
+            :class="{ spinning: isManualRefresh }"
           ></i>
         </button>
         <button
