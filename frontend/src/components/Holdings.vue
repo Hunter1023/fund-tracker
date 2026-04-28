@@ -1,295 +1,290 @@
 <template>
   <div class="holdings-container">
-      <div class="platform-tabs">
-        <button
-          v-for="platform in platforms"
-          :key="platform"
-          :class="['platform-tab', { active: selectedPlatform === platform }]"
-          @click="selectedPlatform = platform"
-        >
-          {{ platform }}
-        </button>
-        <button
-          class="platform-tab manage-tab"
-          @click="showPlatformManager = true"
-          title="管理平台"
-        >
-          <i class="bi bi-gear"></i>
-        </button>
-      </div>
+    <div class="platform-tabs">
+      <button
+        v-for="platform in platforms"
+        :key="platform"
+        :class="['platform-tab', { active: selectedPlatform === platform }]"
+        @click="selectedPlatform = platform"
+      >
+        {{ platform }}
+      </button>
+      <button
+        class="platform-tab manage-tab"
+        @click="showPlatformManager = true"
+        title="管理平台"
+      >
+        <i class="bi bi-gear"></i>
+      </button>
+    </div>
 
-      <div class="summary-card">
-        <div class="summary-item">
-          <div class="summary-label">今日收益</div>
-          <div
-            class="summary-value"
-            :class="
-              summary.hasTradingDayData && summary.totalTodayProfit >= 0
-                ? 'profit-positive'
-                : summary.hasTradingDayData
-                  ? 'profit-negative'
-                  : ''
-            "
-          >
-            {{
-              summary.hasTradingDayData
-                ? "¥" + formatAmount(summary.totalTodayProfit)
-                : "-"
-            }}
-          </div>
-        </div>
-        <div class="summary-item">
-          <div class="summary-label">持有收益</div>
-          <div
-            class="summary-value"
-            :class="
-              summary.totalProfit >= 0 ? 'profit-positive' : 'profit-negative'
-            "
-          >
-            ¥{{ formatAmount(summary.totalProfit) }} ({{
-              summary.totalProfitRate.toFixed(2)
-            }}%)
-          </div>
-        </div>
-        <div class="summary-item">
-          <div class="summary-label">总金额</div>
-          <div class="summary-value">
-            ¥{{ formatAmount(summary.totalValue) }}
-          </div>
-        </div>
-        <div class="summary-item">
-          <div class="summary-label">总成本</div>
-          <div class="summary-value">
-            ¥{{ formatAmount(summary.totalAmount) }}
-          </div>
-        </div>
-        <div class="summary-item">
-          <div class="summary-label">基金数量</div>
-          <div class="summary-value">{{ summary.fundCount }}</div>
-        </div>
-      </div>
-
-      <!-- 板块分布 - 可展开/收起 -->
-      <div class="sector-distribution-section">
+    <div class="summary-card">
+      <div class="summary-item">
+        <div class="summary-label">今日收益</div>
         <div
-          class="sector-header"
-          @click="showSectorDistribution = !showSectorDistribution"
+          class="summary-value"
+          :class="
+            summary.hasTradingDayData && summary.totalTodayProfit >= 0
+              ? 'profit-positive'
+              : summary.hasTradingDayData
+                ? 'profit-negative'
+                : ''
+          "
         >
-          <h3 class="sector-title">板块分布</h3>
-          <i
-            :class="
-              showSectorDistribution ? 'bi bi-chevron-up' : 'bi bi-chevron-down'
-            "
-            class="toggle-icon"
-          ></i>
+          {{
+            summary.hasTradingDayData
+              ? "¥" + formatAmount(summary.totalTodayProfit)
+              : "-"
+          }}
         </div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">持有收益</div>
         <div
-          v-if="showSectorDistribution && sortedHoldings.length > 0"
-          class="chart-container"
+          class="summary-value"
+          :class="
+            summary.totalProfit >= 0 ? 'profit-positive' : 'profit-negative'
+          "
         >
-          <div class="pie-chart-wrapper">
-            <div class="chart-area">
-              <canvas ref="pieChart"></canvas>
-            </div>
-            <div ref="legendContainer" class="custom-legend"></div>
+          ¥{{ formatAmount(summary.totalProfit) }} ({{
+            summary.totalProfitRate.toFixed(2)
+          }}%)
+        </div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">总金额</div>
+        <div class="summary-value">¥{{ formatAmount(summary.totalValue) }}</div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">总成本</div>
+        <div class="summary-value">
+          ¥{{ formatAmount(summary.totalAmount) }}
+        </div>
+      </div>
+      <div class="summary-item">
+        <div class="summary-label">基金数量</div>
+        <div class="summary-value">{{ summary.fundCount }}</div>
+      </div>
+    </div>
+
+    <!-- 板块分布 - 可展开/收起 -->
+    <div class="sector-distribution-section">
+      <div
+        class="sector-header"
+        @click="showSectorDistribution = !showSectorDistribution"
+      >
+        <h3 class="sector-title">板块分布</h3>
+        <i
+          :class="
+            showSectorDistribution ? 'bi bi-chevron-up' : 'bi bi-chevron-down'
+          "
+          class="toggle-icon"
+        ></i>
+      </div>
+      <div
+        v-if="showSectorDistribution && sortedHoldings.length > 0"
+        class="chart-container"
+      >
+        <div class="pie-chart-wrapper">
+          <div class="chart-area">
+            <canvas ref="pieChart"></canvas>
           </div>
+          <div ref="legendContainer" class="custom-legend"></div>
         </div>
       </div>
+    </div>
 
-      <div v-if="sortedHoldings.length === 0" class="empty-state">
-        <div class="empty-icon">💼</div>
-        <p>暂无持仓</p>
-        <div class="action-bar empty-action-bar">
-          <button
-            class="sync-btn"
-            @click="showSearchModal = true"
-            :disabled="loading"
-          >
-            <i class="bi bi-plus-circle me-2"></i>添加持仓
-          </button>
-        </div>
+    <div v-if="sortedHoldings.length === 0" class="empty-state">
+      <div class="empty-icon">💼</div>
+      <p>暂无持仓</p>
+      <div class="action-bar empty-action-bar">
+        <button class="sync-btn" @click="showSearchModal = true">
+          <i class="bi bi-plus-circle me-2"></i>添加持仓
+        </button>
       </div>
+    </div>
 
-      <div v-else>
-        <div class="table-container">
-          <div class="table-wrapper">
-            <table class="custom-table">
-              <thead>
-                <tr>
-                  <th
-                    v-for="column in columns"
-                    :key="column.key"
-                    :class="['table-header', { sortable: column.sortable }]"
-                    @click="column.sortable && handleSort(column.key)"
-                  >
-                    <div class="header-content">
-                      <span>{{ column.label }}</span>
-                      <span v-if="column.sortable" class="sort-icon">
-                        <i
-                          v-if="sortField === column.key"
-                          :class="
-                            sortDirection === 'asc'
-                              ? 'bi bi-caret-up-fill'
-                              : 'bi bi-caret-down-fill'
-                          "
-                          class="sort-active"
-                        ></i>
-                        <i v-else class="bi bi-caret-up-down"></i>
-                      </span>
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="holding in sortedHoldings"
-                  :key="`${holding.fund_code}-${holding.platform || '默认'}`"
-                  class="table-row"
+    <div v-show="sortedHoldings.length > 0">
+      <div class="table-container">
+        <div class="table-wrapper">
+          <table class="custom-table">
+            <thead>
+              <tr>
+                <th
+                  v-for="column in columns"
+                  :key="column.key"
+                  :class="['table-header', { sortable: column.sortable }]"
+                  @click="column.sortable && handleSort(column.key)"
                 >
-                  <td>
-                    <div
-                      v-for="tag in (holding.tags || '')
-                        .split(',')
-                        .filter((t) => t.trim())"
-                      :key="tag"
-                      class="tag-item"
+                  <div class="header-content">
+                    <span>{{ column.label }}</span>
+                    <span v-if="column.sortable" class="sort-icon">
+                      <i
+                        v-if="sortField === column.key"
+                        :class="
+                          sortDirection === 'asc'
+                            ? 'bi bi-caret-up-fill'
+                            : 'bi bi-caret-down-fill'
+                        "
+                        class="sort-active"
+                      ></i>
+                      <i v-else class="bi bi-caret-up-down"></i>
+                    </span>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="holding in sortedHoldings"
+                :key="`${holding.fund_code}-${holding.platform || '默认'}`"
+                class="table-row"
+              >
+                <td>
+                  <div
+                    v-for="tag in (holding.tags || '')
+                      .split(',')
+                      .filter((t) => t.trim())"
+                    :key="tag"
+                    class="tag-item"
+                  >
+                    <span
+                      class="tag-badge"
+                      :class="`tag-${getTagColorIndex(tag)}`"
                     >
+                      {{ tag.trim() }}
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <div class="fund-name-cell">
+                    <div
+                      class="fund-name clickable"
+                      @click="openFundDetail(holding)"
+                    >
+                      {{ holding.fund_name }}
+                    </div>
+                    <div class="fund-info-row">
                       <span
-                        class="tag-badge"
-                        :class="`tag-${getTagColorIndex(tag)}`"
+                        v-if="isUpdatedToday(holding)"
+                        class="badge update-badge"
+                        >已更新</span
                       >
-                        {{ tag.trim() }}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="fund-name-cell">
-                      <div
-                        class="fund-name clickable"
-                        @click="openFundDetail(holding)"
-                      >
-                        {{ holding.fund_name }}
-                      </div>
-                      <div class="fund-info-row">
-                        <span
-                          v-if="isUpdatedToday(holding)"
-                          class="badge update-badge"
-                          >已更新</span
-                        >
-                        <div class="fund-code">
-                          {{ holding.fund_code }}
-                        </div>
+                      <div class="fund-code">
+                        {{ holding.fund_code }}
                       </div>
                     </div>
-                  </td>
-                  <td>
-                    <div
-                      class="rate-cell"
-                      :style="{
-                        color: getChangeRateColor(holding.daily_change_rate),
-                      }"
-                    >
-                      <div class="rate-value">
-                        {{ holding.daily_change_rate }}%
-                      </div>
-                      <div v-if="!isUpdatedToday(holding)" class="rate-date">
-                        {{ getMonthDay(holding.fsrq) }}
-                      </div>
+                  </div>
+                </td>
+                <td>
+                  <div
+                    class="rate-cell"
+                    :style="{
+                      color: getChangeRateColor(holding.daily_change_rate),
+                    }"
+                  >
+                    <div class="rate-value">
+                      {{ holding.daily_change_rate }}%
                     </div>
-                  </td>
-                  <td>
-                    <div class="rate-cell">
-                      <div
-                        class="rate-value"
-                        :style="{
-                          color:
-                            holding.estimate_change_rate !== null &&
-                            holding.estimate_change_rate !== undefined &&
-                            holding.estimate_change_rate !== '-'
-                              ? getChangeRateColor(holding.estimate_change_rate)
-                              : '#6c757d',
-                        }"
-                      >
-                        {{
-                          holding.estimate_change_rate !== null &&
-                          holding.estimate_change_rate !== undefined &&
-                          holding.estimate_change_rate !== "-"
-                            ? holding.estimate_change_rate + "%"
-                            : "-"
-                        }}
-                      </div>
-                      <div v-if="holding.estimate_time && holding.estimate_change_rate !== '-'" class="rate-date">
-                        {{ formatEstimateTime(holding.estimate_time) }}
-                      </div>
+                    <div v-if="!isUpdatedToday(holding)" class="rate-date">
+                      {{ getMonthDay(holding.fsrq) }}
                     </div>
-                  </td>
-                  <td>
+                  </div>
+                </td>
+                <td>
+                  <div class="rate-cell">
                     <div
                       class="rate-value"
                       :style="{
                         color:
-                          holding.estimate_profit !== null &&
-                          holding.estimate_profit !== undefined
-                            ? getChangeRateColor(holding.estimate_profit)
+                          holding.estimate_change_rate !== null &&
+                          holding.estimate_change_rate !== undefined &&
+                          holding.estimate_change_rate !== '-'
+                            ? getChangeRateColor(holding.estimate_change_rate)
                             : '#6c757d',
                       }"
                     >
                       {{
-                        holding.estimate_profit !== null &&
-                        holding.estimate_profit !== undefined
-                          ? "¥" + formatAmount(holding.estimate_profit || 0)
+                        holding.estimate_change_rate !== null &&
+                        holding.estimate_change_rate !== undefined &&
+                        holding.estimate_change_rate !== "-"
+                          ? holding.estimate_change_rate + "%"
                           : "-"
                       }}
                     </div>
-                  </td>
-                  <td>
                     <div
-                      class="rate-value"
-                      :style="{
-                        color: getChangeRateColor(holding.one_month_rate),
-                      }"
+                      v-if="
+                        holding.estimate_time &&
+                        holding.estimate_change_rate !== '-'
+                      "
+                      class="rate-date"
                     >
-                      {{ (holding.one_month_rate || 0).toFixed(2) }}%
+                      {{ formatEstimateTime(holding.estimate_time) }}
                     </div>
-                  </td>
-                  <td>
-                    <div
-                      class="rate-cell"
-                      :style="{
-                        color: getChangeRateColor(calculateProfit(holding)),
-                      }"
-                    >
-                      <div class="rate-value">
-                        ¥{{ formatAmount(calculateProfit(holding)) }}
-                      </div>
-                      <div class="rate-value">
-                        {{ calculateProfitRate(holding).toFixed(2) }}%
-                      </div>
-                    </div>
-                  </td>
-                  <td>
+                  </div>
+                </td>
+                <td>
+                  <div
+                    class="rate-value"
+                    :style="{
+                      color:
+                        holding.estimate_profit !== null &&
+                        holding.estimate_profit !== undefined
+                          ? getChangeRateColor(holding.estimate_profit)
+                          : '#6c757d',
+                    }"
+                  >
+                    {{
+                      holding.estimate_profit !== null &&
+                      holding.estimate_profit !== undefined
+                        ? "¥" + formatAmount(holding.estimate_profit || 0)
+                        : "-"
+                    }}
+                  </div>
+                </td>
+                <td>
+                  <div
+                    class="rate-value"
+                    :style="{
+                      color: getChangeRateColor(holding.one_month_rate),
+                    }"
+                  >
+                    {{ (holding.one_month_rate || 0).toFixed(2) }}%
+                  </div>
+                </td>
+                <td>
+                  <div
+                    class="rate-cell"
+                    :style="{
+                      color: getChangeRateColor(calculateProfit(holding)),
+                    }"
+                  >
                     <div class="rate-value">
-                      ¥{{ formatAmount(holding.current_value) }}
+                      ¥{{ formatAmount(calculateProfit(holding)) }}
                     </div>
-                  </td>
-                  <td>
                     <div class="rate-value">
-                      ¥{{ formatAmount(holding.cost) }}
+                      {{ calculateProfitRate(holding).toFixed(2) }}%
                     </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="action-bar">
-            <button
-              class="sync-btn"
-              @click="showSearchModal = true"
-              :disabled="loading"
-            >
-              <i class="bi bi-plus-circle me-2"></i>添加持仓
-            </button>
-          </div>
+                  </div>
+                </td>
+                <td>
+                  <div class="rate-value">
+                    ¥{{ formatAmount(holding.current_value) }}
+                  </div>
+                </td>
+                <td>
+                  <div class="rate-value">
+                    ¥{{ formatAmount(holding.cost) }}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="action-bar">
+          <button class="sync-btn" @click="showSearchModal = true">
+            <i class="bi bi-plus-circle me-2"></i>添加持仓
+          </button>
         </div>
       </div>
     </div>
@@ -326,7 +321,6 @@ import SearchFundModal from "./SearchFundModal.vue";
 
 const {
   holdings,
-  loading,
   isLoaded,
   sortField,
   sortDirection,
