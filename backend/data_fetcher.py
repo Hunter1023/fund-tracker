@@ -596,18 +596,14 @@ class DataFetcher:
         """
         获取基金历史净值数据
         :param fund_code: 基金代码
-        :param timestamp: 时间戳（用于缓存过期）
+        :param timestamp: 时间戳（用于缓存过期，传入秒级时间戳可强制刷新）
         :return: 历史净值数据和涨跌幅数据
         """
-        # 确保timestamp为天级时间戳，实现24小时缓存过期
         if timestamp is None:
-            # 使用天级时间戳（86400秒）
             timestamp = int(time.time() / 86400)
 
-        # 内部函数，用于缓存
         @lru_cache(maxsize=128)
         def _get_fund_history(fund_code, timestamp):
-            # 首先使用 get_fund_rates 方法获取涨跌幅数据（这个方法已经有完整的回退机制）
             rates_data = DataFetcher.get_fund_rates(fund_code, timestamp)
             one_month_rate = rates_data.get('one_month_rate', 0)
             three_month_rate = rates_data.get('three_month_rate', 0)

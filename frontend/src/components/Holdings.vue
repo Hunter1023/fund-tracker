@@ -233,7 +233,7 @@
                             : "-"
                         }}
                       </div>
-                      <div v-if="holding.estimate_time" class="rate-date">
+                      <div v-if="holding.estimate_time && holding.estimate_change_rate !== '-'" class="rate-date">
                         {{ formatEstimateTime(holding.estimate_time) }}
                       </div>
                     </div>

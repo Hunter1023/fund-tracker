@@ -1553,15 +1553,33 @@ def get_fund_history(fund_code):
     :return: 历史净值数据和近1个月涨幅
     """
     from datetime import datetime, timedelta
+    force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     db = next(get_db())
     try:
-        # 先尝试从数据库获取
         fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
-        if fund and fund.realtime_data and fund.realtime_data.net_values:
-            # 检查数据是否过期（超过1天）
+
+        if not force_refresh and fund and fund.realtime_data and fund.realtime_data.net_values:
             updated_at = fund.realtime_data.updated_at
-            if updated_at and (datetime.now() - updated_at.replace(tzinfo=None)) < timedelta(days=1):
-                # 数据未过期，直接返回数据库中的数据
+            fsrq = fund.realtime_data.fsrq or ''
+
+            now = datetime.now()
+            is_weekday = now.weekday() < 5
+
+            data_is_fresh = False
+            if updated_at and (now - updated_at.replace(tzinfo=None)) < timedelta(days=1):
+                if is_weekday and fsrq:
+                    today_str = now.strftime('%Y-%m-%d')
+                    if now.weekday() == 0:
+                        yesterday_str = (now - timedelta(days=3)).strftime('%Y-%m-%d')
+                    else:
+                        yesterday_str = (now - timedelta(days=1)).strftime('%Y-%m-%d')
+
+                    if fsrq == today_str or fsrq == yesterday_str:
+                        data_is_fresh = True
+                else:
+                    data_is_fresh = True
+
+            if data_is_fresh:
                 net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
                 return jsonify({
                     'fund_code': fund_code,
@@ -1574,10 +1592,8 @@ def get_fund_history(fund_code):
                     'unit_net_value': fund.realtime_data.unit_net_value or 0
                 })
 
-        # 数据不存在或已过期，从第三方接口获取
-        history_data = DataFetcher.get_fund_history(fund_code)
+        history_data = DataFetcher.get_fund_history(fund_code, int(time.time()))
 
-        # 保存到数据库
         if fund:
             if not fund.realtime_data:
                 fund.realtime_data = FundRealtimeData(fund_id=fund.id)
@@ -1594,7 +1610,6 @@ def get_fund_history(fund_code):
         return jsonify(history_data)
     except Exception as e:
         logger.error(f"获取基金历史净值失败: {e}")
-        # 如果出错，尝试返回数据库中的旧数据（如果有）
         if fund and fund.realtime_data and fund.realtime_data.net_values:
             net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
             return jsonify({
