@@ -201,19 +201,21 @@
                   class="table-row"
                 >
                   <td>
-                    <div
-                      v-for="tag in (holding.tags || '')
-                        .split(',')
-                        .filter((t) => t.trim())"
-                      :key="tag"
-                      class="tag-item"
-                    >
-                      <span
-                        class="tag-badge"
-                        :class="`tag-${getTagColorIndex(tag)}`"
+                    <div class="tags-container">
+                      <div
+                        v-for="tag in (holding.tags || '')
+                          .split(',')
+                          .filter((t) => t.trim())"
+                        :key="tag"
+                        class="tag-item"
                       >
-                        {{ tag.trim() }}
-                      </span>
+                        <span
+                          class="tag-badge"
+                          :class="`tag-${getTagColorIndex(tag)}`"
+                        >
+                          {{ tag.trim() }}
+                        </span>
+                      </div>
                     </div>
                   </td>
                   <td>
@@ -492,6 +494,15 @@ watch(
     updatePieChart();
   },
   { deep: true },
+);
+
+// 监听平台切换，重新同步行高
+watch(
+  selectedPlatform,
+  async () => {
+    await nextTick();
+    syncRowHeights();
+  },
 );
 
 // 监听展开状态变化，当展开时更新饼图
@@ -1214,8 +1225,15 @@ defineExpose({
   color: #9ca3af;
 }
 
+.tags-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
 .tag-item {
-  margin-bottom: 6px;
+  margin-bottom: 0;
 }
 
 .tag-badge {
