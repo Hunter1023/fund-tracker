@@ -106,183 +106,221 @@
 
     <div v-show="sortedHoldings.length > 0">
       <div class="table-container">
-        <div class="table-wrapper">
-          <table class="custom-table">
-            <thead>
-              <tr>
-                <th
-                  v-for="(column, index) in columns"
-                  :key="column.key"
-                  :class="[
-                    'table-header',
-                    { sortable: column.sortable, 'sticky-column': index === 0 },
-                  ]"
-                  @click="column.sortable && handleSort(column.key)"
-                >
-                  <div class="header-content">
-                    <span>{{ column.label }}</span>
-                    <span v-if="column.sortable" class="sort-icon">
-                      <i
-                        v-if="sortField === column.key"
-                        :class="
-                          sortDirection === 'asc'
-                            ? 'bi bi-caret-up-fill'
-                            : 'bi bi-caret-down-fill'
-                        "
-                        class="sort-active"
-                      ></i>
-                      <i v-else class="bi bi-caret-up-down"></i>
-                    </span>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="holding in sortedHoldings"
-                :key="`${holding.fund_code}-${holding.platform || '默认'}`"
-                class="table-row"
-              >
-                <td class="sticky-column">
-                  <div class="fund-name-cell">
-                    <div
-                      class="fund-name clickable"
-                      @click="openFundDetail(holding)"
-                    >
-                      {{ holding.fund_name }}
+        <div class="frozen-table-wrapper">
+          <div class="frozen-column">
+            <table class="frozen-table">
+              <thead>
+                <tr>
+                  <th
+                    :class="[
+                      'table-header',
+                      { sortable: columns[0]?.sortable },
+                    ]"
+                    @click="columns[0]?.sortable && handleSort(columns[0]?.key)"
+                  >
+                    <div class="header-content">
+                      <span>{{ columns[0]?.label }}</span>
+                      <span v-if="columns[0]?.sortable" class="sort-icon">
+                        <i
+                          v-if="sortField === columns[0]?.key"
+                          :class="
+                            sortDirection === 'asc'
+                              ? 'bi bi-caret-up-fill'
+                              : 'bi bi-caret-down-fill'
+                          "
+                          class="sort-active"
+                        ></i>
+                        <i v-else class="bi bi-caret-up-down"></i>
+                      </span>
                     </div>
-                    <div class="fund-info-row">
-                      <span
-                        v-if="isUpdatedToday(holding)"
-                        class="badge update-badge"
-                        >已更新</span
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="holding in sortedHoldings"
+                  :key="`${holding.fund_code}-${holding.platform || '默认'}`"
+                  class="table-row"
+                >
+                  <td>
+                    <div class="fund-name-cell">
+                      <div
+                        class="fund-name clickable"
+                        @click="openFundDetail(holding)"
                       >
-                      <div class="fund-code">
-                        {{ holding.fund_code }}
+                        {{ holding.fund_name }}
+                      </div>
+                      <div class="fund-info-row">
+                        <span
+                          v-if="isUpdatedToday(holding)"
+                          class="badge update-badge"
+                          >已更新</span
+                        >
+                        <div class="fund-code">
+                          {{ holding.fund_code }}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </td>
-                <td>
-                  <div
-                    v-for="tag in (holding.tags || '')
-                      .split(',')
-                      .filter((t) => t.trim())"
-                    :key="tag"
-                    class="tag-item"
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="scrollable-table-wrapper" ref="tableWrapper">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th
+                    v-for="column in columns.slice(1)"
+                    :key="column.key"
+                    :class="['table-header', { sortable: column.sortable }]"
+                    @click="column.sortable && handleSort(column.key)"
                   >
-                    <span
-                      class="tag-badge"
-                      :class="`tag-${getTagColorIndex(tag)}`"
+                    <div class="header-content">
+                      <span>{{ column.label }}</span>
+                      <span v-if="column.sortable" class="sort-icon">
+                        <i
+                          v-if="sortField === column.key"
+                          :class="
+                            sortDirection === 'asc'
+                              ? 'bi bi-caret-up-fill'
+                              : 'bi bi-caret-down-fill'
+                          "
+                          class="sort-active"
+                        ></i>
+                        <i v-else class="bi bi-caret-up-down"></i>
+                      </span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="holding in sortedHoldings"
+                  :key="`${holding.fund_code}-${holding.platform || '默认'}`"
+                  class="table-row"
+                >
+                  <td>
+                    <div
+                      v-for="tag in (holding.tags || '')
+                        .split(',')
+                        .filter((t) => t.trim())"
+                      :key="tag"
+                      class="tag-item"
                     >
-                      {{ tag.trim() }}
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <div
-                    class="rate-cell"
-                    :style="{
-                      color: getChangeRateColor(holding.daily_change_rate),
-                    }"
-                  >
-                    <div class="rate-value">
-                      {{ holding.daily_change_rate }}%
+                      <span
+                        class="tag-badge"
+                        :class="`tag-${getTagColorIndex(tag)}`"
+                      >
+                        {{ tag.trim() }}
+                      </span>
                     </div>
-                    <div v-if="!isUpdatedToday(holding)" class="rate-date">
-                      {{ getMonthDay(holding.fsrq) }}
+                  </td>
+                  <td>
+                    <div
+                      class="rate-cell"
+                      :style="{
+                        color: getChangeRateColor(holding.daily_change_rate),
+                      }"
+                    >
+                      <div class="rate-value">
+                        {{ holding.daily_change_rate }}%
+                      </div>
+                      <div v-if="!isUpdatedToday(holding)" class="rate-date">
+                        {{ getMonthDay(holding.fsrq) }}
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td>
-                  <div class="rate-cell">
+                  </td>
+                  <td>
+                    <div class="rate-cell">
+                      <div
+                        class="rate-value"
+                        :style="{
+                          color:
+                            holding.estimate_change_rate !== null &&
+                            holding.estimate_change_rate !== undefined &&
+                            holding.estimate_change_rate !== '-'
+                              ? getChangeRateColor(holding.estimate_change_rate)
+                              : '#6c757d',
+                        }"
+                      >
+                        {{
+                          holding.estimate_change_rate !== null &&
+                          holding.estimate_change_rate !== undefined &&
+                          holding.estimate_change_rate !== "-"
+                            ? holding.estimate_change_rate + "%"
+                            : "-"
+                        }}
+                      </div>
+                      <div
+                        v-if="
+                          holding.estimate_time &&
+                          holding.estimate_change_rate !== '-'
+                        "
+                        class="rate-date"
+                      >
+                        {{ formatEstimateTime(holding.estimate_time) }}
+                      </div>
+                    </div>
+                  </td>
+                  <td>
                     <div
                       class="rate-value"
                       :style="{
                         color:
-                          holding.estimate_change_rate !== null &&
-                          holding.estimate_change_rate !== undefined &&
-                          holding.estimate_change_rate !== '-'
-                            ? getChangeRateColor(holding.estimate_change_rate)
+                          holding.estimate_profit !== null &&
+                          holding.estimate_profit !== undefined
+                            ? getChangeRateColor(holding.estimate_profit)
                             : '#6c757d',
                       }"
                     >
                       {{
-                        holding.estimate_change_rate !== null &&
-                        holding.estimate_change_rate !== undefined &&
-                        holding.estimate_change_rate !== "-"
-                          ? holding.estimate_change_rate + "%"
+                        holding.estimate_profit !== null &&
+                        holding.estimate_profit !== undefined
+                          ? "¥" + formatAmount(holding.estimate_profit || 0)
                           : "-"
                       }}
                     </div>
+                  </td>
+                  <td>
                     <div
-                      v-if="
-                        holding.estimate_time &&
-                        holding.estimate_change_rate !== '-'
-                      "
-                      class="rate-date"
+                      class="rate-value"
+                      :style="{
+                        color: getChangeRateColor(holding.one_month_rate),
+                      }"
                     >
-                      {{ formatEstimateTime(holding.estimate_time) }}
+                      {{ (holding.one_month_rate || 0).toFixed(2) }}%
                     </div>
-                  </div>
-                </td>
-                <td>
-                  <div
-                    class="rate-value"
-                    :style="{
-                      color:
-                        holding.estimate_profit !== null &&
-                        holding.estimate_profit !== undefined
-                          ? getChangeRateColor(holding.estimate_profit)
-                          : '#6c757d',
-                    }"
-                  >
-                    {{
-                      holding.estimate_profit !== null &&
-                      holding.estimate_profit !== undefined
-                        ? "¥" + formatAmount(holding.estimate_profit || 0)
-                        : "-"
-                    }}
-                  </div>
-                </td>
-                <td>
-                  <div
-                    class="rate-value"
-                    :style="{
-                      color: getChangeRateColor(holding.one_month_rate),
-                    }"
-                  >
-                    {{ (holding.one_month_rate || 0).toFixed(2) }}%
-                  </div>
-                </td>
-                <td>
-                  <div
-                    class="rate-cell"
-                    :style="{
-                      color: getChangeRateColor(calculateProfit(holding)),
-                    }"
-                  >
+                  </td>
+                  <td>
+                    <div
+                      class="rate-cell"
+                      :style="{
+                        color: getChangeRateColor(calculateProfit(holding)),
+                      }"
+                    >
+                      <div class="rate-value">
+                        ¥{{ formatAmount(calculateProfit(holding)) }}
+                      </div>
+                      <div class="rate-value">
+                        {{ calculateProfitRate(holding).toFixed(2) }}%
+                      </div>
+                    </div>
+                  </td>
+                  <td>
                     <div class="rate-value">
-                      ¥{{ formatAmount(calculateProfit(holding)) }}
+                      ¥{{ formatAmount(holding.current_value) }}
                     </div>
+                  </td>
+                  <td>
                     <div class="rate-value">
-                      {{ calculateProfitRate(holding).toFixed(2) }}%
+                      ¥{{ formatAmount(holding.cost) }}
                     </div>
-                  </div>
-                </td>
-                <td>
-                  <div class="rate-value">
-                    ¥{{ formatAmount(holding.current_value) }}
-                  </div>
-                </td>
-                <td>
-                  <div class="rate-value">
-                    ¥{{ formatAmount(holding.cost) }}
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <div class="action-bar">
           <button class="sync-btn" @click="showSearchModal = true">
@@ -342,6 +380,7 @@ const {
 
 const pieChart = ref(null);
 const legendContainer = ref(null);
+const tableWrapper = ref(null);
 let chartInstance = null;
 
 const showDetailModal = ref(false);
@@ -395,6 +434,42 @@ async function handlePlatformUpdate() {
   await loadHoldings();
 }
 
+function syncRowHeights() {
+  requestAnimationFrame(() => {
+    const frozenTable = document.querySelector(".frozen-table");
+    const scrollableTable = document.querySelector(".custom-table");
+
+    if (!frozenTable || !scrollableTable) return;
+
+    const frozenTheadRows = frozenTable.querySelectorAll("thead tr");
+    const scrollableTheadRows = scrollableTable.querySelectorAll("thead tr");
+    const frozenTbodyRows = frozenTable.querySelectorAll("tbody tr");
+    const scrollableTbodyRows = scrollableTable.querySelectorAll("tbody tr");
+
+    frozenTheadRows.forEach((frozenRow, index) => {
+      const scrollableRow = scrollableTheadRows[index];
+      if (scrollableRow) {
+        const scrollableHeight = scrollableRow.offsetHeight;
+        const frozenHeight = frozenRow.offsetHeight;
+        const maxHeight = Math.max(scrollableHeight, frozenHeight);
+        frozenRow.style.height = maxHeight + "px";
+        scrollableRow.style.height = maxHeight + "px";
+      }
+    });
+
+    frozenTbodyRows.forEach((frozenRow, index) => {
+      const scrollableRow = scrollableTbodyRows[index];
+      if (scrollableRow) {
+        const scrollableHeight = scrollableRow.offsetHeight;
+        const frozenHeight = frozenRow.offsetHeight;
+        const maxHeight = Math.max(scrollableHeight, frozenHeight);
+        frozenRow.style.height = maxHeight + "px";
+        scrollableRow.style.height = maxHeight + "px";
+      }
+    });
+  });
+}
+
 // 组件挂载时自动加载数据
 // 加载平台数据和持仓数据，确保页面刷新时能正常显示
 onMounted(async () => {
@@ -403,14 +478,17 @@ onMounted(async () => {
   await loadPlatforms();
   // 加载持仓数据，确保页面刷新时能正常显示
   await loadHoldings();
+  await nextTick();
+  syncRowHeights();
   updatePieChart();
 });
 
-// 监听持仓数据变化，更新饼图
+// 监听持仓数据变化，同步行高并更新饼图
 watch(
   sortedHoldings,
   async () => {
     await nextTick();
+    syncRowHeights();
     updatePieChart();
   },
   { deep: true },
@@ -840,23 +918,47 @@ defineExpose({
   margin-bottom: 24px;
 }
 
-.table-wrapper {
-  overflow-x: auto;
+.frozen-table-wrapper {
+  display: flex;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  -webkit-overflow-scrolling: touch;
-  position: relative;
+  overflow: hidden;
 }
 
-.sticky-column {
+.frozen-column {
   position: sticky;
   left: 0;
-  z-index: 1;
+  z-index: 10;
   background: #fff;
+  flex-shrink: 0;
 }
 
-.table-header.sticky-column {
-  background: #495057;
+.frozen-table {
+  width: 160px;
+  min-width: 160px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.frozen-table .table-row td {
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.875rem;
+  text-align: left;
+  box-sizing: border-box;
+  height: 100%;
+}
+
+.frozen-table .table-row:last-child td {
+  border-bottom: none;
+  border-bottom-left-radius: 12px;
+}
+
+.scrollable-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
 }
 
 .custom-table {
@@ -864,21 +966,32 @@ defineExpose({
   border-collapse: separate;
   border-spacing: 0;
   background: #fff;
-  min-width: 900px;
+  min-width: 740px;
+}
+
+@media (max-width: 768px) {
+  .frozen-column {
+    width: 120px;
+  }
+
+  .frozen-table {
+    width: 120px;
+    min-width: 120px;
+  }
 }
 
 .custom-table th:nth-child(1),
 .custom-table td:nth-child(1) {
-  width: 160px;
-  max-width: 160px;
-  min-width: 120px;
+  width: 120px;
+  max-width: 120px;
+  min-width: 100px;
 }
 
 .custom-table th:nth-child(2),
 .custom-table td:nth-child(2) {
-  width: 120px;
-  max-width: 120px;
-  min-width: 100px;
+  width: 100px;
+  max-width: 100px;
+  min-width: 80px;
 }
 
 .custom-table th:nth-child(3),
@@ -897,16 +1010,16 @@ defineExpose({
 
 .custom-table th:nth-child(5),
 .custom-table td:nth-child(5) {
-  width: 100px;
-  max-width: 100px;
-  min-width: 80px;
+  width: 80px;
+  max-width: 80px;
+  min-width: 60px;
 }
 
 .custom-table th:nth-child(6),
 .custom-table td:nth-child(6) {
-  width: 80px;
-  max-width: 80px;
-  min-width: 60px;
+  width: 100px;
+  max-width: 100px;
+  min-width: 80px;
 }
 
 .custom-table th:nth-child(7),
@@ -918,13 +1031,6 @@ defineExpose({
 
 .custom-table th:nth-child(8),
 .custom-table td:nth-child(8) {
-  width: 100px;
-  max-width: 100px;
-  min-width: 80px;
-}
-
-.custom-table th:nth-child(9),
-.custom-table td:nth-child(9) {
   width: 100px;
   max-width: 100px;
   min-width: 80px;
@@ -944,6 +1050,15 @@ defineExpose({
 
 .table-header:first-child {
   border-top-left-radius: 12px;
+  border-top-right-radius: 0;
+}
+
+.frozen-table .table-header:first-child {
+  border-top-right-radius: 0;
+}
+
+.custom-table .table-header:first-child {
+  border-top-left-radius: 0;
 }
 
 .table-header:last-child {
@@ -1004,6 +1119,8 @@ defineExpose({
   font-size: 0.875rem;
   white-space: nowrap;
   text-align: center;
+  box-sizing: border-box;
+  height: 100%;
 }
 
 .table-row td:nth-child(1) {
