@@ -24,13 +24,7 @@
       </div>
     </div>
 
-    <div v-if="loading" class="loading-container">
-      <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">加载中...</span>
-      </div>
-    </div>
-
-    <div v-else-if="filteredFunds.length === 0" class="empty-state">
+    <div v-if="filteredFunds.length === 0" class="empty-state">
       <div class="empty-icon">📊</div>
       <p>暂无基金</p>
     </div>
@@ -148,7 +142,12 @@
                         : "-"
                     }}
                   </div>
-                  <div v-if="fund.estimate_time && fund.estimate_change_rate !== '-'" class="rate-date">
+                  <div
+                    v-if="
+                      fund.estimate_time && fund.estimate_change_rate !== '-'
+                    "
+                    class="rate-date"
+                  >
                     {{ formatEstimateTime(fund.estimate_time) }}
                   </div>
                 </div>
@@ -456,13 +455,6 @@ defineExpose({
   opacity: 0.8;
   font-size: 0.8rem;
   margin-left: 2px;
-}
-
-.loading-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 60px 20px;
 }
 
 .empty-state {

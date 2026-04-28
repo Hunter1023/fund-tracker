@@ -56,14 +56,6 @@
       </div>
     </div>
 
-    <div v-if="isManualRefresh && loading" class="spinner-overlay">
-      <div class="spinner-content">
-        <div class="spinner-border text-primary" role="status">
-          <span class="visually-hidden">加载中...</span>
-        </div>
-      </div>
-    </div>
-
     <div class="search-section">
       <div class="search-container">
         <span class="search-icon">
@@ -295,7 +287,6 @@ const currentUser = ref(null);
 const showAuthModal = ref(false);
 const showUserMenu = ref(false);
 const activeTab = ref("watchlist");
-const loading = ref(false);
 const isManualRefresh = ref(false);
 const searchKeyword = ref("");
 const searchResults = ref([]);
@@ -323,14 +314,6 @@ const filteredTags = ref([]);
 
 let searchTimeout = null;
 let currentSearchRequest = null;
-
-function showLoading() {
-  loading.value = true;
-}
-
-function hideLoading() {
-  loading.value = false;
-}
 
 async function initAuth() {
   const token = getStoredToken();
@@ -753,7 +736,6 @@ function stopGlobalRefresh() {
 
 async function handleManualRefresh() {
   isManualRefresh.value = true;
-  showLoading();
   try {
     if (activeTab.value === "holding" && holdingsRef.value?.loadHoldings) {
       await holdingsRef.value.loadHoldings();
@@ -764,7 +746,6 @@ async function handleManualRefresh() {
       await watchlistRef.value.loadWatchlist();
     }
   } finally {
-    hideLoading();
     isManualRefresh.value = false;
   }
 }
@@ -983,27 +964,6 @@ onUnmounted(() => {
   margin: 0;
   font-weight: 300;
   text-align: right;
-}
-
-.spinner-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  backdrop-filter: blur(4px);
-}
-
-.spinner-content {
-  background: #fff;
-  padding: 40px;
-  border-radius: 16px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
 }
 
 .search-section {
