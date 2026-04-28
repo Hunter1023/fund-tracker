@@ -141,22 +141,6 @@
                 class="table-row"
               >
                 <td>
-                  <div
-                    v-for="tag in (holding.tags || '')
-                      .split(',')
-                      .filter((t) => t.trim())"
-                    :key="tag"
-                    class="tag-item"
-                  >
-                    <span
-                      class="tag-badge"
-                      :class="`tag-${getTagColorIndex(tag)}`"
-                    >
-                      {{ tag.trim() }}
-                    </span>
-                  </div>
-                </td>
-                <td>
                   <div class="fund-name-cell">
                     <div
                       class="fund-name clickable"
@@ -174,6 +158,22 @@
                         {{ holding.fund_code }}
                       </div>
                     </div>
+                  </div>
+                </td>
+                <td>
+                  <div
+                    v-for="tag in (holding.tags || '')
+                      .split(',')
+                      .filter((t) => t.trim())"
+                    :key="tag"
+                    class="tag-item"
+                  >
+                    <span
+                      class="tag-badge"
+                      :class="`tag-${getTagColorIndex(tag)}`"
+                    >
+                      {{ tag.trim() }}
+                    </span>
                   </div>
                 </td>
                 <td>
@@ -604,12 +604,12 @@ function generateCustomLegend(sectors, backgroundColors) {
 }
 
 const columns = [
-  { key: "tags", label: "板块", sortable: true },
   { key: "name", label: "名称", sortable: true },
+  { key: "tags", label: "板块", sortable: true },
   { key: "daily_change_rate", label: "最新涨幅", sortable: true },
   { key: "estimate_change_rate", label: "估算涨幅", sortable: true },
   { key: "estimate_profit", label: "今日收益", sortable: true },
-  { key: "one_month_rate", label: "近1月收益率", sortable: true },
+  { key: "one_month_rate", label: "近1月", sortable: true },
   { key: "profit", label: "持有收益", sortable: true },
   { key: "current_value", label: "持仓金额", sortable: true },
   { key: "cost", label: "持仓成本", sortable: true },
@@ -852,11 +852,67 @@ defineExpose({
   min-width: 900px;
 }
 
+.custom-table th:nth-child(1),
+.custom-table td:nth-child(1) {
+  width: 160px;
+  max-width: 160px;
+  min-width: 120px;
+}
+
 .custom-table th:nth-child(2),
 .custom-table td:nth-child(2) {
-  width: 180px;
-  max-width: 180px;
-  min-width: 180px;
+  width: 120px;
+  max-width: 120px;
+  min-width: 100px;
+}
+
+.custom-table th:nth-child(3),
+.custom-table td:nth-child(3) {
+  width: 100px;
+  max-width: 100px;
+  min-width: 80px;
+}
+
+.custom-table th:nth-child(4),
+.custom-table td:nth-child(4) {
+  width: 100px;
+  max-width: 100px;
+  min-width: 80px;
+}
+
+.custom-table th:nth-child(5),
+.custom-table td:nth-child(5) {
+  width: 100px;
+  max-width: 100px;
+  min-width: 80px;
+}
+
+.custom-table th:nth-child(6),
+.custom-table td:nth-child(6) {
+  width: 80px;
+  max-width: 80px;
+  min-width: 60px;
+}
+
+.custom-table th:nth-child(7),
+.custom-table td:nth-child(7) {
+  width: 100px;
+  max-width: 100px;
+  min-width: 80px;
+}
+
+.custom-table th:nth-child(8),
+.custom-table td:nth-child(8) {
+  width: 100px;
+  max-width: 100px;
+  min-width: 80px;
+}
+
+.custom-table th:nth-child(9),
+.custom-table td:nth-child(9) {
+  width: 100px;
+  max-width: 100px;
+  min-width: 80px;
 }
 
 .table-header {
@@ -865,7 +921,7 @@ defineExpose({
   padding: 14px 16px;
   font-weight: 600;
   font-size: 0.875rem;
-  text-align: left;
+  text-align: center;
   border: none;
   position: relative;
   white-space: nowrap;
@@ -888,9 +944,18 @@ defineExpose({
   background: #343a40;
 }
 
+.table-header:not(:last-child) {
+  border-right: 1px solid #495057;
+}
+
+.table-header.sortable:hover:not(:last-child) {
+  border-right-color: #343a40;
+}
+
 .header-content {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
 }
 
@@ -923,6 +988,12 @@ defineExpose({
   border-bottom: 1px solid #e5e7eb;
   font-size: 0.875rem;
   white-space: nowrap;
+  text-align: center;
+}
+
+.table-row td:nth-child(1),
+.table-row td:nth-child(2) {
+  text-align: left;
 }
 
 .table-row:last-child td {
@@ -941,15 +1012,21 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 4px;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .fund-name {
   font-weight: 600;
   color: #1f2937;
-  font-size: 0.95rem;
-  white-space: nowrap;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .fund-name.clickable {
@@ -1196,15 +1273,54 @@ defineExpose({
     font-weight: 600;
   }
 
+  .custom-table th:nth-child(1),
+  .custom-table td:nth-child(1) {
+    width: 120px;
+    max-width: 120px;
+    min-width: 100px;
+  }
+
+  .custom-table th:nth-child(2),
+  .custom-table td:nth-child(2) {
+    width: 100px;
+    max-width: 100px;
+    min-width: 80px;
+  }
+
+  .fund-name {
+    font-size: 0.8rem;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .fund-code {
+    font-size: 0.7rem;
+  }
+
+  .badge {
+    font-size: 0.6rem;
+    padding: 2px 6px;
+  }
+
+  .table-row td {
+    padding: 12px 8px;
+    font-size: 0.8rem;
+  }
+
+  .table-header {
+    padding: 12px 8px;
+    font-size: 0.8rem;
+  }
+
   .platform-tab {
     font-size: 0.9rem;
   }
 
   .sector-title {
-    font-size: 0.9rem;
-  }
-
-  .table-header {
     font-size: 0.9rem;
   }
 
