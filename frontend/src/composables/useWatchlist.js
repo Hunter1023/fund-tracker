@@ -83,14 +83,11 @@ export function useWatchlist() {
   });
 
   async function loadWatchlist() {
-    loading.value = true;
     try {
       const response = await watchlistApi.get();
       funds.value = response.data;
     } catch (error) {
       console.error("加载自选失败:", error);
-    } finally {
-      loading.value = false;
     }
   }
 

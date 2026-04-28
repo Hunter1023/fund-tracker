@@ -1,20 +1,5 @@
 <template>
   <div class="holdings-container">
-    <div v-if="loading" class="skeleton-container">
-      <div class="skeleton-summary">
-        <div v-for="i in 5" :key="i" class="skeleton-summary-item">
-          <div class="skeleton-label"></div>
-          <div class="skeleton-value"></div>
-        </div>
-      </div>
-      <div class="skeleton-table">
-        <div v-for="i in 5" :key="i" class="skeleton-row">
-          <div v-for="j in 9" :key="j" class="skeleton-cell"></div>
-        </div>
-      </div>
-    </div>
-
-    <div v-else>
       <div class="platform-tabs">
         <button
           v-for="platform in platforms"
@@ -793,100 +778,6 @@ defineExpose({
   margin-top: 24px;
   display: flex;
   justify-content: center;
-}
-
-.loading-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 60px 20px;
-}
-
-.skeleton-container {
-  padding: 20px;
-}
-
-.skeleton-summary {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
-  padding: 20px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
-  border-radius: 12px;
-}
-
-.skeleton-summary-item {
-  text-align: center;
-}
-
-.skeleton-label {
-  height: 14px;
-  background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 4px;
-  margin-bottom: 8px;
-  width: 60%;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.skeleton-value {
-  height: 32px;
-  background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 4px;
-  width: 80%;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.skeleton-table {
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.skeleton-row {
-  display: grid;
-  grid-template-columns: repeat(9, 1fr);
-  gap: 8px;
-  padding: 16px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.skeleton-row:last-child {
-  border-bottom: none;
-}
-
-.skeleton-cell {
-  height: 24px;
-  background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 4px;
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-@media (max-width: 768px) {
-  .skeleton-summary {
-    grid-template-columns: 1fr;
-  }
-
-  .skeleton-row {
-    grid-template-columns: repeat(3, 1fr);
-  }
 }
 
 .summary-card {

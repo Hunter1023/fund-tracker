@@ -166,8 +166,6 @@ export function useHoldings() {
   });
 
   async function loadHoldings() {
-    loading.value = true;
-    isLoaded.value = false;
     try {
       const response = await holdingApi.get();
       holdings.value = Array.isArray(response.data) ? [...response.data] : [];
@@ -175,9 +173,6 @@ export function useHoldings() {
     } catch (error) {
       console.error("加载持仓失败:", error);
       holdings.value = [];
-      isLoaded.value = true;
-    } finally {
-      loading.value = false;
     }
   }
 
