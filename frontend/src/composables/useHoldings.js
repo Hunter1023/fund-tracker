@@ -3,7 +3,6 @@ import { fundApi, holdingApi, platformApi } from "../services/api";
 
 export function useHoldings() {
   const holdings = ref([]);
-  const loading = ref(false);
   const isLoaded = ref(false);
   const sortField = ref("one_month_rate");
   const sortDirection = ref("desc");
@@ -487,7 +486,6 @@ export function useHoldings() {
 
   return {
     holdings,
-    loading,
     isLoaded,
     sortField,
     sortDirection,
