@@ -855,6 +855,10 @@ defineExpose({
   background: #fff;
 }
 
+.table-header.sticky-column {
+  background: #495057;
+}
+
 .custom-table {
   width: 100%;
   border-collapse: separate;
