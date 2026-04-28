@@ -4,8 +4,10 @@ import { fundApi, holdingApi, platformApi } from "../services/api";
 export function useHoldings() {
   const holdings = ref([]);
   const isLoaded = ref(false);
-  const sortField = ref("one_month_rate");
-  const sortDirection = ref("desc");
+  const savedSortField = localStorage.getItem("holdings_sort_field");
+  const savedSortDirection = localStorage.getItem("holdings_sort_direction");
+  const sortField = ref(savedSortField || "current_value");
+  const sortDirection = ref(savedSortDirection || "desc");
   const transactionType = ref("sync");
   const selectedPlatform = ref("默认");
   const platforms = ref([]);
@@ -457,6 +459,8 @@ export function useHoldings() {
       sortField.value = field;
       sortDirection.value = "desc";
     }
+    localStorage.setItem("holdings_sort_field", sortField.value);
+    localStorage.setItem("holdings_sort_direction", sortDirection.value);
   }
 
   function getCurrentDate() {

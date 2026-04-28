@@ -111,9 +111,12 @@
             <thead>
               <tr>
                 <th
-                  v-for="column in columns"
+                  v-for="(column, index) in columns"
                   :key="column.key"
-                  :class="['table-header', { sortable: column.sortable }]"
+                  :class="[
+                    'table-header',
+                    { sortable: column.sortable, 'sticky-column': index === 0 },
+                  ]"
                   @click="column.sortable && handleSort(column.key)"
                 >
                   <div class="header-content">
@@ -140,7 +143,7 @@
                 :key="`${holding.fund_code}-${holding.platform || '默认'}`"
                 class="table-row"
               >
-                <td>
+                <td class="sticky-column">
                   <div class="fund-name-cell">
                     <div
                       class="fund-name clickable"
@@ -842,6 +845,14 @@ defineExpose({
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   -webkit-overflow-scrolling: touch;
+  position: relative;
+}
+
+.sticky-column {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
 }
 
 .custom-table {
@@ -991,8 +1002,7 @@ defineExpose({
   text-align: center;
 }
 
-.table-row td:nth-child(1),
-.table-row td:nth-child(2) {
+.table-row td:nth-child(1) {
   text-align: left;
 }
 
