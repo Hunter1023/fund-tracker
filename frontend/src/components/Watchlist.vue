@@ -29,84 +29,125 @@
       <p>暂无基金</p>
     </div>
 
-    <div v-else class="table-wrapper">
-      <table class="custom-table">
-        <thead>
-          <tr>
-            <th
-              v-for="column in columns"
-              :key="column.key"
-              :data-column="column.key"
-              :class="['table-header', { sortable: column.sortable }]"
-              :style="{ minWidth: column.minWidth, width: column.width }"
-              @click="column.sortable && handleSort(column.key)"
-              draggable="true"
-              @dragstart="handleDragStart(column.key)"
-              @dragover.prevent
-              @drop="handleDrop(column.key)"
-            >
-              <div class="header-content">
-                <span>{{ column.label }}</span>
-                <span v-if="column.sortable" class="sort-icon">
-                  <i
-                    v-if="sortField === column.key"
-                    :class="
-                      sortDirection === 'asc'
-                        ? 'bi bi-caret-up-fill'
-                        : 'bi bi-caret-down-fill'
-                    "
-                    class="sort-active"
-                  ></i>
-                  <i v-else class="bi bi-caret-up-down"></i>
-                </span>
-              </div>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="fund in filteredFunds"
-            :key="fund.fund_code"
-            class="table-row"
-          >
-            <td
-              v-for="column in columns"
-              :key="column.key"
-              :data-column="column.key"
-            >
-              <template v-if="column.key === 'tags'">
-                <div
-                  v-for="tag in (fund.tags || '')
-                    .split(',')
-                    .filter((t) => t.trim())"
-                  :key="tag"
-                  class="tag-item"
+    <div v-else>
+      <div class="frozen-table-wrapper">
+        <div class="frozen-column">
+          <table class="frozen-table">
+            <thead>
+              <tr>
+                <th
+                  :class="['table-header', { sortable: columns[0]?.sortable }]"
+                  :style="{ minWidth: columns[0]?.minWidth, width: columns[0]?.width }"
+                  @click="columns[0]?.sortable && handleSort(columns[0]?.key)"
                 >
-                  <span
-                    class="tag-badge"
-                    :class="`tag-${getTagColorIndex(tag)}`"
-                    @click="currentTag = tag.trim()"
-                  >
-                    {{ tag.trim() }}
-                  </span>
-                </div>
-              </template>
-              <template v-else-if="column.key === 'name'">
-                <div class="fund-name-cell">
-                  <div
-                    class="fund-name clickable"
-                    @click="openFundDetail(fund)"
-                  >
-                    {{ fund.fund_name }}
+                  <div class="header-content">
+                    <span>{{ columns[0]?.label }}</span>
+                    <span v-if="columns[0]?.sortable" class="sort-icon">
+                      <i
+                        v-if="sortField === columns[0]?.key"
+                        :class="
+                          sortDirection === 'asc'
+                            ? 'bi bi-caret-up-fill'
+                            : 'bi bi-caret-down-fill'
+                        "
+                        class="sort-active"
+                      ></i>
+                      <i v-else class="bi bi-caret-up-down"></i>
+                    </span>
                   </div>
-                  <div class="fund-code">
-                    {{ fund.fund_code }}
-                    <span v-if="isHolding(fund.fund_code)" class="holding-badge"
-                      >持有</span
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="fund in filteredFunds"
+                :key="fund.fund_code"
+                class="table-row"
+              >
+                <td>
+                  <div class="fund-name-cell">
+                    <div
+                      class="fund-name clickable"
+                      @click="openFundDetail(fund)"
                     >
-                    <span v-if="isUpdatedToday(fund)" class="update-badge"
-                      >已更新</span
+                      {{ fund.fund_name }}
+                    </div>
+                    <div class="fund-code">
+                      {{ fund.fund_code }}
+                      <span v-if="isHolding(fund.fund_code)" class="holding-badge"
+                        >持有</span
+                      >
+                      <span v-if="isUpdatedToday(fund)" class="update-badge"
+                        >已更新</span
+                      >
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="scrollable-table-wrapper" ref="tableWrapper">
+          <table class="custom-table">
+            <thead>
+              <tr>
+                <th
+                  v-for="column in columns.slice(1)"
+                  :key="column.key"
+                  :data-column="column.key"
+                  :class="['table-header', { sortable: column.sortable }]"
+                  :style="{ minWidth: column.minWidth, width: column.width }"
+                  @click="column.sortable && handleSort(column.key)"
+                  draggable="true"
+                  @dragstart="handleDragStart(column.key)"
+                  @dragover.prevent
+                  @drop="handleDrop(column.key)"
+                >
+                  <div class="header-content">
+                    <span>{{ column.label }}</span>
+                    <span v-if="column.sortable" class="sort-icon">
+                      <i
+                        v-if="sortField === column.key"
+                        :class="
+                          sortDirection === 'asc'
+                            ? 'bi bi-caret-up-fill'
+                            : 'bi bi-caret-down-fill'
+                        "
+                        class="sort-active"
+                      ></i>
+                      <i v-else class="bi bi-caret-up-down"></i>
+                    </span>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="fund in filteredFunds"
+                :key="fund.fund_code"
+                class="table-row"
+              >
+                <td
+                  v-for="column in columns.slice(1)"
+                  :key="column.key"
+                  :data-column="column.key"
+                >
+              <template v-if="column.key === 'tags'">
+                <div class="tags-container">
+                  <div
+                    v-for="tag in (fund.tags || '')
+                      .split(',')
+                      .filter((t) => t.trim())"
+                    :key="tag"
+                    class="tag-item"
+                  >
+                    <span
+                      class="tag-badge"
+                      :class="`tag-${getTagColorIndex(tag)}`"
+                      @click="currentTag = tag.trim()"
                     >
+                      {{ tag.trim() }}
+                    </span>
                   </div>
                 </div>
               </template>
@@ -204,6 +245,8 @@
         </tbody>
       </table>
     </div>
+    </div>
+    </div>
 
     <FundDetailModal
       v-model:show="showDetailModal"
@@ -221,7 +264,7 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { useHoldings } from "../composables/useHoldings";
 import { useWatchlist } from "../composables/useWatchlist";
 import ConfirmDialog from "./ConfirmDialog.vue";
@@ -385,6 +428,54 @@ async function handleConfirm() {
   await loadWatchlist();
 }
 
+function syncRowHeights() {
+  requestAnimationFrame(() => {
+    const frozenTable = document.querySelector(".frozen-table");
+    const scrollableTable = document.querySelector(".custom-table");
+
+    if (!frozenTable || !scrollableTable) return;
+
+    const frozenTheadRows = frozenTable.querySelectorAll("thead tr");
+    const scrollableTheadRows = scrollableTable.querySelectorAll("thead tr");
+    const frozenTbodyRows = frozenTable.querySelectorAll("tbody tr");
+    const scrollableTbodyRows = scrollableTable.querySelectorAll("tbody tr");
+
+    frozenTheadRows.forEach((frozenRow, index) => {
+      const scrollableRow = scrollableTheadRows[index];
+      if (scrollableRow) {
+        const scrollableHeight = scrollableRow.offsetHeight;
+        const frozenHeight = frozenRow.offsetHeight;
+        const maxHeight = Math.max(scrollableHeight, frozenHeight);
+        frozenRow.style.height = maxHeight + "px";
+        scrollableRow.style.height = maxHeight + "px";
+      }
+    });
+
+    frozenTbodyRows.forEach((frozenRow, index) => {
+      const scrollableRow = scrollableTbodyRows[index];
+      if (scrollableRow) {
+        const scrollableHeight = scrollableRow.offsetHeight;
+        const frozenHeight = frozenRow.offsetHeight;
+        const maxHeight = Math.max(scrollableHeight, frozenHeight);
+        frozenRow.style.height = maxHeight + "px";
+        scrollableRow.style.height = maxHeight + "px";
+      }
+    });
+  });
+}
+
+onMounted(() => {
+  syncRowHeights();
+});
+
+watch(
+  () => filteredFunds.value,
+  () => {
+    syncRowHeights();
+  },
+  { deep: true }
+);
+
 defineExpose({
   loadWatchlist,
   loadHoldingCodes,
@@ -472,11 +563,57 @@ defineExpose({
   font-size: 1rem;
 }
 
-.table-wrapper {
-  overflow-x: auto;
+.frozen-table-wrapper {
+  display: flex;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.frozen-column {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.scrollable-table-wrapper {
+  overflow-x: auto;
+  flex: 1;
   -webkit-overflow-scrolling: touch;
+}
+
+.frozen-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #fff;
+}
+
+.frozen-table th,
+.frozen-table td {
+  width: 160px;
+  max-width: 160px;
+  min-width: 120px;
+}
+
+.frozen-table .table-header:first-child {
+  border-top-right-radius: 0;
+}
+
+.frozen-table .table-header {
+  padding: 14px 16px;
+  font-size: 0.875rem;
+}
+
+.frozen-table .table-row td {
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.875rem;
+  text-align: left;
+  box-sizing: border-box;
+  height: 100%;
 }
 
 .custom-table {
@@ -484,14 +621,11 @@ defineExpose({
   border-collapse: separate;
   border-spacing: 0;
   background: #fff;
-  min-width: 900px;
+  min-width: 740px;
 }
 
-.custom-table th:nth-child(1),
-.custom-table td:nth-child(1) {
-  width: 160px;
-  max-width: 160px;
-  min-width: 120px;
+.custom-table .table-header:first-child {
+  border-top-left-radius: 0;
 }
 
 .custom-table th:nth-child(2),
@@ -619,8 +753,7 @@ defineExpose({
   text-align: center;
 }
 
-.table-row td:nth-child(1),
-.table-row td:nth-child(2) {
+.table-row td:nth-child(1) {
   text-align: left;
 }
 
@@ -636,8 +769,14 @@ defineExpose({
   border-bottom-right-radius: 12px;
 }
 
+.tags-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
 .tag-item {
-  margin-bottom: 6px;
 }
 
 .tag-badge {
