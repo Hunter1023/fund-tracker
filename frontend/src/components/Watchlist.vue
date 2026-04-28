@@ -148,7 +148,7 @@
                         : "-"
                     }}
                   </div>
-                  <div v-if="fund.estimate_time" class="rate-date">
+                  <div v-if="fund.estimate_time && fund.estimate_change_rate !== '-'" class="rate-date">
                     {{ formatEstimateTime(fund.estimate_time) }}
                   </div>
                 </div>
