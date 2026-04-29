@@ -2112,10 +2112,13 @@ def manage_holding():
                     today = datetime.now().strftime('%Y-%m-%d')
                     is_today = (fsrq == today)
 
-                    if unit_net_value:
+                    # 优先使用数据库中用户设置的持仓金额，只有当金额未设置时才用份额×净值计算
+                    if holding.current_value:
+                        current_value = holding.current_value
+                    elif unit_net_value:
                         current_value = holding.shares * float(unit_net_value)
                     else:
-                        current_value = holding.current_value or holding.cost
+                        current_value = holding.cost
                     profit_loss = current_value - holding.cost
                     profit_loss_rate = (profit_loss / holding.cost * 100) if holding.cost > 0 else 0
 
