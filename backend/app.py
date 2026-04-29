@@ -2112,10 +2112,12 @@ def manage_holding():
                     today = datetime.now().strftime('%Y-%m-%d')
                     is_today = (fsrq == today)
 
-                    # 直接使用数据库中存储的值，尊重用户的手动编辑
-                    current_value = holding.current_value or holding.cost
-                    profit_loss = holding.profit_loss if holding.profit_loss is not None else (current_value - holding.cost)
-                    profit_loss_rate = holding.profit_loss_rate if holding.profit_loss_rate is not None else ((profit_loss / holding.cost * 100) if holding.cost > 0 else 0)
+                    if unit_net_value:
+                        current_value = holding.shares * float(unit_net_value)
+                    else:
+                        current_value = holding.current_value or holding.cost
+                    profit_loss = current_value - holding.cost
+                    profit_loss_rate = (profit_loss / holding.cost * 100) if holding.cost > 0 else 0
 
                     if not is_trading_day:
                         estimate_change_rate = '-'
