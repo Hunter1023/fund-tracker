@@ -54,7 +54,7 @@ jobs:
         run: docker compose down
 
       - name: Build and start containers
-        run: docker compose up -d --build
+        run: docker compose up -d --build --no-cache
         env:
           TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
 
