@@ -440,26 +440,41 @@ function syncRowHeights() {
     const frozenTbodyRows = frozenTable.querySelectorAll("tbody tr");
     const scrollableTbodyRows = scrollableTable.querySelectorAll("tbody tr");
 
-    frozenTheadRows.forEach((frozenRow, index) => {
-      const scrollableRow = scrollableTheadRows[index];
-      if (scrollableRow) {
-        const scrollableHeight = scrollableRow.offsetHeight;
-        const frozenHeight = frozenRow.offsetHeight;
-        const maxHeight = Math.max(scrollableHeight, frozenHeight);
-        frozenRow.style.height = maxHeight + "px";
-        scrollableRow.style.height = maxHeight + "px";
-      }
+    frozenTheadRows.forEach((frozenRow) => {
+      frozenRow.style.height = "";
+    });
+    scrollableTheadRows.forEach((scrollableRow) => {
+      scrollableRow.style.height = "";
+    });
+    frozenTbodyRows.forEach((frozenRow) => {
+      frozenRow.style.height = "";
+    });
+    scrollableTbodyRows.forEach((scrollableRow) => {
+      scrollableRow.style.height = "";
     });
 
-    frozenTbodyRows.forEach((frozenRow, index) => {
-      const scrollableRow = scrollableTbodyRows[index];
-      if (scrollableRow) {
-        const scrollableHeight = scrollableRow.offsetHeight;
-        const frozenHeight = frozenRow.offsetHeight;
-        const maxHeight = Math.max(scrollableHeight, frozenHeight);
-        frozenRow.style.height = maxHeight + "px";
-        scrollableRow.style.height = maxHeight + "px";
-      }
+    requestAnimationFrame(() => {
+      frozenTheadRows.forEach((frozenRow, index) => {
+        const scrollableRow = scrollableTheadRows[index];
+        if (scrollableRow) {
+          const scrollableHeight = scrollableRow.offsetHeight;
+          const frozenHeight = frozenRow.offsetHeight;
+          const maxHeight = Math.max(scrollableHeight, frozenHeight);
+          frozenRow.style.height = maxHeight + "px";
+          scrollableRow.style.height = maxHeight + "px";
+        }
+      });
+
+      frozenTbodyRows.forEach((frozenRow, index) => {
+        const scrollableRow = scrollableTbodyRows[index];
+        if (scrollableRow) {
+          const scrollableHeight = scrollableRow.offsetHeight;
+          const frozenHeight = frozenRow.offsetHeight;
+          const maxHeight = Math.max(scrollableHeight, frozenHeight);
+          frozenRow.style.height = maxHeight + "px";
+          scrollableRow.style.height = maxHeight + "px";
+        }
+      });
     });
   });
 }
