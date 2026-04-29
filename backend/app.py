@@ -2719,8 +2719,8 @@ def update_holding(fund_code):
             logger.warning(f"持仓不存在，基金ID: {fund.id}, 平台: {platform}")
             return jsonify({'error': '持仓不存在'}), 404
 
-        # 根据新的持仓金额和最新净值计算新的份额
-        shares = current_value / float(unit_net_value) if float(unit_net_value) > 0 else 0
+        # 保持份额不变（份额只有在买入/卖出时才会改变）
+        shares = fund_holding.shares
         # 计算平均成本
         avg_cost = cost / shares if shares > 0 else 0
         # 计算收益率
@@ -2732,9 +2732,8 @@ def update_holding(fund_code):
         logger.info(f"更新前 - 持仓ID: {fund_holding.id}, 成本: {fund_holding.cost}, 份额: {fund_holding.shares}, 当前价值: {fund_holding.current_value}, 持有收益: {fund_holding.profit_loss}, 平台: {fund_holding.platform}")
         logger.info(f"更新后 - 成本: {cost}, 份额: {shares}, 当前价值: {current_value}, 持有收益: {profit}, 平台: {platform}")
 
-        # 更新持仓
+        # 更新持仓（不更新份额）
         fund_holding.cost = cost
-        fund_holding.shares = shares
         fund_holding.avg_cost = avg_cost
         fund_holding.current_value = current_value
         fund_holding.profit_loss = profit
