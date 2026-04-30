@@ -322,32 +322,43 @@ def preload_all_funds_history():
 scheduler.add_job(preload_all_funds_history, 'cron', hour=2, minute=0, id='preload_funds_history')
 
 # 辅助函数：判断是否为交易日
-def is_trading_day(fsrq: str) -> bool:
+def is_trading_day(fsrq: str, allow_yesterday: bool = False) -> bool:
     """
     判断是否为交易日（通过净值日期判断）
     :param fsrq: 净值日期，格式为YYYY-MM-DD
+    :param allow_yesterday: 是否允许昨天的净值日期（用于凌晨时段的持仓更新）
     :return: 是否为交易日
     """
     if not fsrq:
         return False
     today = datetime.now().strftime('%Y-%m-%d')
-    return fsrq == today
+    if fsrq == today:
+        return True
+    if allow_yesterday:
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        if fsrq == yesterday:
+            return True
+    return False
 
 # 定时任务：更新持仓收益
 @retry_db_operation()
 def update_holding_profit():
     """
     定时任务：在交易日晚上7点开始，每10分钟检测一次最新涨幅是否已更新，
-    更新所有持仓基金的持有收益到数据库
+    更新所有持仓基金的持有收益到数据库。
+    增加凌晨时段(0:00-2:00)，以应对东方财富API延迟发布净值的情况。
     """
     current_time = datetime.now()
     current_hour = current_time.hour
 
-    # 只在晚上7点到11点之间执行
-    if current_hour < 19 or current_hour >= 23:
+    is_overnight = (0 <= current_hour < 2)
+    is_evening = (19 <= current_hour < 23)
+    if not (is_evening or is_overnight):
         return
 
-    logger.info(f"开始检查持仓收益更新...")
+    allow_yesterday = is_overnight
+
+    logger.info(f"开始检查持仓收益更新... (时段: {'凌晨' if is_overnight else '晚间'}, allow_yesterday={allow_yesterday})")
     db = next(get_db())
     try:
         # 获取所有持仓基金
@@ -374,10 +385,10 @@ def update_holding_profit():
                 skipped_count += 1
                 continue
 
-            # 检查是否为交易日（fsrq是否为当日）
+            # 检查是否为交易日（fsrq是否为当日，凌晨时段允许昨天的净值日期）
             fsrq = fund_data.get('fsrq', '')
-            if not is_trading_day(fsrq):
-                logger.info(f"基金 {fund_code} 净值日期 {fsrq} 不是今日，跳过")
+            if not is_trading_day(fsrq, allow_yesterday=allow_yesterday):
+                logger.info(f"基金 {fund_code} 净值日期 {fsrq} 不是有效交易日，跳过")
                 skipped_count += 1
                 continue
 
