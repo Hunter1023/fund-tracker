@@ -738,8 +738,10 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
 
     cache_key = int(time.time() / (5 * 60))
     valuation_data_dict = {}
-    all_funds_for_estimate = funds_to_refresh + funds_to_get_estimate
-    if all_funds_for_estimate and need_estimate_refresh:
+    funds_always_need_estimate = funds_to_refresh
+    funds_conditional_estimate = funds_to_get_estimate if need_estimate_refresh else []
+    all_funds_for_estimate = funds_always_need_estimate + funds_conditional_estimate
+    if all_funds_for_estimate:
         valuation_data_dict = DataFetcher.get_fund_valuation_batch(all_funds_for_estimate, cache_key)
 
     # 并发获取需要刷新的基金数据
@@ -843,6 +845,10 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                     if key in ('fund_code', 'fund_name'):
                         continue
                     if not should_update_rates and key in ('fsrq', 'daily_change_rate', 'unit_net_value', 'one_month_rate', 'three_month_rate', 'one_year_rate', 'net_value_date'):
+                        continue
+                    if key in ('estimate_net_value', 'estimate_change_rate', 'estimate_time') and value is None:
+                        continue
+                    if key == 'estimate_time' and value == '':
                         continue
                     setattr(realtime_data, key, value)
             else:
