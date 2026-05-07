@@ -791,128 +791,128 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             fund_data = valuation_data_dict.get(fund_code)
             rates_data = rates_data_dict.get(fund_code)
             realtime_data = realtime_data_map.get(fund_code)
-                # 准备数据
-                net_value_date = ''
-                if fund_data:
-                    net_value_date = fund_data.get('net_value', '')
-                elif rates_data:
-                    net_value_date = rates_data.get('fsrq', '')
+            # 准备数据
+            net_value_date = ''
+            if fund_data:
+                net_value_date = fund_data.get('net_value', '')
+            elif rates_data:
+                net_value_date = rates_data.get('fsrq', '')
 
-                unit_net_value = None
-                if rates_data and rates_data.get('unit_net_value') is not None and rates_data.get('unit_net_value') != '' and rates_data.get('unit_net_value') != 0:
-                    unit_net_value = float(rates_data.get('unit_net_value'))
-                elif fund_data and fund_data.get('unit_net_value') is not None and fund_data.get('unit_net_value') != '':
-                    unit_net_value = float(fund_data.get('unit_net_value'))
+            unit_net_value = None
+            if rates_data and rates_data.get('unit_net_value') is not None and rates_data.get('unit_net_value') != '' and rates_data.get('unit_net_value') != 0:
+                unit_net_value = float(rates_data.get('unit_net_value'))
+            elif fund_data and fund_data.get('unit_net_value') is not None and fund_data.get('unit_net_value') != '':
+                unit_net_value = float(fund_data.get('unit_net_value'))
 
-                estimate_net_value = None
-                if fund_data and fund_data.get('estimate_net_value') is not None and fund_data.get('estimate_net_value') != '':
-                    estimate_net_value = float(fund_data.get('estimate_net_value'))
+            estimate_net_value = None
+            if fund_data and fund_data.get('estimate_net_value') is not None and fund_data.get('estimate_net_value') != '':
+                estimate_net_value = float(fund_data.get('estimate_net_value'))
 
-                estimate_change_rate = None
-                if fund_data and fund_data.get('estimate_change_rate') is not None and fund_data.get('estimate_change_rate') != '':
-                    estimate_change_rate = float(fund_data.get('estimate_change_rate'))
+            estimate_change_rate = None
+            if fund_data and fund_data.get('estimate_change_rate') is not None and fund_data.get('estimate_change_rate') != '':
+                estimate_change_rate = float(fund_data.get('estimate_change_rate'))
 
-                estimate_time = ''
-                if fund_data:
-                    estimate_time = fund_data.get('estimate_time', '')
+            estimate_time = ''
+            if fund_data:
+                estimate_time = fund_data.get('estimate_time', '')
 
-                data = {
-                    'fund_code': fund_code,
-                    'fund_name': fund.fund_name,
-                    'net_value_date': net_value_date,
-                    'unit_net_value': unit_net_value,
-                    'estimate_net_value': estimate_net_value,
-                    'estimate_change_rate': estimate_change_rate,
-                    'estimate_time': estimate_time,
-                    'one_month_rate': rates_data.get('one_month_rate', 0),
-                    'three_month_rate': rates_data.get('three_month_rate', 0),
-                    'one_year_rate': rates_data.get('one_year_rate', 0),
-                    'daily_change_rate': rates_data.get('daily_change_rate', 0),
-                    'fsrq': rates_data.get('fsrq', ''),
-                    'net_values': '[]'
-                }
+            data = {
+                'fund_code': fund_code,
+                'fund_name': fund.fund_name,
+                'net_value_date': net_value_date,
+                'unit_net_value': unit_net_value,
+                'estimate_net_value': estimate_net_value,
+                'estimate_change_rate': estimate_change_rate,
+                'estimate_time': estimate_time,
+                'one_month_rate': rates_data.get('one_month_rate', 0),
+                'three_month_rate': rates_data.get('three_month_rate', 0),
+                'one_year_rate': rates_data.get('one_year_rate', 0),
+                'daily_change_rate': rates_data.get('daily_change_rate', 0),
+                'fsrq': rates_data.get('fsrq', ''),
+                'net_values': '[]'
+            }
 
-                if realtime_data:
-                    should_update_rates = True
-                    if realtime_data.fsrq and data.get('fsrq', ''):
-                        today = datetime.now().strftime('%Y-%m-%d')
-                        if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
-                            should_update_rates = False
+            if realtime_data:
+                should_update_rates = True
+                if realtime_data.fsrq and data.get('fsrq', ''):
+                    today = datetime.now().strftime('%Y-%m-%d')
+                    if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
+                        should_update_rates = False
 
-                    for key, value in data.items():
-                        if key in ('fund_code', 'fund_name'):
-                            continue
-                        if not should_update_rates and key in ('fsrq', 'daily_change_rate', 'unit_net_value', 'one_month_rate', 'three_month_rate', 'one_year_rate', 'net_value_date'):
-                            continue
-                        setattr(realtime_data, key, value)
-                else:
-                    realtime_data = FundRealtimeData(
-                        fund_id=fund.id,
-                        net_value_date=data['net_value_date'],
-                        unit_net_value=data['unit_net_value'],
-                        estimate_net_value=data['estimate_net_value'],
-                        estimate_change_rate=data['estimate_change_rate'],
-                        estimate_time=data['estimate_time'],
-                        one_month_rate=data['one_month_rate'],
-                        three_month_rate=data['three_month_rate'],
-                        one_year_rate=data['one_year_rate'],
-                        daily_change_rate=data['daily_change_rate'],
-                        fsrq=data['fsrq'],
-                        net_values=data['net_values']
-                    )
-                    db.add(realtime_data)
+                for key, value in data.items():
+                    if key in ('fund_code', 'fund_name'):
+                        continue
+                    if not should_update_rates and key in ('fsrq', 'daily_change_rate', 'unit_net_value', 'one_month_rate', 'three_month_rate', 'one_year_rate', 'net_value_date'):
+                        continue
+                    setattr(realtime_data, key, value)
+            else:
+                realtime_data = FundRealtimeData(
+                    fund_id=fund.id,
+                    net_value_date=data['net_value_date'],
+                    unit_net_value=data['unit_net_value'],
+                    estimate_net_value=data['estimate_net_value'],
+                    estimate_change_rate=data['estimate_change_rate'],
+                    estimate_time=data['estimate_time'],
+                    one_month_rate=data['one_month_rate'],
+                    three_month_rate=data['three_month_rate'],
+                    one_year_rate=data['one_year_rate'],
+                    daily_change_rate=data['daily_change_rate'],
+                    fsrq=data['fsrq'],
+                    net_values=data['net_values']
+                )
+                db.add(realtime_data)
 
-                # 添加到结果（延迟flush到循环外批量提交）
+            # 添加到结果（延迟flush到循环外批量提交）
+            results[fund_code] = {
+                'fund_code': fund_code,
+                'fund_name': fund.fund_name,
+                'net_value': data.get('net_value_date', ''),
+                'unit_net_value': data.get('unit_net_value', None),
+                'estimate_net_value': data.get('estimate_net_value', None),
+                'estimate_change_rate': str(data.get('estimate_change_rate', 0)) if data.get('estimate_change_rate') is not None else '-',
+                'estimate_time': data.get('estimate_time', ''),
+                'one_month_rate': data.get('one_month_rate', 0),
+                'three_month_rate': data.get('three_month_rate', 0),
+                'one_year_rate': data.get('one_year_rate', 0),
+                'daily_change_rate': data.get('daily_change_rate', 0),
+                'fsrq': data.get('fsrq', ''),
+                'net_values': []
+            }
+        else:
+            # API调用失败，尝试返回数据库中的旧数据
+            if realtime_data:
                 results[fund_code] = {
                     'fund_code': fund_code,
                     'fund_name': fund.fund_name,
-                    'net_value': data.get('net_value_date', ''),
-                    'unit_net_value': data.get('unit_net_value', None),
-                    'estimate_net_value': data.get('estimate_net_value', None),
-                    'estimate_change_rate': str(data.get('estimate_change_rate', 0)) if data.get('estimate_change_rate') is not None else '-',
-                    'estimate_time': data.get('estimate_time', ''),
-                    'one_month_rate': data.get('one_month_rate', 0),
-                    'three_month_rate': data.get('three_month_rate', 0),
-                    'one_year_rate': data.get('one_year_rate', 0),
-                    'daily_change_rate': data.get('daily_change_rate', 0),
-                    'fsrq': data.get('fsrq', ''),
+                    'net_value': realtime_data.net_value_date if realtime_data else '',
+                    'unit_net_value': realtime_data.unit_net_value if realtime_data else None,
+                    'estimate_net_value': realtime_data.estimate_net_value if realtime_data else None,
+                    'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data and realtime_data.estimate_change_rate is not None else '-',
+                    'estimate_time': realtime_data.estimate_time if realtime_data else '',
+                    'one_month_rate': realtime_data.one_month_rate if realtime_data else 0,
+                    'three_month_rate': realtime_data.three_month_rate if realtime_data else 0,
+                    'one_year_rate': realtime_data.one_year_rate if realtime_data else 0,
+                    'daily_change_rate': realtime_data.daily_change_rate if realtime_data else 0,
+                    'fsrq': realtime_data.fsrq if realtime_data else '',
                     'net_values': []
                 }
             else:
-                # API调用失败，尝试返回数据库中的旧数据
-                if realtime_data:
-                    results[fund_code] = {
-                        'fund_code': fund_code,
-                        'fund_name': fund.fund_name,
-                        'net_value': realtime_data.net_value_date if realtime_data else '',
-                        'unit_net_value': realtime_data.unit_net_value if realtime_data else None,
-                        'estimate_net_value': realtime_data.estimate_net_value if realtime_data else None,
-                        'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data and realtime_data.estimate_change_rate is not None else '-',
-                        'estimate_time': realtime_data.estimate_time if realtime_data else '',
-                        'one_month_rate': realtime_data.one_month_rate if realtime_data else 0,
-                        'three_month_rate': realtime_data.three_month_rate if realtime_data else 0,
-                        'one_year_rate': realtime_data.one_year_rate if realtime_data else 0,
-                        'daily_change_rate': realtime_data.daily_change_rate if realtime_data else 0,
-                        'fsrq': realtime_data.fsrq if realtime_data else '',
-                        'net_values': []
-                    }
-                else:
-                    # 如果数据库中也没有数据，返回基本信息
-                    results[fund_code] = {
-                        'fund_code': fund_code,
-                        'fund_name': fund.fund_name,
-                        'net_value': '',
-                        'unit_net_value': None,
-                        'estimate_net_value': None,
-                        'estimate_change_rate': '-',
-                        'estimate_time': '',
-                        'one_month_rate': 0,
-                        'three_month_rate': 0,
-                        'one_year_rate': 0,
-                        'daily_change_rate': 0,
-                        'fsrq': '',
-                        'net_values': []
-                    }
+                # 如果数据库中也没有数据，返回基本信息
+                results[fund_code] = {
+                    'fund_code': fund_code,
+                    'fund_name': fund.fund_name,
+                    'net_value': '',
+                    'unit_net_value': None,
+                    'estimate_net_value': None,
+                    'estimate_change_rate': '-',
+                    'estimate_time': '',
+                    'one_month_rate': 0,
+                    'three_month_rate': 0,
+                    'one_year_rate': 0,
+                    'daily_change_rate': 0,
+                    'fsrq': '',
+                    'net_values': []
+                }
 
         try:
             db.commit()
