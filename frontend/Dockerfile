@@ -2,7 +2,11 @@
 FROM node:18-alpine as build-stage
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm install --registry=https://registry.npmmirror.com
+RUN npm config set fetch-timeout 120000 && \
+    npm config set fetch-retry-mintimeout 30000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-retries 5 && \
+    npm install --registry=https://registry.npmmirror.com
 COPY . .
 RUN npm run build
 
