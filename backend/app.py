@@ -748,8 +748,42 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
     # 并发获取需要刷新的基金数据
     rates_data_dict = {}
     if funds_to_refresh:
-        # 并发获取涨跌幅数据
         rates_data_dict = DataFetcher.get_fund_rates_batch(funds_to_refresh, cache_key)
+
+        funds_need_fallback = []
+        for fund_code in funds_to_refresh:
+            rates_data = rates_data_dict.get(fund_code)
+            if not rates_data or (rates_data.get('one_month_rate') == 0 and rates_data.get('three_month_rate') == 0 and rates_data.get('one_year_rate') == 0 and rates_data.get('daily_change_rate') == 0):
+                funds_need_fallback.append(fund_code)
+
+        if funds_need_fallback:
+            print(f"以下基金使用 get_fund_rates 获取数据失败，并发尝试 get_fund_history_simple: {funds_need_fallback}")
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            fallback_results = {}
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                future_to_fund = {
+                    executor.submit(DataFetcher.get_fund_history_simple, fc, cache_key): fc
+                    for fc in funds_need_fallback
+                }
+                for future in as_completed(future_to_fund, timeout=30):
+                    fc = future_to_fund[future]
+                    try:
+                        fallback_results[fc] = future.result(timeout=10)
+                    except Exception as e:
+                        print(f"get_fund_history_simple 获取基金 {fc} 数据失败: {e}")
+
+            for fc in funds_need_fallback:
+                history_data = fallback_results.get(fc)
+                if history_data:
+                    rates_data_dict[fc] = {
+                        'fund_code': fc,
+                        'one_month_rate': history_data.get('one_month_rate', 0),
+                        'three_month_rate': history_data.get('three_month_rate', 0),
+                        'one_year_rate': history_data.get('one_year_rate', 0),
+                        'daily_change_rate': history_data.get('daily_change_rate', 0),
+                        'fsrq': history_data.get('fsrq', ''),
+                        'unit_net_value': history_data.get('unit_net_value', 0)
+                    }
 
         # 处理数据并更新数据库
         for fund_code in funds_to_refresh:
@@ -759,22 +793,6 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
 
             fund_data = valuation_data_dict.get(fund_code)
             rates_data = rates_data_dict.get(fund_code)
-
-            # 如果 rates_data 为 None 或所有涨跌幅数据都为 0，尝试使用 get_fund_history_simple 获取数据
-            if not rates_data or (rates_data.get('one_month_rate') == 0 and rates_data.get('three_month_rate') == 0 and rates_data.get('one_year_rate') == 0 and rates_data.get('daily_change_rate') == 0):
-                print(f"基金 {fund_code} 使用 get_fund_rates 获取数据失败，尝试使用 get_fund_history_simple")
-                history_data = DataFetcher.get_fund_history_simple(fund_code)
-                if history_data:
-                    rates_data = {
-                        'fund_code': fund_code,
-                        'one_month_rate': history_data.get('one_month_rate', 0),
-                        'three_month_rate': history_data.get('three_month_rate', 0),
-                        'one_year_rate': history_data.get('one_year_rate', 0),
-                        'daily_change_rate': history_data.get('daily_change_rate', 0),
-                        'fsrq': history_data.get('fsrq', '')
-                    }
-
-            if rates_data:
                 # 准备数据
                 net_value_date = ''
                 if fund_data:

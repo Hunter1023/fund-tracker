@@ -59,6 +59,33 @@ class DataFetcher:
     _lock = threading.Lock()
 
     @staticmethod
+    def _get_fund_valuation_no_retry(fund_code, timestamp=None):
+        url = f"{DATA_SOURCES['fund_valuation']}{fund_code}.js"
+        try:
+            response = requests.get(url, timeout=5)
+            response.encoding = 'utf-8'
+            start = response.text.find('(')
+            end = response.text.rfind(')')
+            if start != -1 and end != -1:
+                data_str = response.text[start+1:end]
+                data_str = data_str.rstrip(';')
+                data = json.loads(data_str)
+                return {
+                    'fund_code': data.get('fundcode'),
+                    'fund_name': data.get('name'),
+                    'net_value': data.get('jzrq'),
+                    'unit_net_value': data.get('dwjz'),
+                    'estimate_net_value': data.get('gsz'),
+                    'estimate_change_rate': data.get('gszzl'),
+                    'estimate_time': data.get('gztime')
+                }
+            else:
+                return None
+        except Exception as e:
+            print(f"获取基金估值失败: {e}")
+            return None
+
+    @staticmethod
     @lru_cache(maxsize=512)
     @retry_on_failure(max_retries=3, delay=1, backoff=2)
     def get_fund_valuation(fund_code, timestamp=None):
@@ -191,6 +218,96 @@ class DataFetcher:
         except Exception as e:
             print(f"搜索基金失败: {e}")
             return []
+
+    @staticmethod
+    def _get_fund_rates_no_retry(fund_code, timestamp=None):
+        url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Referer': f'https://fundf10.eastmoney.com/jjjz_{fund_code}.html'
+        }
+
+        one_month_rate = 0
+        three_month_rate = 0
+        one_year_rate = 0
+        daily_change_rate = 0
+        fsrq = ''
+        unit_net_value = 0
+
+        try:
+            response = requests.get(url, headers=headers, timeout=8)
+            data = response.json()
+
+            if data.get('Datas'):
+                fsrq = data['Datas'].get('FSRQ', '')
+                field_mappings = {
+                    'one_month': ['SYL_Y', 'SYL_1M', 'syl_y', 'syly'],
+                    'three_month': ['SYL_3Y', 'SYL_3M', 'syl_3y', 'syl3y'],
+                    'one_year': ['SYL_1N', 'syl_1n', 'syl1n'],
+                    'daily': ['RZDF', 'JZZZL', 'rzdf', 'jzzzl'],
+                    'unit_net_value': ['DWJZ', 'dwjz']
+                }
+
+                for field in field_mappings['unit_net_value']:
+                    if field in data['Datas']:
+                        try:
+                            unit_net_value = float(data['Datas'][field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+                for field in field_mappings['one_month']:
+                    if field in data['Datas']:
+                        try:
+                            one_month_rate = float(data['Datas'][field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+                for field in field_mappings['three_month']:
+                    if field in data['Datas']:
+                        try:
+                            three_month_rate = float(data['Datas'][field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+                for field in field_mappings['one_year']:
+                    if field in data['Datas']:
+                        try:
+                            one_year_rate = float(data['Datas'][field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+                for field in field_mappings['daily']:
+                    if field in data['Datas']:
+                        try:
+                            daily_change_rate = float(data['Datas'][field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+            return {
+                'fund_code': fund_code,
+                'one_month_rate': one_month_rate,
+                'three_month_rate': three_month_rate,
+                'one_year_rate': one_year_rate,
+                'daily_change_rate': daily_change_rate,
+                'fsrq': fsrq,
+                'unit_net_value': unit_net_value
+            }
+        except Exception as e:
+            print(f"批量获取基金 {fund_code} 涨跌幅数据失败: {e}")
+            return {
+                'fund_code': fund_code,
+                'one_month_rate': one_month_rate,
+                'three_month_rate': three_month_rate,
+                'one_year_rate': one_year_rate,
+                'daily_change_rate': daily_change_rate,
+                'fsrq': fsrq,
+                'unit_net_value': unit_net_value
+            }
 
     @staticmethod
     @lru_cache(maxsize=512)
@@ -719,23 +836,19 @@ class DataFetcher:
 
         results = {}
 
-        # 使用线程池并发获取数据
         with ThreadPoolExecutor(max_workers=10) as executor:
-            # 提交所有任务
             future_to_fund = {
-                executor.submit(DataFetcher.get_fund_rates, fund_code, timestamp): fund_code
+                executor.submit(DataFetcher._get_fund_rates_no_retry, fund_code, timestamp): fund_code
                 for fund_code in fund_codes
             }
 
-            # 等待所有任务完成
-            for future in as_completed(future_to_fund):
+            for future in as_completed(future_to_fund, timeout=20):
                 fund_code = future_to_fund[future]
                 try:
-                    data = future.result(timeout=15)  # 增加超时时间到15秒
+                    data = future.result(timeout=10)
                     results[fund_code] = data
                 except Exception as e:
                     print(f"获取基金 {fund_code} 数据失败: {e}")
-                    # 不返回默认数据，让调用方决定如何处理
                     results[fund_code] = None
 
         return results
@@ -753,19 +866,16 @@ class DataFetcher:
 
         results = {}
 
-        # 使用线程池并发获取数据
         with ThreadPoolExecutor(max_workers=10) as executor:
-            # 提交所有任务
             future_to_fund = {
-                executor.submit(DataFetcher.get_fund_valuation, fund_code, timestamp): fund_code
+                executor.submit(DataFetcher._get_fund_valuation_no_retry, fund_code, timestamp): fund_code
                 for fund_code in fund_codes
             }
 
-            # 等待所有任务完成
-            for future in as_completed(future_to_fund):
+            for future in as_completed(future_to_fund, timeout=15):
                 fund_code = future_to_fund[future]
                 try:
-                    data = future.result(timeout=15)  # 增加超时时间到15秒
+                    data = future.result(timeout=5)
                     results[fund_code] = data
                 except Exception as e:
                     print(f"获取基金 {fund_code} 估值数据失败: {e}")
