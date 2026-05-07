@@ -292,7 +292,9 @@ def preload_all_funds_history():
                 # 从第三方接口获取历史净值数据
                 history_data = DataFetcher.get_fund_history(fund_code)
 
-                # 保存到数据库
+                new_fsrq = history_data.get('fsrq', '')
+                new_unit_net_value = history_data.get('unit_net_value', 0)
+
                 if not fund.realtime_data:
                     fund.realtime_data = FundRealtimeData(fund_id=fund.id)
                 fund.realtime_data.net_values = json.dumps(history_data.get('net_values', []))
@@ -300,8 +302,13 @@ def preload_all_funds_history():
                 fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
                 fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
                 fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
-                fund.realtime_data.fsrq = history_data.get('fsrq', '')
-                fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+
+                if fund.realtime_data.fsrq and new_fsrq < fund.realtime_data.fsrq:
+                    print(f"基金 {fund_code} 新数据日期({new_fsrq})早于已有日期({fund.realtime_data.fsrq})，保留已有净值数据")
+                else:
+                    fund.realtime_data.fsrq = new_fsrq
+                    fund.realtime_data.unit_net_value = new_unit_net_value
+
                 fund.realtime_data.updated_at = datetime.now()
                 db.commit()
 
@@ -442,7 +449,6 @@ def update_holding_profit():
                 # 同时更新基金历史净值数据，确保历史走势图也更新到今日
                 from data_fetcher import DataFetcher
                 if fund.realtime_data:
-                    # 强制刷新历史数据
                     history_data = DataFetcher.get_fund_history(fund_code)
                     if history_data:
                         fund.realtime_data.net_values = json.dumps(history_data.get('net_values', []))
@@ -451,7 +457,7 @@ def update_holding_profit():
                         fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
                         fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
                         fund.realtime_data.fsrq = history_data.get('fsrq', '')
-                        fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+                        fund.realtime_data.unit_net_value = float(unit_net_value)
                         fund.realtime_data.updated_at = datetime.now()
                 db.flush()
 
