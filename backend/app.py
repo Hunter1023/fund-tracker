@@ -731,7 +731,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 'fsrq': realtime_data.fsrq,
                 'net_values': []
             }
-            if need_estimate_refresh:
+            if need_estimate_refresh or realtime_data.estimate_change_rate is None:
                 funds_to_get_estimate.append(fund_code)
         else:
             funds_to_refresh.append(fund_code)
@@ -739,7 +739,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
     cache_key = int(time.time() / (5 * 60))
     valuation_data_dict = {}
     funds_always_need_estimate = funds_to_refresh
-    funds_conditional_estimate = funds_to_get_estimate if need_estimate_refresh else []
+    funds_conditional_estimate = funds_to_get_estimate if (need_estimate_refresh or any(realtime_data_map.get(fc) and realtime_data_map[fc].estimate_change_rate is None for fc in funds_to_get_estimate)) else []
     all_funds_for_estimate = funds_always_need_estimate + funds_conditional_estimate
     if all_funds_for_estimate:
         valuation_data_dict = DataFetcher.get_fund_valuation_batch(all_funds_for_estimate, cache_key)
@@ -946,7 +946,6 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         if fund_code in valuation_data_dict and fund_code in results:
             fund_data = valuation_data_dict[fund_code]
             if fund_data:
-                # 更新估值数据
                 estimate_net_value = None
                 if fund_data.get('estimate_net_value') is not None and fund_data.get('estimate_net_value') != '':
                     estimate_net_value = float(fund_data.get('estimate_net_value'))
@@ -960,6 +959,20 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 results[fund_code]['estimate_net_value'] = estimate_net_value
                 results[fund_code]['estimate_change_rate'] = str(estimate_change_rate) if estimate_change_rate is not None else '-'
                 results[fund_code]['estimate_time'] = estimate_time
+
+                realtime_data = realtime_data_map.get(fund_code)
+                if realtime_data:
+                    if estimate_net_value is not None:
+                        realtime_data.estimate_net_value = estimate_net_value
+                    if estimate_change_rate is not None:
+                        realtime_data.estimate_change_rate = estimate_change_rate
+                    if estimate_time:
+                        realtime_data.estimate_time = estimate_time
+                    try:
+                        db.commit()
+                    except Exception as e:
+                        print(f"更新估值缓存到数据库失败: {e}")
+                        db.rollback()
 
     return results
 
