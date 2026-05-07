@@ -612,7 +612,6 @@ class DataFetcher:
             fsrq = rates_data.get('fsrq', '')
             unit_net_value = rates_data.get('unit_net_value', 0)
 
-            # 获取历史净值数据（用单独的 try-except，避免影响涨跌幅数据）
             net_values = []
             try:
                 page_index = 1
@@ -627,10 +626,8 @@ class DataFetcher:
                     net_values_response = requests.get(net_values_url, headers=headers, timeout=10)
                     net_values_data = net_values_response.json()
 
-                    # 解析历史净值数据
                     if net_values_data.get('Data') and net_values_data['Data'].get('LSJZList'):
                         for item in net_values_data['Data']['LSJZList']:
-                            # 跳过DWJZ为空的记录（如节假日）
                             if item.get('DWJZ'):
                                 net_values.append({
                                     'date': item.get('FSRQ'),
@@ -638,14 +635,7 @@ class DataFetcher:
                                     'cumulative_net_value': item.get('LJJZ'),
                                     'change_rate': item.get('JZZZL')
                                 })
-                                # 从历史数据中获取单位净值
-                                if unit_net_value == 0:
-                                    try:
-                                        unit_net_value = float(item.get('DWJZ'))
-                                    except (ValueError, TypeError):
-                                        pass
 
-                        # 检查是否还有更多数据
                         total_count = net_values_data.get('TotalCount', 0)
                         if len(net_values) >= total_count or len(net_values) >= 500:
                             break
@@ -654,6 +644,22 @@ class DataFetcher:
                         break
             except Exception as e:
                 print(f"获取基金历史净值失败，但涨跌幅数据仍可用: {e}")
+
+            if net_values:
+                latest_lsjz = net_values[0]
+                latest_lsjz_date = latest_lsjz.get('date', '')
+                try:
+                    latest_lsjz_nav = float(latest_lsjz.get('unit_net_value', 0))
+                except (ValueError, TypeError):
+                    latest_lsjz_nav = 0
+
+                if unit_net_value == 0 and latest_lsjz_nav > 0:
+                    unit_net_value = latest_lsjz_nav
+                    fsrq = latest_lsjz_date
+                    print(f"基金 {fund_code} get_fund_rates未返回净值，使用LSJZList数据: unit_net_value={unit_net_value}, fsrq={fsrq}")
+                elif fsrq == latest_lsjz_date and latest_lsjz_nav > 0 and unit_net_value != latest_lsjz_nav:
+                    print(f"基金 {fund_code} 净值数据不一致(API: {unit_net_value}, LSJZList: {latest_lsjz_nav}, 日期: {fsrq})，使用LSJZList数据")
+                    unit_net_value = latest_lsjz_nav
 
             return {
                 'fund_code': fund_code,
