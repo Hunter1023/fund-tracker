@@ -868,15 +868,27 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 )
                 db.add(realtime_data)
 
+            result_estimate_net_value = data.get('estimate_net_value', None)
+            if result_estimate_net_value is None and realtime_data and realtime_data.estimate_net_value is not None:
+                result_estimate_net_value = realtime_data.estimate_net_value
+
+            result_estimate_change_rate = data.get('estimate_change_rate', None)
+            if result_estimate_change_rate is None and realtime_data and realtime_data.estimate_change_rate is not None:
+                result_estimate_change_rate = realtime_data.estimate_change_rate
+
+            result_estimate_time = data.get('estimate_time', '')
+            if not result_estimate_time and realtime_data and realtime_data.estimate_time:
+                result_estimate_time = realtime_data.estimate_time
+
             # 添加到结果（延迟flush到循环外批量提交）
             results[fund_code] = {
                 'fund_code': fund_code,
                 'fund_name': fund.fund_name,
                 'net_value': data.get('net_value_date', ''),
                 'unit_net_value': data.get('unit_net_value', None),
-                'estimate_net_value': data.get('estimate_net_value', None),
-                'estimate_change_rate': str(data.get('estimate_change_rate', 0)) if data.get('estimate_change_rate') is not None else '-',
-                'estimate_time': data.get('estimate_time', ''),
+                'estimate_net_value': result_estimate_net_value,
+                'estimate_change_rate': str(result_estimate_change_rate) if result_estimate_change_rate is not None else '-',
+                'estimate_time': result_estimate_time,
                 'one_month_rate': data.get('one_month_rate', 0),
                 'three_month_rate': data.get('three_month_rate', 0),
                 'one_year_rate': data.get('one_year_rate', 0),
