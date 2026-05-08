@@ -1,5 +1,12 @@
 <template>
   <div class="app-container">
+    <!-- 全局加载遮罩 -->
+    <div v-if="isGlobalLoading" class="global-loading-overlay">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">加载中...</span>
+      </div>
+    </div>
+
     <div class="header-section">
       <div class="header-placeholder"></div>
       <div class="header-content">
@@ -311,6 +318,17 @@ const modalTitle = ref("");
 const existingTags = ref([]);
 const showDropdown = ref(false);
 const filteredTags = ref([]);
+
+// 全局加载状态
+const isGlobalLoading = ref(false);
+
+function showLoading() {
+  isGlobalLoading.value = true;
+}
+
+function hideLoading() {
+  isGlobalLoading.value = false;
+}
 
 let searchTimeout = null;
 let currentSearchRequest = null;
@@ -1188,6 +1206,26 @@ onUnmounted(() => {
   padding: 24px;
   max-width: 1200px;
   margin: 0 auto;
+}
+
+/* 全局加载遮罩样式 */
+.global-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  backdrop-filter: blur(4px);
+}
+
+.global-loading-overlay .spinner-border {
+  width: 3rem;
+  height: 3rem;
 }
 
 /* 模态框样式 */

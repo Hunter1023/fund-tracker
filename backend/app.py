@@ -1754,13 +1754,18 @@ def get_fund_complete_info(fund_code):
                         'one_year_rate': fund.realtime_data.one_year_rate or 0,
                         'daily_change_rate': fund.realtime_data.daily_change_rate or 0,
                         'fsrq': fund.realtime_data.fsrq or '',
-                        'unit_net_value': fund.realtime_data.unit_net_value or 0
+                        'unit_net_value': fund.realtime_data.unit_net_value or 0,
+                        'estimate_change_rate': str(fund.realtime_data.estimate_change_rate) if fund.realtime_data.estimate_change_rate is not None else '-',
+                        'estimate_time': fund.realtime_data.estimate_time or ''
                     }
 
             # 数据不存在、已过期或 net_values 为空，从第三方接口获取
             logger.info(f"从第三方接口获取基金 {fund_code} 的历史数据")
             history_data = DataFetcher.get_fund_history(fund_code)
             logger.info(f"从第三方获取到的历史数据中 net_values 数量: {len(history_data.get('net_values', []))}")
+
+            # 获取估值数据
+            estimate_data = DataFetcher._get_fund_valuation_no_retry(fund_code)
 
             # 保存到数据库
             if fund:
@@ -1773,9 +1778,17 @@ def get_fund_complete_info(fund_code):
                 fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
                 fund.realtime_data.fsrq = history_data.get('fsrq', '')
                 fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+                # 更新估值数据
+                if estimate_data:
+                    fund.realtime_data.estimate_change_rate = float(estimate_data.get('estimate_change_rate')) if estimate_data.get('estimate_change_rate') else None
+                    fund.realtime_data.estimate_time = estimate_data.get('estimate_time', '')
                 fund.realtime_data.updated_at = datetime.now()
                 db.commit()
                 logger.info(f"已保存基金 {fund_code} 的历史数据到数据库，net_values 数量: {len(history_data.get('net_values', []))}")
+
+            # 添加估值数据到返回结果
+            history_data['estimate_change_rate'] = str(estimate_data.get('estimate_change_rate')) if estimate_data and estimate_data.get('estimate_change_rate') else '-'
+            history_data['estimate_time'] = estimate_data.get('estimate_time', '') if estimate_data else ''
 
             return history_data
 
