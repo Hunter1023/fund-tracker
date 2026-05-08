@@ -1704,11 +1704,11 @@ def get_fund_complete_info(fund_code):
     :return: 基金完整信息
     """
     from datetime import datetime, timedelta
-    from flask_jwt_extended import get_current_user_id
+    from flask_jwt_extended import get_jwt_identity
     db = next(get_db())
     try:
         # 获取当前用户ID（可选，未登录时返回None）
-        user_id = get_current_user_id(optional=True)
+        user_id = get_jwt_identity()
         # 并行获取数据
         from concurrent.futures import ThreadPoolExecutor
 
