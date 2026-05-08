@@ -497,6 +497,12 @@ function syncRowHeights() {
   }, 50);
 }
 
+function forceSyncRowHeights() {
+  syncRowHeights();
+  setTimeout(syncRowHeights, 100);
+  setTimeout(syncRowHeights, 200);
+}
+
 // 组件挂载时自动加载数据
 // 加载平台数据和持仓数据，确保页面刷新时能正常显示
 onMounted(async () => {
@@ -506,11 +512,11 @@ onMounted(async () => {
   // 加载持仓数据，确保页面刷新时能正常显示
   await loadHoldings();
   await nextTick();
-  syncRowHeights();
+  forceSyncRowHeights();
   updatePieChart();
 
   // 添加窗口resize事件监听
-  window.addEventListener("resize", syncRowHeights);
+  window.addEventListener("resize", forceSyncRowHeights);
 });
 
 // 监听持仓数据变化，同步行高并更新饼图
@@ -518,7 +524,7 @@ watch(
   sortedHoldings,
   async () => {
     await nextTick();
-    syncRowHeights();
+    forceSyncRowHeights();
     updatePieChart();
   },
   { deep: true },
@@ -527,7 +533,7 @@ watch(
 // 监听平台切换，重新同步行高
 watch(selectedPlatform, async () => {
   await nextTick();
-  syncRowHeights();
+  forceSyncRowHeights();
 });
 
 // 监听展开状态变化，当展开时更新饼图
@@ -1181,6 +1187,7 @@ defineExpose({
   gap: 4px;
   white-space: normal;
   word-break: break-word;
+  min-height: 60px;
 }
 
 .fund-name {
