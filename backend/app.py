@@ -1801,16 +1801,10 @@ def get_fund_complete_info(fund_code):
                 'platform_id': t.platform_id  # 返回平台ID
             } for t in transactions]
 
-        # 并行执行，PostgreSQL支持并发操作
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            future_basic = executor.submit(get_basic_info)
-            future_history = executor.submit(get_history_data)
-            future_transactions = executor.submit(get_transactions)
-
-            basic_info = future_basic.result()
-            history_data = future_history.result()
-            transactions = future_transactions.result()
+        # 串行执行（避免SQLAlchemy session线程安全问题）
+        basic_info = get_basic_info()
+        history_data = get_history_data()
+        transactions = get_transactions()
 
         # 构建响应
         response = {
