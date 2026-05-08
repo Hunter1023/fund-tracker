@@ -851,6 +851,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                     if key == 'estimate_time' and value == '':
                         continue
                     setattr(realtime_data, key, value)
+                realtime_data.updated_at = datetime.now()  # 更新时间戳
             else:
                 realtime_data = FundRealtimeData(
                     fund_id=fund.id,
