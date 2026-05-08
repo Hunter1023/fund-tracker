@@ -968,6 +968,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                         realtime_data.estimate_change_rate = estimate_change_rate
                     if estimate_time:
                         realtime_data.estimate_time = estimate_time
+                    realtime_data.updated_at = datetime.now()  # 更新时间戳，确保下次刷新检查正常
                     try:
                         db.commit()
                     except Exception as e:
