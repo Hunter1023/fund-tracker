@@ -168,7 +168,6 @@ export function useWatchlist() {
   }
 
   async function removeFromWatchlist(fundCode) {
-    loading.value = true;
     try {
       const response = await watchlistApi.remove(fundCode);
       if (response.data.success) {
@@ -176,8 +175,6 @@ export function useWatchlist() {
       }
     } catch (error) {
       console.error("移除自选失败:", error);
-    } finally {
-      loading.value = false;
     }
   }
 
