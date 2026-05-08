@@ -428,8 +428,14 @@ async function handleConfirm() {
   await loadWatchlist();
 }
 
+let syncRowHeightsTimeout = null;
+
 function syncRowHeights() {
-  requestAnimationFrame(() => {
+  if (syncRowHeightsTimeout) {
+    clearTimeout(syncRowHeightsTimeout);
+  }
+  
+  syncRowHeightsTimeout = setTimeout(() => {
     const frozenTable = document.querySelector(".frozen-table");
     const scrollableTable = document.querySelector(".custom-table");
 
@@ -442,15 +448,19 @@ function syncRowHeights() {
 
     frozenTheadRows.forEach((frozenRow) => {
       frozenRow.style.height = "";
+      frozenRow.style.minHeight = "";
     });
     scrollableTheadRows.forEach((scrollableRow) => {
       scrollableRow.style.height = "";
+      scrollableRow.style.minHeight = "";
     });
     frozenTbodyRows.forEach((frozenRow) => {
       frozenRow.style.height = "";
+      frozenRow.style.minHeight = "";
     });
     scrollableTbodyRows.forEach((scrollableRow) => {
       scrollableRow.style.height = "";
+      scrollableRow.style.minHeight = "";
     });
 
     requestAnimationFrame(() => {
@@ -460,8 +470,8 @@ function syncRowHeights() {
           const scrollableHeight = scrollableRow.offsetHeight;
           const frozenHeight = frozenRow.offsetHeight;
           const maxHeight = Math.max(scrollableHeight, frozenHeight);
-          frozenRow.style.height = maxHeight + "px";
-          scrollableRow.style.height = maxHeight + "px";
+          frozenRow.style.minHeight = maxHeight + "px";
+          scrollableRow.style.minHeight = maxHeight + "px";
         }
       });
 
@@ -471,16 +481,17 @@ function syncRowHeights() {
           const scrollableHeight = scrollableRow.offsetHeight;
           const frozenHeight = frozenRow.offsetHeight;
           const maxHeight = Math.max(scrollableHeight, frozenHeight);
-          frozenRow.style.height = maxHeight + "px";
-          scrollableRow.style.height = maxHeight + "px";
+          frozenRow.style.minHeight = maxHeight + "px";
+          scrollableRow.style.minHeight = maxHeight + "px";
         }
       });
     });
-  });
+  }, 50);
 }
 
 onMounted(() => {
   syncRowHeights();
+  window.addEventListener("resize", syncRowHeights);
 });
 
 watch(

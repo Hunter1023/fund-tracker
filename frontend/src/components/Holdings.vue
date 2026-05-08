@@ -436,8 +436,14 @@ async function handlePlatformUpdate() {
   await loadHoldings();
 }
 
+let syncRowHeightsTimeout = null;
+
 function syncRowHeights() {
-  requestAnimationFrame(() => {
+  if (syncRowHeightsTimeout) {
+    clearTimeout(syncRowHeightsTimeout);
+  }
+
+  syncRowHeightsTimeout = setTimeout(() => {
     const frozenTable = document.querySelector(".frozen-table");
     const scrollableTable = document.querySelector(".custom-table");
 
@@ -450,15 +456,19 @@ function syncRowHeights() {
 
     frozenTheadRows.forEach((frozenRow) => {
       frozenRow.style.height = "";
+      frozenRow.style.minHeight = "";
     });
     scrollableTheadRows.forEach((scrollableRow) => {
       scrollableRow.style.height = "";
+      scrollableRow.style.minHeight = "";
     });
     frozenTbodyRows.forEach((frozenRow) => {
       frozenRow.style.height = "";
+      frozenRow.style.minHeight = "";
     });
     scrollableTbodyRows.forEach((scrollableRow) => {
       scrollableRow.style.height = "";
+      scrollableRow.style.minHeight = "";
     });
 
     requestAnimationFrame(() => {
@@ -468,8 +478,8 @@ function syncRowHeights() {
           const scrollableHeight = scrollableRow.offsetHeight;
           const frozenHeight = frozenRow.offsetHeight;
           const maxHeight = Math.max(scrollableHeight, frozenHeight);
-          frozenRow.style.height = maxHeight + "px";
-          scrollableRow.style.height = maxHeight + "px";
+          frozenRow.style.minHeight = maxHeight + "px";
+          scrollableRow.style.minHeight = maxHeight + "px";
         }
       });
 
@@ -479,12 +489,12 @@ function syncRowHeights() {
           const scrollableHeight = scrollableRow.offsetHeight;
           const frozenHeight = frozenRow.offsetHeight;
           const maxHeight = Math.max(scrollableHeight, frozenHeight);
-          frozenRow.style.height = maxHeight + "px";
-          scrollableRow.style.height = maxHeight + "px";
+          frozenRow.style.minHeight = maxHeight + "px";
+          scrollableRow.style.minHeight = maxHeight + "px";
         }
       });
     });
-  });
+  }, 50);
 }
 
 // 组件挂载时自动加载数据
@@ -498,6 +508,9 @@ onMounted(async () => {
   await nextTick();
   syncRowHeights();
   updatePieChart();
+
+  // 添加窗口resize事件监听
+  window.addEventListener("resize", syncRowHeights);
 });
 
 // 监听持仓数据变化，同步行高并更新饼图
@@ -512,13 +525,10 @@ watch(
 );
 
 // 监听平台切换，重新同步行高
-watch(
-  selectedPlatform,
-  async () => {
-    await nextTick();
-    syncRowHeights();
-  },
-);
+watch(selectedPlatform, async () => {
+  await nextTick();
+  syncRowHeights();
+});
 
 // 监听展开状态变化，当展开时更新饼图
 watch(showSectorDistribution, async (newValue) => {
