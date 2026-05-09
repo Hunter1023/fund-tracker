@@ -535,7 +535,17 @@ defineExpose({
   min-width: 900px;
 }
 
-.custom-table .frozen-col {
+.custom-table th.frozen-col {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
+  table-layout: fixed;
+}
+
+.custom-table td.frozen-col {
   position: sticky;
   left: 0;
   z-index: 10;
