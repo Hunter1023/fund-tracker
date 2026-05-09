@@ -37,7 +37,10 @@
               <tr>
                 <th
                   :class="['table-header', { sortable: columns[0]?.sortable }]"
-                  :style="{ minWidth: columns[0]?.minWidth, width: columns[0]?.width }"
+                  :style="{
+                    minWidth: columns[0]?.minWidth,
+                    width: columns[0]?.width,
+                  }"
                   @click="columns[0]?.sortable && handleSort(columns[0]?.key)"
                 >
                   <div class="header-content">
@@ -74,7 +77,9 @@
                     </div>
                     <div class="fund-code">
                       {{ fund.fund_code }}
-                      <span v-if="isHolding(fund.fund_code)" class="holding-badge"
+                      <span
+                        v-if="isHolding(fund.fund_code)"
+                        class="holding-badge"
                         >持有</span
                       >
                       <span v-if="isUpdatedToday(fund)" class="update-badge"
@@ -132,120 +137,129 @@
                   :key="column.key"
                   :data-column="column.key"
                 >
-              <template v-if="column.key === 'tags'">
-                <div class="tags-container">
-                  <div
-                    v-for="tag in (fund.tags || '')
-                      .split(',')
-                      .filter((t) => t.trim())"
-                    :key="tag"
-                    class="tag-item"
-                  >
-                    <span
-                      class="tag-badge"
-                      :class="`tag-${getTagColorIndex(tag)}`"
-                      @click="currentTag = tag.trim()"
+                  <template v-if="column.key === 'tags'">
+                    <div class="tags-container">
+                      <div
+                        v-for="tag in (fund.tags || '')
+                          .split(',')
+                          .filter((t) => t.trim())"
+                        :key="tag"
+                        class="tag-item"
+                      >
+                        <span
+                          class="tag-badge"
+                          :class="`tag-${getTagColorIndex(tag)}`"
+                          @click="currentTag = tag.trim()"
+                        >
+                          {{ tag.trim() }}
+                        </span>
+                      </div>
+                    </div>
+                  </template>
+                  <template v-else-if="column.key === 'daily_change_rate'">
+                    <div
+                      class="rate-cell"
+                      :style="{
+                        color: getChangeRateColor(fund.daily_change_rate),
+                      }"
                     >
-                      {{ tag.trim() }}
-                    </span>
-                  </div>
-                </div>
-              </template>
-              <template v-else-if="column.key === 'daily_change_rate'">
-                <div
-                  class="rate-cell"
-                  :style="{ color: getChangeRateColor(fund.daily_change_rate) }"
-                >
-                  <div class="rate-value">{{ fund.daily_change_rate }}%</div>
-                  <div v-if="!isUpdatedToday(fund)" class="rate-date">
-                    {{ getMonthDay(fund.fsrq || fund.net_value) }}
-                  </div>
-                </div>
-              </template>
-              <template v-else-if="column.key === 'estimate_change_rate'">
-                <div class="rate-cell">
-                  <div
-                    class="rate-value"
-                    :style="{
-                      color:
-                        fund.estimate_change_rate !== null &&
-                        fund.estimate_change_rate !== undefined &&
-                        fund.estimate_change_rate !== '-'
-                          ? getChangeRateColor(fund.estimate_change_rate)
-                          : '#6c757d',
-                    }"
-                  >
-                    {{
-                      fund.estimate_change_rate !== null &&
-                      fund.estimate_change_rate !== undefined &&
-                      fund.estimate_change_rate !== "-"
-                        ? fund.estimate_change_rate + "%"
-                        : "-"
-                    }}
-                  </div>
-                  <div
-                    v-if="
-                      fund.estimate_time && fund.estimate_change_rate !== '-'
-                    "
-                    class="rate-date"
-                  >
-                    {{ formatEstimateTime(fund.estimate_time) }}
-                  </div>
-                </div>
-              </template>
-              <template v-else-if="column.key === 'one_month_rate'">
-                <div
-                  class="rate-value"
-                  :style="{ color: getChangeRateColor(fund.one_month_rate) }"
-                >
-                  {{
-                    fund.one_month_rate !== undefined
-                      ? fund.one_month_rate.toFixed(2) + "%"
-                      : "-"
-                  }}
-                </div>
-              </template>
-              <template v-else-if="column.key === 'three_month_rate'">
-                <div
-                  class="rate-value"
-                  :style="{ color: getChangeRateColor(fund.three_month_rate) }"
-                >
-                  {{
-                    fund.three_month_rate !== undefined
-                      ? fund.three_month_rate.toFixed(2) + "%"
-                      : "-"
-                  }}
-                </div>
-              </template>
-              <template v-else-if="column.key === 'one_year_rate'">
-                <div
-                  class="rate-value"
-                  :style="{ color: getChangeRateColor(fund.one_year_rate) }"
-                >
-                  {{
-                    fund.one_year_rate !== undefined
-                      ? fund.one_year_rate.toFixed(2) + "%"
-                      : "-"
-                  }}
-                </div>
-              </template>
-              <template v-else-if="column.key === 'action'">
-                <div class="action-cell">
-                  <button
-                    v-if="isLoggedIn"
-                    class="action-btn btn-delete"
-                    @click="confirmRemoveFromWatchlist(fund)"
-                  >
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </div>
-              </template>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    </div>
+                      <div class="rate-value">
+                        {{ fund.daily_change_rate }}%
+                      </div>
+                      <div v-if="!isUpdatedToday(fund)" class="rate-date">
+                        {{ getMonthDay(fund.fsrq || fund.net_value) }}
+                      </div>
+                    </div>
+                  </template>
+                  <template v-else-if="column.key === 'estimate_change_rate'">
+                    <div class="rate-cell">
+                      <div
+                        class="rate-value"
+                        :style="{
+                          color:
+                            fund.estimate_change_rate !== null &&
+                            fund.estimate_change_rate !== undefined &&
+                            fund.estimate_change_rate !== '-'
+                              ? getChangeRateColor(fund.estimate_change_rate)
+                              : '#6c757d',
+                        }"
+                      >
+                        {{
+                          fund.estimate_change_rate !== null &&
+                          fund.estimate_change_rate !== undefined &&
+                          fund.estimate_change_rate !== "-"
+                            ? fund.estimate_change_rate + "%"
+                            : "-"
+                        }}
+                      </div>
+                      <div
+                        v-if="
+                          fund.estimate_time &&
+                          fund.estimate_change_rate !== '-'
+                        "
+                        class="rate-date"
+                      >
+                        {{ formatEstimateTime(fund.estimate_time) }}
+                      </div>
+                    </div>
+                  </template>
+                  <template v-else-if="column.key === 'one_month_rate'">
+                    <div
+                      class="rate-value"
+                      :style="{
+                        color: getChangeRateColor(fund.one_month_rate),
+                      }"
+                    >
+                      {{
+                        fund.one_month_rate !== undefined
+                          ? fund.one_month_rate.toFixed(2) + "%"
+                          : "-"
+                      }}
+                    </div>
+                  </template>
+                  <template v-else-if="column.key === 'three_month_rate'">
+                    <div
+                      class="rate-value"
+                      :style="{
+                        color: getChangeRateColor(fund.three_month_rate),
+                      }"
+                    >
+                      {{
+                        fund.three_month_rate !== undefined
+                          ? fund.three_month_rate.toFixed(2) + "%"
+                          : "-"
+                      }}
+                    </div>
+                  </template>
+                  <template v-else-if="column.key === 'one_year_rate'">
+                    <div
+                      class="rate-value"
+                      :style="{ color: getChangeRateColor(fund.one_year_rate) }"
+                    >
+                      {{
+                        fund.one_year_rate !== undefined
+                          ? fund.one_year_rate.toFixed(2) + "%"
+                          : "-"
+                      }}
+                    </div>
+                  </template>
+                  <template v-else-if="column.key === 'action'">
+                    <div class="action-cell">
+                      <button
+                        v-if="isLoggedIn"
+                        class="action-btn btn-delete"
+                        @click="confirmRemoveFromWatchlist(fund)"
+                      >
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  </template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <FundDetailModal
@@ -264,7 +278,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useHoldings } from "../composables/useHoldings";
 import { useWatchlist } from "../composables/useWatchlist";
 import ConfirmDialog from "./ConfirmDialog.vue";
@@ -434,7 +448,7 @@ function syncRowHeights() {
   if (syncRowHeightsTimeout) {
     clearTimeout(syncRowHeightsTimeout);
   }
-  
+
   syncRowHeightsTimeout = setTimeout(() => {
     const frozenTable = document.querySelector(".frozen-table");
     const scrollableTable = document.querySelector(".custom-table");
@@ -489,17 +503,23 @@ function syncRowHeights() {
   }, 50);
 }
 
-onMounted(() => {
+function forceSyncRowHeights() {
   syncRowHeights();
-  window.addEventListener("resize", syncRowHeights);
+  setTimeout(syncRowHeights, 100);
+  setTimeout(syncRowHeights, 200);
+}
+
+onMounted(() => {
+  forceSyncRowHeights();
+  window.addEventListener("resize", forceSyncRowHeights);
 });
 
 watch(
   () => filteredFunds.value,
   () => {
-    syncRowHeights();
+    forceSyncRowHeights();
   },
-  { deep: true }
+  { deep: true },
 );
 
 defineExpose({
@@ -864,6 +884,7 @@ defineExpose({
   gap: 4px;
   white-space: normal;
   word-break: break-word;
+  min-height: 60px;
 }
 
 .fund-name {
