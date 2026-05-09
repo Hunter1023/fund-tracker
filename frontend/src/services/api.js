@@ -150,6 +150,23 @@ export const authApi = {
   getEmailConfig: () => api.get("/auth/email/config"),
 };
 
+export const userApi = {
+  getProfile: () => api.get("/user/profile"),
+
+  updateProfile: (data) => api.put("/user/profile", data),
+
+  sendLinkEmailCode: (email) => api.post("/auth/email/send-code", { email }),
+
+  linkEmail: (email, code) => api.post("/user/email/link", { email, code }),
+
+  setPassword: (password, confirmPassword) =>
+    api.post("/user/password/set", { password, confirm_password: confirmPassword }),
+
+  linkGithub: (code) => api.post("/user/github/link", { code }),
+
+  getGithubConfig: () => api.get("/auth/github/config"),
+};
+
 export function getStoredUser() {
   try {
     const user = localStorage.getItem("auth_user");
