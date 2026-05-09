@@ -955,6 +955,13 @@ defineExpose({
   min-width: 80px;
 }
 
+.custom-table th:nth-child(9),
+.custom-table td:nth-child(9) {
+  width: 100px;
+  max-width: 100px;
+  min-width: 80px;
+}
+
 .table-header {
   background: #495057;
   color: #fff;
