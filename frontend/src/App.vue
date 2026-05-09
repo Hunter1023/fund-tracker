@@ -37,7 +37,7 @@
         <div v-else class="user-menu-wrapper">
           <button
             class="auth-btn user-btn"
-            @click="showUserMenu = !showUserMenu"
+            @click="showUserProfile = !showUserProfile"
           >
             <img
               v-if="currentUser.github_avatar"
@@ -50,15 +50,6 @@
               currentUser.nickname || currentUser.username || "用户"
             }}</span>
           </button>
-          <div v-if="showUserMenu" class="user-dropdown">
-            <div class="user-info">
-              <div class="user-email">{{ currentUser.email }}</div>
-            </div>
-            <div class="dropdown-divider"></div>
-            <button class="dropdown-item" @click="handleLogout">
-              <i class="bi bi-box-arrow-right"></i> 退出登录
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -270,6 +261,14 @@
       @close="showAuthModal = false"
       @login-success="handleLoginSuccess"
     />
+
+    <!-- 用户信息页面 -->
+    <UserProfile
+      v-if="showUserProfile"
+      @close="showUserProfile = false"
+      @user-updated="handleUserUpdated"
+      @logout="handleLogout"
+    />
   </div>
 </template>
 
@@ -278,6 +277,7 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import AuthModal from "./components/AuthModal.vue";
 import FundDetailModal from "./components/FundDetailModal.vue";
 import Holdings from "./components/Holdings.vue";
+import UserProfile from "./components/UserProfile.vue";
 import Watchlist from "./components/Watchlist.vue";
 import {
   authApi,
@@ -293,6 +293,7 @@ import {
 const currentUser = ref(null);
 const showAuthModal = ref(false);
 const showUserMenu = ref(false);
+const showUserProfile = ref(false);
 const activeTab = ref("watchlist");
 const isManualRefresh = ref(false);
 const searchKeyword = ref("");
@@ -360,17 +361,33 @@ async function initAuth() {
   await handleGithubCallback();
 }
 
+const userProfileRef = ref(null);
+
 async function handleGithubCallback() {
   const urlParams = new URLSearchParams(window.location.search);
   const code = urlParams.get("code");
   if (!code) return;
 
+  const pathname = window.location.pathname;
+  const isProfileCallback = pathname === "/profile/github-callback";
+
   try {
-    const response = await authApi.githubAuth(code);
-    const { token, refresh_token, user } = response.data;
-    setAuthData(token, user, refresh_token);
-    currentUser.value = user;
-    activeTab.value = "holding";
+    if (isProfileCallback) {
+      // 用户资料页面的 GitHub 绑定回调
+      const response = await userApi.linkGithub(code);
+      const { user } = response.data;
+      setAuthData(localStorage.getItem("auth_token"), user);
+      currentUser.value = user;
+      showUserProfile.value = true;
+      window.history.replaceState({}, document.title, "/");
+    } else {
+      // 登录页面的 GitHub 回调
+      const response = await authApi.githubAuth(code);
+      const { token, refresh_token, user } = response.data;
+      setAuthData(token, user, refresh_token);
+      currentUser.value = user;
+      activeTab.value = "holding";
+    }
     window.history.replaceState({}, document.title, window.location.pathname);
   } catch (err) {
     console.error("GitHub登录失败:", err);
@@ -397,6 +414,7 @@ function handleLogout() {
   clearAuthData();
   currentUser.value = null;
   showUserMenu.value = false;
+  showUserProfile.value = false;
   activeTab.value = "watchlist";
   watchlistFunds.value = [];
   holdingsFunds.value = [];
@@ -405,6 +423,15 @@ function handleLogout() {
       watchlistRef.value.loadWatchlist();
     }
   });
+}
+
+function handleOpenProfile() {
+  showUserMenu.value = false;
+  showUserProfile.value = true;
+}
+
+function handleUserUpdated(user) {
+  currentUser.value = user;
 }
 
 function handleAuthChanged(event) {

@@ -4,7 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
 from data_fetcher import DataFetcher
 from models import Fund, FundHolding, Transaction, Watchlist, FundRealtimeData, HoldingProfitHistory, Platform, User, create_tables, get_db
-from auth import register_auth_routes, get_current_user_id
+from auth import register_auth_routes, register_user_profile_routes, get_current_user_id
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import decimal
@@ -37,6 +37,7 @@ CORS(app, supports_credentials=True)
 jwt = JWTManager(app)
 
 register_auth_routes(app)
+register_user_profile_routes(app)
 
 # 配置日志
 logging.basicConfig(

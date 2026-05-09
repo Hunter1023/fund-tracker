@@ -400,4 +400,203 @@ def _user_to_dict(user):
         'github_avatar': user.github_avatar,
         'is_active': user.is_active,
         'created_at': user.created_at.isoformat() if user.created_at else None,
+        'has_password': bool(user.password_hash),
     }
+
+
+def register_user_profile_routes(app):
+    @app.route('/api/user/profile', methods=['GET'])
+    @jwt_required()
+    def get_user_profile():
+        user_id = get_jwt_identity()
+        db = next(get_db())
+        try:
+            user = db.query(User).filter(User.id == int(user_id)).first()
+            if not user:
+                return jsonify({'error': '用户不存在'}), 404
+
+            return jsonify({'user': _user_to_dict(user)})
+        finally:
+            db.close()
+
+    @app.route('/api/user/profile', methods=['PUT'])
+    @jwt_required()
+    def update_user_profile():
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        nickname = data.get('nickname', '').strip()
+
+        if not nickname:
+            return jsonify({'error': '昵称不能为空'}), 400
+
+        db = next(get_db())
+        try:
+            user = db.query(User).filter(User.id == int(user_id)).first()
+            if not user:
+                return jsonify({'error': '用户不存在'}), 404
+
+            user.nickname = nickname
+            db.commit()
+            db.refresh(user)
+
+            return jsonify({'user': _user_to_dict(user)})
+        except Exception as e:
+            db.rollback()
+            logger.error(f"更新用户信息失败: {e}")
+            return jsonify({'error': '更新失败，请稍后重试'}), 500
+        finally:
+            db.close()
+
+    @app.route('/api/user/email/link', methods=['POST'])
+    @jwt_required()
+    def link_email():
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        email = data.get('email', '').strip()
+        code = data.get('code', '').strip()
+
+        if not email or not code:
+            return jsonify({'error': '邮箱和验证码不能为空'}), 400
+
+        cached = _verification_codes.get(email)
+        if not cached:
+            return jsonify({'error': '请先发送验证码'}), 400
+
+        now = time.time()
+        if now - cached['sent_at'] > CODE_EXPIRE_SECONDS:
+            del _verification_codes[email]
+            return jsonify({'error': '验证码已过期，请重新发送'}), 400
+
+        if cached['code'] != code:
+            return jsonify({'error': '验证码错误'}), 401
+
+        del _verification_codes[email]
+
+        db = next(get_db())
+        try:
+            existing_user = db.query(User).filter(User.email == email).first()
+            if existing_user and existing_user.id != int(user_id):
+                return jsonify({'error': '该邮箱已被其他账户绑定'}), 400
+
+            user = db.query(User).filter(User.id == int(user_id)).first()
+            if not user:
+                return jsonify({'error': '用户不存在'}), 404
+
+            user.email = email
+            db.commit()
+            db.refresh(user)
+
+            return jsonify({'user': _user_to_dict(user)})
+        except Exception as e:
+            db.rollback()
+            logger.error(f"绑定邮箱失败: {e}")
+            return jsonify({'error': '绑定失败，请稍后重试'}), 500
+        finally:
+            db.close()
+
+    @app.route('/api/user/password/set', methods=['POST'])
+    @jwt_required()
+    def set_password():
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        password = data.get('password', '')
+        confirm_password = data.get('confirm_password', '')
+
+        if not password:
+            return jsonify({'error': '密码不能为空'}), 400
+        if len(password) < 6:
+            return jsonify({'error': '密码长度不能少于6位'}), 400
+        if password != confirm_password:
+            return jsonify({'error': '两次输入的密码不一致'}), 400
+
+        db = next(get_db())
+        try:
+            user = db.query(User).filter(User.id == int(user_id)).first()
+            if not user:
+                return jsonify({'error': '用户不存在'}), 404
+
+            user.password_hash = generate_password_hash(password)
+            db.commit()
+            db.refresh(user)
+
+            return jsonify({'user': _user_to_dict(user)})
+        except Exception as e:
+            db.rollback()
+            logger.error(f"设置密码失败: {e}")
+            return jsonify({'error': '设置失败，请稍后重试'}), 500
+        finally:
+            db.close()
+
+    @app.route('/api/user/github/link', methods=['POST'])
+    @jwt_required()
+    def link_github():
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        code = data.get('code', '')
+
+        if not code:
+            return jsonify({'error': '缺少授权码'}), 400
+
+        if not OAUTH_CLIENT_ID or not OAUTH_CLIENT_SECRET:
+            return jsonify({'error': 'GitHub登录未配置'}), 500
+
+        try:
+            token_response = requests.post(
+                'https://github.com/login/oauth/access_token',
+                json={
+                    'client_id': OAUTH_CLIENT_ID,
+                    'client_secret': OAUTH_CLIENT_SECRET,
+                    'code': code,
+                },
+                headers={'Accept': 'application/json'},
+                timeout=10,
+            )
+            token_data = token_response.json()
+
+            if 'access_token' not in token_data:
+                return jsonify({'error': 'GitHub授权失败'}), 400
+
+            github_token = token_data['access_token']
+
+            user_response = requests.get(
+                'https://api.github.com/user',
+                headers={
+                    'Authorization': f'token {github_token}',
+                    'Accept': 'application/json',
+                },
+                timeout=10,
+            )
+            github_user = user_response.json()
+
+            github_id = str(github_user.get('id', ''))
+            if not github_id:
+                return jsonify({'error': '获取GitHub用户信息失败'}), 400
+
+            db = next(get_db())
+            try:
+                existing_user = db.query(User).filter(User.github_id == github_id).first()
+                if existing_user and existing_user.id != int(user_id):
+                    return jsonify({'error': '该GitHub账户已被其他账户绑定'}), 400
+
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if not user:
+                    return jsonify({'error': '用户不存在'}), 404
+
+                user.github_id = github_id
+                user.github_username = github_user.get('login', '')
+                user.github_avatar = github_user.get('avatar_url', '')
+
+                db.commit()
+                db.refresh(user)
+
+                return jsonify({'user': _user_to_dict(user)})
+            except Exception as e:
+                db.rollback()
+                logger.error(f"绑定GitHub账户失败: {e}")
+                return jsonify({'error': '绑定失败，请稍后重试'}), 500
+            finally:
+                db.close()
+
+        except requests.RequestException as e:
+            logger.error(f"GitHub OAuth请求失败: {e}")
+            return jsonify({'error': 'GitHub授权服务不可用'}), 503
