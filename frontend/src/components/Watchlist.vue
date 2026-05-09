@@ -30,12 +30,13 @@
     </div>
 
     <div v-else>
-      <div class="frozen-table-wrapper">
-        <div class="frozen-column">
-          <table class="frozen-table">
+      <div class="table-container">
+        <div class="scrollable-table-wrapper" ref="tableWrapper">
+          <table class="custom-table">
             <thead>
               <tr>
                 <th
+                  class="frozen-col"
                   :class="['table-header', { sortable: columns[0]?.sortable }]"
                   :style="{
                     minWidth: columns[0]?.minWidth,
@@ -59,43 +60,6 @@
                     </span>
                   </div>
                 </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="fund in filteredFunds"
-                :key="fund.fund_code"
-                class="table-row"
-              >
-                <td>
-                  <div class="fund-name-cell">
-                    <div
-                      class="fund-name clickable"
-                      @click="openFundDetail(fund)"
-                    >
-                      {{ fund.fund_name }}
-                    </div>
-                    <div class="fund-code">
-                      {{ fund.fund_code }}
-                      <span
-                        v-if="isHolding(fund.fund_code)"
-                        class="holding-badge"
-                        >持有</span
-                      >
-                      <span v-if="isUpdatedToday(fund)" class="update-badge"
-                        >已更新</span
-                      >
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="scrollable-table-wrapper" ref="tableWrapper">
-          <table class="custom-table">
-            <thead>
-              <tr>
                 <th
                   v-for="column in columns.slice(1)"
                   :key="column.key"
@@ -132,6 +96,27 @@
                 :key="fund.fund_code"
                 class="table-row"
               >
+                <td class="frozen-col">
+                  <div class="fund-name-cell">
+                    <div
+                      class="fund-name clickable"
+                      @click="openFundDetail(fund)"
+                    >
+                      {{ fund.fund_name }}
+                    </div>
+                    <div class="fund-code">
+                      {{ fund.fund_code }}
+                      <span
+                        v-if="isHolding(fund.fund_code)"
+                        class="holding-badge"
+                        >持有</span
+                      >
+                      <span v-if="isUpdatedToday(fund)" class="update-badge"
+                        >已更新</span
+                      >
+                    </div>
+                  </div>
+                </td>
                 <td
                   v-for="column in columns.slice(1)"
                   :key="column.key"
@@ -278,7 +263,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from "vue";
+import { onMounted, ref } from "vue";
 import { useHoldings } from "../composables/useHoldings";
 import { useWatchlist } from "../composables/useWatchlist";
 import ConfirmDialog from "./ConfirmDialog.vue";
@@ -442,85 +427,7 @@ async function handleConfirm() {
   await loadWatchlist();
 }
 
-let syncRowHeightsTimeout = null;
-
-function syncRowHeights() {
-  if (syncRowHeightsTimeout) {
-    clearTimeout(syncRowHeightsTimeout);
-  }
-
-  syncRowHeightsTimeout = setTimeout(() => {
-    const frozenTable = document.querySelector(".frozen-table");
-    const scrollableTable = document.querySelector(".custom-table");
-
-    if (!frozenTable || !scrollableTable) return;
-
-    const frozenTheadRows = frozenTable.querySelectorAll("thead tr");
-    const scrollableTheadRows = scrollableTable.querySelectorAll("thead tr");
-    const frozenTbodyRows = frozenTable.querySelectorAll("tbody tr");
-    const scrollableTbodyRows = scrollableTable.querySelectorAll("tbody tr");
-
-    frozenTheadRows.forEach((frozenRow) => {
-      frozenRow.style.height = "";
-      frozenRow.style.minHeight = "";
-    });
-    scrollableTheadRows.forEach((scrollableRow) => {
-      scrollableRow.style.height = "";
-      scrollableRow.style.minHeight = "";
-    });
-    frozenTbodyRows.forEach((frozenRow) => {
-      frozenRow.style.height = "";
-      frozenRow.style.minHeight = "";
-    });
-    scrollableTbodyRows.forEach((scrollableRow) => {
-      scrollableRow.style.height = "";
-      scrollableRow.style.minHeight = "";
-    });
-
-    requestAnimationFrame(() => {
-      frozenTheadRows.forEach((frozenRow, index) => {
-        const scrollableRow = scrollableTheadRows[index];
-        if (scrollableRow) {
-          const scrollableHeight = scrollableRow.offsetHeight;
-          const frozenHeight = frozenRow.offsetHeight;
-          const maxHeight = Math.max(scrollableHeight, frozenHeight);
-          frozenRow.style.minHeight = maxHeight + "px";
-          scrollableRow.style.minHeight = maxHeight + "px";
-        }
-      });
-
-      frozenTbodyRows.forEach((frozenRow, index) => {
-        const scrollableRow = scrollableTbodyRows[index];
-        if (scrollableRow) {
-          const scrollableHeight = scrollableRow.offsetHeight;
-          const frozenHeight = frozenRow.offsetHeight;
-          const maxHeight = Math.max(scrollableHeight, frozenHeight);
-          frozenRow.style.minHeight = maxHeight + "px";
-          scrollableRow.style.minHeight = maxHeight + "px";
-        }
-      });
-    });
-  }, 50);
-}
-
-function forceSyncRowHeights() {
-  syncRowHeights();
-  setTimeout(syncRowHeights, 100);
-  setTimeout(syncRowHeights, 200);
-}
-
-onMounted(() => {
-  forceSyncRowHeights();
-  window.addEventListener("resize", forceSyncRowHeights);
-});
-
-watch(
-  () => filteredFunds.value,
-  () => {
-    forceSyncRowHeights();
-  },
-  { deep: true },
-);
+onMounted(() => {});
 
 defineExpose({
   loadWatchlist,
@@ -609,57 +516,15 @@ defineExpose({
   font-size: 1rem;
 }
 
-.frozen-table-wrapper {
-  display: flex;
+.table-container {
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
-.frozen-column {
-  position: sticky;
-  left: 0;
-  z-index: 10;
-  background: #fff;
-  flex-shrink: 0;
-}
-
 .scrollable-table-wrapper {
   overflow-x: auto;
-  flex: 1;
   -webkit-overflow-scrolling: touch;
-}
-
-.frozen-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  background: #fff;
-}
-
-.frozen-table th,
-.frozen-table td {
-  width: 160px;
-  max-width: 160px;
-  min-width: 120px;
-}
-
-.frozen-table .table-header:first-child {
-  border-top-right-radius: 0;
-}
-
-.frozen-table .table-header {
-  padding: 14px 16px;
-  font-size: 0.875rem;
-}
-
-.frozen-table .table-row td {
-  padding: 16px;
-  border-bottom: 1px solid #e5e7eb;
-  font-size: 0.875rem;
-  text-align: left;
-  box-sizing: border-box;
-  height: 100%;
 }
 
 .custom-table {
@@ -667,11 +532,18 @@ defineExpose({
   border-collapse: separate;
   border-spacing: 0;
   background: #fff;
-  min-width: 740px;
+  min-width: 900px;
 }
 
-.custom-table .table-header:first-child {
-  border-top-left-radius: 0;
+.custom-table .frozen-col {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background: #fff;
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
+  table-layout: fixed;
 }
 
 .custom-table th:nth-child(2),
