@@ -68,9 +68,7 @@ services:
     image: cloudflare/cloudflared:2024.12.1
     restart: always
     network_mode: host
-    command: tunnel --url http://localhost:8080 run
-    environment:
-      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    command: tunnel run --url http://localhost:8080 --token ${TUNNEL_TOKEN}
 
 # 自定义网络，保证前后端互通
 networks:
