@@ -177,11 +177,9 @@ export function useHoldings() {
   }
 
   async function addHolding(data) {
-    // 前端先本地更新，展示添加效果
     const platform = data.platform || selectedPlatform.value || "默认";
 
     if (data.type === "sync") {
-      // 同步持仓操作，直接创建新的持仓对象
       const newHolding = {
         fund_code: data.fund_code,
         fund_name: data.fund_name,
@@ -203,13 +201,11 @@ export function useHoldings() {
       };
       updateHoldingLocally(newHolding);
     } else if (data.type === "buy" || data.type === "sell") {
-      // 加仓或减仓操作，优先查找对应平台的持仓，如果找不到则找该基金的第一个持仓
       let existingHolding = holdings.value.find(
         (h) =>
           h.fund_code === data.fund_code && (h.platform || "默认") === platform,
       );
 
-      // 如果找不到对应平台的持仓，尝试查找该基金的任意一个持仓
       if (!existingHolding) {
         existingHolding = holdings.value.find(
           (h) => h.fund_code === data.fund_code,
@@ -218,7 +214,6 @@ export function useHoldings() {
 
       if (existingHolding) {
         if (data.type === "buy") {
-          // 加仓操作
           const newCurrentValue =
             existingHolding.current_value + (data.cost || 0);
           const estimateChangeRate =
@@ -242,7 +237,6 @@ export function useHoldings() {
           };
           updateHoldingLocally(updatedHolding);
         } else if (data.type === "sell") {
-          // 减仓操作
           const sellRatio = (data.shares || 0) / existingHolding.shares;
           const updatedHolding = {
             ...existingHolding,
@@ -266,7 +260,6 @@ export function useHoldings() {
           }
         }
       } else {
-        // 如果是加仓且找不到现有持仓，创建新持仓
         if (data.type === "buy") {
           const newHolding = {
             fund_code: data.fund_code,
@@ -290,7 +283,6 @@ export function useHoldings() {
       }
     }
 
-    // 确定使用的平台：优先使用现有持仓的实际平台
     let actualPlatform = platform;
     if (data.type === "buy" || data.type === "sell") {
       let existingHolding = holdings.value.find(
@@ -307,36 +299,37 @@ export function useHoldings() {
       }
     }
 
-    // 异步发送请求给后端，使用实际平台值
     const requestData = {
       ...data,
       platform: actualPlatform,
     };
 
+    syncHoldingToBackend(requestData, data.fund_code, actualPlatform);
+
+    return { success: true };
+  }
+
+  async function syncHoldingToBackend(requestData, fundCode, actualPlatform) {
     try {
       const response = await holdingApi.add(requestData);
       if (!response.data.success) {
-        // 如果后端失败，重新加载持仓列表
         await loadHoldings();
-        return { success: false };
       } else {
-        // 后端成功后，异步获取基金最新数据并更新本地持仓（不重新计算current_value和profit_loss）
         try {
-          const fundResponse = await fundApi.get(data.fund_code);
+          const fundResponse = await fundApi.get(fundCode);
           const fundData = fundResponse.data;
           if (fundData) {
             let currentHolding = holdings.value.find(
               (h) =>
-                h.fund_code === data.fund_code &&
+                h.fund_code === fundCode &&
                 (h.platform || "默认") === actualPlatform,
             );
             if (!currentHolding) {
               currentHolding = holdings.value.find(
-                (h) => h.fund_code === data.fund_code,
+                (h) => h.fund_code === fundCode,
               );
             }
             if (currentHolding) {
-              // 检查最新涨幅是否已更新（fsrq是否为今日）
               const fsrq = fundData.fsrq || "";
               const today = getCurrentDate();
               const isToday = fsrq === today;
@@ -351,7 +344,6 @@ export function useHoldings() {
                 estimateChangeRate !== "-" &&
                 estimateChangeRate !== undefined
               ) {
-                // 有估算数据，使用估算涨幅计算今日收益
                 const changeRate = parseFloat(estimateChangeRate) || 0;
                 estimateProfit =
                   (changeRate * currentHolding.current_value) / 100;
@@ -361,16 +353,13 @@ export function useHoldings() {
                 dailyChangeRate !== "-" &&
                 dailyChangeRate !== 0
               ) {
-                // 最新涨幅已更新，使用最新涨幅计算今日收益
                 const changeRate = parseFloat(dailyChangeRate) || 0;
                 estimateProfit =
                   currentHolding.current_value * (changeRate / 100);
               } else {
-                // 没有估算数据且最新涨幅未更新，不显示今日收益
                 estimateProfit = null;
               }
 
-              // 保持数据库中保存的 current_value、profit_loss 和 profit_loss_rate 不变
               const updatedHolding = {
                 ...currentHolding,
                 daily_change_rate: fundData.daily_change_rate || "-",
@@ -378,7 +367,7 @@ export function useHoldings() {
                 estimate_profit: estimateProfit,
                 fsrq: fundData.fsrq || "",
                 one_month_rate: fundData.one_month_rate || 0,
-                fund_name: fundData.fund_name || data.fund_name,
+                fund_name: fundData.fund_name || requestData.fund_name,
               };
               updateHoldingLocally(updatedHolding);
             }
@@ -386,13 +375,10 @@ export function useHoldings() {
         } catch (error) {
           console.error("获取基金数据失败:", error);
         }
-        return { success: true };
       }
     } catch (error) {
       console.error("添加持仓失败:", error);
-      // 后端失败，重新加载持仓列表
       await loadHoldings();
-      return { success: false };
     }
   }
 

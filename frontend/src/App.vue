@@ -772,18 +772,26 @@ watch(
 );
 
 // 全局刷新函数
+let isRefreshing = false;
+
 function startGlobalRefresh() {
   stopGlobalRefresh();
   globalRefreshInterval = setInterval(async () => {
-    if (activeTab.value === "holding" && holdingsRef.value?.loadHoldings) {
-      await holdingsRef.value.loadHoldings();
-    } else if (
-      activeTab.value === "watchlist" &&
-      watchlistRef.value?.loadWatchlist
-    ) {
-      await watchlistRef.value.loadWatchlist();
+    if (isRefreshing) return;
+    isRefreshing = true;
+    try {
+      if (activeTab.value === "holding" && holdingsRef.value?.loadHoldings) {
+        await holdingsRef.value.loadHoldings();
+      } else if (
+        activeTab.value === "watchlist" &&
+        watchlistRef.value?.loadWatchlist
+      ) {
+        await watchlistRef.value.loadWatchlist();
+      }
+    } finally {
+      isRefreshing = false;
     }
-  }, 30 * 1000);
+  }, 60 * 1000);
 }
 
 function stopGlobalRefresh() {

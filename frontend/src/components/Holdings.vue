@@ -420,10 +420,10 @@ async function handlePlatformUpdate() {
 // 加载平台数据和持仓数据，确保页面刷新时能正常显示
 onMounted(async () => {
   await nextTick();
-  // 加载平台数据，确保平台列表能正常显示
   await loadPlatforms();
-  // 加载持仓数据，确保页面刷新时能正常显示
-  await loadHoldings();
+  if (!isLoaded.value) {
+    await loadHoldings();
+  }
   await nextTick();
   updatePieChart();
 });
