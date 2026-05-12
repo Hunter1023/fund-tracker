@@ -13,6 +13,15 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+CST = ZoneInfo("Asia/Shanghai")
+
+def now_cst():
+    return datetime.now(CST)
+
+def now_cst_naive():
+    return datetime.now(CST).replace(tzinfo=None)
 from apscheduler.schedulers.background import BackgroundScheduler
 import threading
 from sqlalchemy.exc import OperationalError, IntegrityError
@@ -339,11 +348,11 @@ def is_trading_day(fsrq: str, allow_yesterday: bool = False) -> bool:
     """
     if not fsrq:
         return False
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = now_cst_naive().strftime('%Y-%m-%d')
     if fsrq == today:
         return True
     if allow_yesterday:
-        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        yesterday = (now_cst_naive() - timedelta(days=1)).strftime('%Y-%m-%d')
         if fsrq == yesterday:
             return True
     return False
@@ -665,7 +674,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                     realtime_data_map[fc] = rd
                     break
 
-    now = datetime.now()
+    now = now_cst_naive()
     is_trading_day = now.weekday() < 5
     is_trading_hours = now.hour >= 9 and now.hour < 15
     need_estimate_refresh = is_trading_day and is_trading_hours
@@ -708,7 +717,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             if need_estimate_refresh:
                 if realtime_data.updated_at:
                     time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                    if time_diff > timedelta(minutes=5):
+                    if time_diff > timedelta(seconds=30):
                         need_refresh_estimate = True
 
             if rates_all_zero or need_refresh_rates or need_refresh_estimate:
@@ -737,7 +746,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         else:
             funds_to_refresh.append(fund_code)
 
-    cache_key = int(time.time() / (5 * 60))
+    cache_key = int(time.time() / 30)
     valuation_data_dict = {}
     funds_always_need_estimate = funds_to_refresh
     funds_conditional_estimate = funds_to_get_estimate if (need_estimate_refresh or any(realtime_data_map.get(fc) and realtime_data_map[fc].estimate_change_rate is None for fc in funds_to_get_estimate)) else []
@@ -838,7 +847,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             if realtime_data:
                 should_update_rates = True
                 if realtime_data.fsrq and data.get('fsrq', ''):
-                    today = datetime.now().strftime('%Y-%m-%d')
+                    today = now_cst_naive().strftime('%Y-%m-%d')
                     if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
                         should_update_rates = False
 
@@ -1006,7 +1015,7 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
 
     # 无论是否有数据库数据，都尝试从API获取数据
     # 因为数据库可能连接失败，或者数据过期
-    cache_key = int(time.time() / (5 * 60))
+    cache_key = int(time.time() / 30)
     print(f"获取基金 {fund_code} 数据，缓存键: {cache_key}")
     fund_data = DataFetcher.get_fund_valuation(fund_code, cache_key)
     print(f"基金 {fund_code} 估值数据: {fund_data}")
@@ -1208,19 +1217,19 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
         )
 
         # 检查是否需要刷新不同类型的数据
-        need_refresh_rates = False  # 最新涨幅、近1月、3月、1年的涨幅
-        need_refresh_estimate = False  # 估算涨幅
+        need_refresh_rates = False
+        need_refresh_estimate = False
+
+        now = now_cst_naive()
+        is_weekday = now.weekday() < 5
 
         # 检查最新涨幅、近1月、3月、1年的涨幅是否需要刷新（24小时）
         if realtime_data.updated_at:
-            now = datetime.now()
+            now = now_cst_naive()
             time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
             if time_diff > timedelta(hours=24):
                 need_refresh_rates = True
 
-        # 检查fsrq（净值日期）是否过期：工作日且fsrq不是今天也不是昨天，说明数据滞后
-        now = datetime.now()
-        is_weekday = now.weekday() < 5
         if is_weekday and realtime_data.fsrq:
             today_str = now.strftime('%Y-%m-%d')
             if now.weekday() == 0:
@@ -1230,14 +1239,13 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
             if realtime_data.fsrq != today_str and realtime_data.fsrq != yesterday_str:
                 need_refresh_rates = True
 
-        # 检查估算涨幅是否需要刷新（交易日的交易时间内5分钟）
-        now = datetime.now()
-        is_trading_day = now.weekday() < 5  # 周一到周五
-        is_trading_hours = now.hour >= 9 and now.hour < 15  # 9:00-15:00
+        now = now_cst_naive()
+        is_trading_day = now.weekday() < 5
+        is_trading_hours = now.hour >= 9 and now.hour < 15
         if is_trading_day and is_trading_hours:
             if realtime_data.updated_at:
                 time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                if time_diff > timedelta(minutes=5):
+                if time_diff > timedelta(seconds=30):
                     need_refresh_estimate = True
         else:
             # 非交易日或非交易时间，不需要刷新估算涨幅
@@ -1287,7 +1295,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
             if not skip_db_write:
                 should_update_rates = True
                 if realtime_data and realtime_data.fsrq and data.get('fsrq', ''):
-                    today = datetime.now().strftime('%Y-%m-%d')
+                    today = now_cst_naive().strftime('%Y-%m-%d')
                     if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
                         should_update_rates = False
 
@@ -1367,7 +1375,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                 if not skip_db_write:
                     should_update_rates = True
                     if realtime_data and realtime_data.fsrq and data.get('fsrq', ''):
-                        today = datetime.now().strftime('%Y-%m-%d')
+                        today = now_cst_naive().strftime('%Y-%m-%d')
                         if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
                             should_update_rates = False
 
@@ -1614,7 +1622,7 @@ def get_fund_history(fund_code):
             updated_at = fund.realtime_data.updated_at
             fsrq = fund.realtime_data.fsrq or ''
 
-            now = datetime.now()
+            now = now_cst_naive()
             is_weekday = now.weekday() < 5
 
             data_is_fresh = False
@@ -1884,7 +1892,7 @@ def _get_public_watchlist(db):
             db.commit()
             print(f"公开自选: 已自动创建基金 {fund_code} - {fund_name}")
 
-    now = datetime.now()
+    now = now_cst_naive()
     is_trading_day = now.weekday() < 5
 
     funds_data_dict = get_fund_realtime_rates_batch(db, fund_codes, force_refresh=False)
@@ -1942,16 +1950,15 @@ def manage_watchlist():
                     watchlist_fund_ids.add(item.fund.id)
 
             # 判断是否是交易日（周一到周五）
-            from datetime import datetime, timedelta
-            now = datetime.now()
-            is_trading_day = now.weekday() < 5  # 周一到周五
+            now = now_cst_naive()
+            is_trading_day = now.weekday() < 5
 
             # 构建返回结果
             import time
             # 使用批量并发方法获取所有自选基金数据
             funds_data_dict = get_fund_realtime_rates_batch(db, watchlist_fund_codes, force_refresh=False)
 
-            today = datetime.now().strftime('%Y-%m-%d')
+            today = now_cst_naive().strftime('%Y-%m-%d')
 
             for item in watchlist:
                 if not item.fund:
@@ -2150,8 +2157,8 @@ def manage_holding():
 
             holding_list = []
             # 判断是否是交易日（周一到周五）
-            now = datetime.now()
-            is_trading_day = now.weekday() < 5  # 周一到周五
+            now = now_cst_naive()
+            is_trading_day = now.weekday() < 5
 
             for holding in holdings:
                 # 检查请求时间是否超时
@@ -2168,7 +2175,7 @@ def manage_holding():
                     daily_change_rate = fund_data.get('daily_change_rate', '-')
                     estimate_change_rate = fund_data.get('estimate_change_rate', '-')
 
-                    today = datetime.now().strftime('%Y-%m-%d')
+                    today = now_cst_naive().strftime('%Y-%m-%d')
                     is_today = (fsrq == today)
 
                     if unit_net_value:
@@ -2544,7 +2551,7 @@ def manage_holding():
                         current_value = fund_holding.shares * float(unit_net_value)
 
                         # 检查最新涨幅是否已更新（fsrq是否为今日）
-                        today = datetime.now().strftime('%Y-%m-%d')
+                        today = now_cst_naive().strftime('%Y-%m-%d')
                         is_today = (fsrq == today)
 
                         # 检查估算涨幅日期是否为今日
