@@ -717,7 +717,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             if need_estimate_refresh:
                 if realtime_data.updated_at:
                     time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                    if time_diff > timedelta(seconds=30):
+                    if time_diff > timedelta(seconds=60):
                         need_refresh_estimate = True
 
             if rates_all_zero or need_refresh_rates or need_refresh_estimate:
@@ -746,7 +746,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         else:
             funds_to_refresh.append(fund_code)
 
-    cache_key = int(time.time() / 30)
+    cache_key = int(time.time() / 60)
     valuation_data_dict = {}
     funds_always_need_estimate = funds_to_refresh
     funds_conditional_estimate = funds_to_get_estimate if (need_estimate_refresh or any(realtime_data_map.get(fc) and realtime_data_map[fc].estimate_change_rate is None for fc in funds_to_get_estimate)) else []
@@ -1015,7 +1015,7 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
 
     # 无论是否有数据库数据，都尝试从API获取数据
     # 因为数据库可能连接失败，或者数据过期
-    cache_key = int(time.time() / 30)
+    cache_key = int(time.time() / 60)
     print(f"获取基金 {fund_code} 数据，缓存键: {cache_key}")
     fund_data = DataFetcher.get_fund_valuation(fund_code, cache_key)
     print(f"基金 {fund_code} 估值数据: {fund_data}")
@@ -1245,7 +1245,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
         if is_trading_day and is_trading_hours:
             if realtime_data.updated_at:
                 time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
-                if time_diff > timedelta(seconds=30):
+                if time_diff > timedelta(seconds=60):
                     need_refresh_estimate = True
         else:
             # 非交易日或非交易时间，不需要刷新估算涨幅
