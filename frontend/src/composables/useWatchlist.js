@@ -22,7 +22,6 @@ export function useWatchlist() {
   const draggedColumn = ref(null);
   const columnWidths = ref({});
   const holdingCodes = ref([]);
-  let refreshInterval = null;
 
   const filteredFunds = computed(() => {
     let result = funds.value;
@@ -292,20 +291,6 @@ export function useWatchlist() {
     return numRate > 0 ? "#dc3545" : "#28a745";
   }
 
-  function startAutoRefresh(intervalMs = 30000) {
-    stopAutoRefresh();
-    refreshInterval = setInterval(async () => {
-      await loadWatchlist();
-    }, intervalMs);
-  }
-
-  function stopAutoRefresh() {
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-      refreshInterval = null;
-    }
-  }
-
   return {
     funds,
     currentTag,
@@ -329,7 +314,5 @@ export function useWatchlist() {
     handleDrop,
     getCurrentDate,
     getChangeRateColor,
-    startAutoRefresh,
-    stopAutoRefresh,
   };
 }

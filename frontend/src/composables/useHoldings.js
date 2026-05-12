@@ -11,7 +11,6 @@ export function useHoldings() {
   const transactionType = ref("sync");
   const selectedPlatform = ref("默认");
   const platforms = ref([]);
-  let refreshInterval = null;
 
   async function loadPlatforms() {
     try {
@@ -177,7 +176,7 @@ export function useHoldings() {
     }
   }
 
-  function addHolding(data) {
+  async function addHolding(data) {
     // 前端先本地更新，展示添加效果
     const platform = data.platform || selectedPlatform.value || "默认";
 
@@ -314,91 +313,87 @@ export function useHoldings() {
       platform: actualPlatform,
     };
 
-    holdingApi
-      .add(requestData)
-      .then((response) => {
-        if (!response.data.success) {
-          // 如果后端失败，重新加载持仓列表
-          loadHoldings();
-        } else {
-          // 后端成功后，异步获取基金最新数据并更新本地持仓（不重新计算current_value和profit_loss）
-          fundApi
-            .get(data.fund_code)
-            .then((fundResponse) => {
-              const fundData = fundResponse.data;
-              if (fundData) {
-                let currentHolding = holdings.value.find(
-                  (h) =>
-                    h.fund_code === data.fund_code &&
-                    (h.platform || "默认") === actualPlatform,
-                );
-                if (!currentHolding) {
-                  currentHolding = holdings.value.find(
-                    (h) => h.fund_code === data.fund_code,
-                  );
-                }
-                if (currentHolding) {
-                  // 检查最新涨幅是否已更新（fsrq是否为今日）
-                  const fsrq = fundData.fsrq || "";
-                  const today = getCurrentDate();
-                  const isToday = fsrq === today;
+    try {
+      const response = await holdingApi.add(requestData);
+      if (!response.data.success) {
+        // 如果后端失败，重新加载持仓列表
+        await loadHoldings();
+        return { success: false };
+      } else {
+        // 后端成功后，异步获取基金最新数据并更新本地持仓（不重新计算current_value和profit_loss）
+        try {
+          const fundResponse = await fundApi.get(data.fund_code);
+          const fundData = fundResponse.data;
+          if (fundData) {
+            let currentHolding = holdings.value.find(
+              (h) =>
+                h.fund_code === data.fund_code &&
+                (h.platform || "默认") === actualPlatform,
+            );
+            if (!currentHolding) {
+              currentHolding = holdings.value.find(
+                (h) => h.fund_code === data.fund_code,
+              );
+            }
+            if (currentHolding) {
+              // 检查最新涨幅是否已更新（fsrq是否为今日）
+              const fsrq = fundData.fsrq || "";
+              const today = getCurrentDate();
+              const isToday = fsrq === today;
 
-                  const dailyChangeRate = fundData.daily_change_rate;
-                  const estimateChangeRate = fundData.estimate_change_rate;
+              const dailyChangeRate = fundData.daily_change_rate;
+              const estimateChangeRate = fundData.estimate_change_rate;
 
-                  let estimateProfit;
+              let estimateProfit;
 
-                  if (
-                    estimateChangeRate != null &&
-                    estimateChangeRate !== "-" &&
-                    estimateChangeRate !== undefined
-                  ) {
-                    // 有估算数据，使用估算涨幅计算今日收益
-                    const changeRate = parseFloat(estimateChangeRate) || 0;
-                    estimateProfit =
-                      (changeRate * currentHolding.current_value) / 100;
-                  } else if (
-                    isToday &&
-                    dailyChangeRate != null &&
-                    dailyChangeRate !== "-" &&
-                    dailyChangeRate !== 0
-                  ) {
-                    // 最新涨幅已更新，使用最新涨幅计算今日收益
-                    const changeRate = parseFloat(dailyChangeRate) || 0;
-                    estimateProfit =
-                      currentHolding.current_value * (changeRate / 100);
-                  } else {
-                    // 没有估算数据且最新涨幅未更新，不显示今日收益
-                    estimateProfit = null;
-                  }
-
-                  // 保持数据库中保存的 current_value、profit_loss 和 profit_loss_rate 不变
-                  const updatedHolding = {
-                    ...currentHolding,
-                    daily_change_rate: fundData.daily_change_rate || "-",
-                    estimate_change_rate:
-                      fundData.estimate_change_rate || "0.00",
-                    estimate_profit: estimateProfit,
-                    fsrq: fundData.fsrq || "",
-                    one_month_rate: fundData.one_month_rate || 0,
-                    fund_name: fundData.fund_name || data.fund_name,
-                  };
-                  updateHoldingLocally(updatedHolding);
-                }
+              if (
+                estimateChangeRate != null &&
+                estimateChangeRate !== "-" &&
+                estimateChangeRate !== undefined
+              ) {
+                // 有估算数据，使用估算涨幅计算今日收益
+                const changeRate = parseFloat(estimateChangeRate) || 0;
+                estimateProfit =
+                  (changeRate * currentHolding.current_value) / 100;
+              } else if (
+                isToday &&
+                dailyChangeRate != null &&
+                dailyChangeRate !== "-" &&
+                dailyChangeRate !== 0
+              ) {
+                // 最新涨幅已更新，使用最新涨幅计算今日收益
+                const changeRate = parseFloat(dailyChangeRate) || 0;
+                estimateProfit =
+                  currentHolding.current_value * (changeRate / 100);
+              } else {
+                // 没有估算数据且最新涨幅未更新，不显示今日收益
+                estimateProfit = null;
               }
-            })
-            .catch((error) => {
-              console.error("获取基金数据失败:", error);
-            });
-        }
-      })
-      .catch((error) => {
-        console.error("添加持仓失败:", error);
-        // 后端失败，重新加载持仓列表
-        loadHoldings();
-      });
 
-    return { success: true };
+              // 保持数据库中保存的 current_value、profit_loss 和 profit_loss_rate 不变
+              const updatedHolding = {
+                ...currentHolding,
+                daily_change_rate: fundData.daily_change_rate || "-",
+                estimate_change_rate: fundData.estimate_change_rate || "0.00",
+                estimate_profit: estimateProfit,
+                fsrq: fundData.fsrq || "",
+                one_month_rate: fundData.one_month_rate || 0,
+                fund_name: fundData.fund_name || data.fund_name,
+              };
+              updateHoldingLocally(updatedHolding);
+            }
+          }
+        } catch (error) {
+          console.error("获取基金数据失败:", error);
+        }
+        return { success: true };
+      }
+    } catch (error) {
+      console.error("添加持仓失败:", error);
+      // 后端失败，重新加载持仓列表
+      await loadHoldings();
+      return { success: false };
+    }
   }
 
   function updateHoldingLocally(updatedHolding) {
@@ -474,20 +469,6 @@ export function useHoldings() {
     return numRate > 0 ? "#dc3545" : "#28a745";
   }
 
-  function startAutoRefresh(intervalMs = 30000) {
-    stopAutoRefresh();
-    refreshInterval = setInterval(async () => {
-      await loadHoldings();
-    }, intervalMs);
-  }
-
-  function stopAutoRefresh() {
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-      refreshInterval = null;
-    }
-  }
-
   return {
     holdings,
     isLoaded,
@@ -507,7 +488,5 @@ export function useHoldings() {
     handleSort,
     getCurrentDate,
     getChangeRateColor,
-    startAutoRefresh,
-    stopAutoRefresh,
   };
 }

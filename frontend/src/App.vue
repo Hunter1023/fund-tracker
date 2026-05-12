@@ -77,6 +77,7 @@
           placeholder="输入基金代码或名称"
           autocomplete="off"
           @input="handleSearch"
+          @focus="handleSearchFocus"
           @click="handleSearchClick"
         />
         <div
@@ -252,6 +253,7 @@
       v-model:show="showFundDetailModal"
       :fund-data="currentFund"
       :holding-data="currentHolding"
+      :add-holding="addHolding"
       @confirm="handleDetailConfirm"
     />
 
@@ -279,6 +281,7 @@ import FundDetailModal from "./components/FundDetailModal.vue";
 import Holdings from "./components/Holdings.vue";
 import UserProfile from "./components/UserProfile.vue";
 import Watchlist from "./components/Watchlist.vue";
+import { useHoldings } from "./composables/useHoldings";
 import {
   authApi,
   clearAuthData,
@@ -302,6 +305,9 @@ const showSearchDropdown = ref(false);
 const watchlistRef = ref(null);
 const holdingsRef = ref(null);
 const watchlistFunds = ref([]);
+
+// 获取持仓相关方法
+const { addHolding } = useHoldings();
 const holdingsFunds = ref([]);
 let globalRefreshInterval = null;
 
@@ -476,11 +482,23 @@ async function loadWatchlistAndHoldings() {
 }
 
 // 点击搜索框时的处理函数
-function handleSearchClick() {
+function handleSearchFocus() {
   const keyword = searchKeyword.value.trim();
   if (keyword && searchResults.value.length > 0) {
-    // 如果搜索框有内容且已有搜索结果，显示下拉框
     showSearchDropdown.value = true;
+  } else if (keyword) {
+    handleSearch();
+  }
+}
+
+function handleSearchClick() {
+  const keyword = searchKeyword.value.trim();
+  if (keyword) {
+    if (searchResults.value.length > 0) {
+      showSearchDropdown.value = true;
+    } else {
+      handleSearch();
+    }
   }
 }
 
@@ -677,9 +695,8 @@ async function confirmTags() {
 }
 
 function handleClickOutside(event) {
-  const searchContainer = event.target.closest(".input-group");
+  const searchContainer = event.target.closest(".search-container");
   if (!searchContainer) {
-    searchResults.value = [];
     showSearchDropdown.value = false;
   }
 }
@@ -757,19 +774,16 @@ watch(
 // 全局刷新函数
 function startGlobalRefresh() {
   stopGlobalRefresh();
-  globalRefreshInterval = setInterval(
-    async () => {
-      if (activeTab.value === "holding" && holdingsRef.value?.loadHoldings) {
-        await holdingsRef.value.loadHoldings();
-      } else if (
-        activeTab.value === "watchlist" &&
-        watchlistRef.value?.loadWatchlist
-      ) {
-        await watchlistRef.value.loadWatchlist();
-      }
-    },
-    5 * 60 * 1000,
-  );
+  globalRefreshInterval = setInterval(async () => {
+    if (activeTab.value === "holding" && holdingsRef.value?.loadHoldings) {
+      await holdingsRef.value.loadHoldings();
+    } else if (
+      activeTab.value === "watchlist" &&
+      watchlistRef.value?.loadWatchlist
+    ) {
+      await watchlistRef.value.loadWatchlist();
+    }
+  }, 30 * 1000);
 }
 
 function stopGlobalRefresh() {
