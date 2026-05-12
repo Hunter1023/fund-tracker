@@ -1145,16 +1145,15 @@ function handleCancel() {
   }
 }
 
-function handleConfirm() {
+async function handleConfirm() {
   if (showAddHoldingForm.value) {
-    confirmAddHolding();
+    await confirmAddHolding();
   } else if (showOperation.value) {
     confirm();
   }
 }
 
-function confirmAddHolding() {
-  // 重置验证错误
+async function confirmAddHolding() {
   validationErrors.value = {};
 
   const currentValue = parseFloat(addCurrentValue.value);
@@ -1162,7 +1161,6 @@ function confirmAddHolding() {
   const tags = addTags.value.trim();
   const platform = addPlatform.value;
 
-  // 验证持仓金额
   if (
     addCurrentValue.value === "" ||
     isNaN(currentValue) ||
@@ -1172,41 +1170,53 @@ function confirmAddHolding() {
     return;
   }
 
-  // 验证持有收益
   if (addProfit.value === "" || isNaN(profit)) {
     validationErrors.value.addProfit = "请输入有效的持有收益";
     return;
   }
 
-  // 计算持仓成本：当前价值 - 持有收益
-  const cost = currentValue - profit;
+  loading.value = true;
 
-  // 立即关闭弹窗并显示添加效果
-  emit("confirm");
-  emit("update:show", false);
+  try {
+    const cost = currentValue - profit;
 
-  // 异步发送请求给后端
-  if (props.addHolding) {
-    props.addHolding({
-      fund_code: props.fundData.fund_code,
-      fund_name: props.fundData.fund_name,
-      type: "sync",
-      current_value: currentValue,
-      profit: profit,
-      tags: tags,
-      platform: platform,
-    });
-  } else {
-    // 如果没有提供addHolding函数，通过emit事件通知父组件
-    emit("confirm", {
-      fund_code: props.fundData.fund_code,
-      fund_name: props.fundData.fund_name,
-      type: "sync",
-      current_value: currentValue,
-      profit: profit,
-      tags: tags,
-      platform: platform,
-    });
+    let success = false;
+
+    if (props.addHolding) {
+      const result = await props.addHolding({
+        fund_code: props.fundData.fund_code,
+        fund_name: props.fundData.fund_name,
+        type: "sync",
+        current_value: currentValue,
+        profit: profit,
+        tags: tags,
+        platform: platform,
+      });
+      success = result && result.success !== false;
+    } else {
+      emit("confirm", {
+        fund_code: props.fundData.fund_code,
+        fund_name: props.fundData.fund_name,
+        type: "sync",
+        current_value: currentValue,
+        profit: profit,
+        tags: tags,
+        platform: platform,
+      });
+      success = true;
+    }
+
+    if (success) {
+      emit("confirm");
+      emit("update:show", false);
+    } else {
+      validationErrors.value.general = "添加持仓失败，请重试";
+    }
+  } catch (error) {
+    console.error("添加持仓失败:", error);
+    validationErrors.value.general = "添加持仓失败，请重试";
+  } finally {
+    loading.value = false;
   }
 }
 

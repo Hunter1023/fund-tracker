@@ -251,6 +251,7 @@
       v-model:show="showDetailModal"
       :fund-data="currentFund"
       :holding-data="currentHolding"
+      :add-holding="addHolding"
       @confirm="handleConfirm"
     />
 
@@ -297,7 +298,7 @@ const {
   getChangeRateColor,
 } = useWatchlist();
 
-const { holdings, loadHoldings } = useHoldings();
+const { addHolding, holdings, loadHoldings } = useHoldings();
 
 // onMounted中的数据加载已移至App.vue的watch(activeTab)中
 // 避免重复请求

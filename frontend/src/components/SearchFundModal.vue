@@ -196,12 +196,27 @@ async function doImmediateSearch() {
 }
 
 function handleFocus() {
+  if (
+    searchKeyword.value &&
+    searchKeyword.value.trim().length >= 2 &&
+    searchResults.value.length === 0
+  ) {
+    doImmediateSearch();
+  }
 }
 
-function handleWrapperClick() {
+function handleBlur() {
+}
+
+function handleWrapperClick(e) {
+  e.stopPropagation();
+  if (searchInputRef.value) {
+    searchInputRef.value.focus();
+  }
 }
 
 function handleWrapperMouseDown(e) {
+  e.stopPropagation();
 }
 
 function handleOverlayClick() {
