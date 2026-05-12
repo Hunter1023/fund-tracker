@@ -421,9 +421,6 @@ async function handlePlatformUpdate() {
 onMounted(async () => {
   await nextTick();
   await loadPlatforms();
-  if (!isLoaded.value) {
-    await loadHoldings();
-  }
   await nextTick();
   updatePieChart();
 });
