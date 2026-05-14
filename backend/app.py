@@ -748,7 +748,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
 
     cache_key = int(time.time() / 60)
     valuation_data_dict = {}
-    funds_always_need_estimate = funds_to_refresh
+    funds_always_need_estimate = funds_to_refresh if need_estimate_refresh else []
     funds_conditional_estimate = funds_to_get_estimate if (need_estimate_refresh or any(realtime_data_map.get(fc) and realtime_data_map[fc].estimate_change_rate is None for fc in funds_to_get_estimate)) else []
     all_funds_for_estimate = funds_always_need_estimate + funds_conditional_estimate
     if all_funds_for_estimate:
@@ -766,20 +766,20 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 funds_need_fallback.append(fund_code)
 
         if funds_need_fallback:
-            print(f"以下基金使用 get_fund_rates 获取数据失败，并发尝试 get_fund_history_simple: {funds_need_fallback}")
+            print(f"以下基金使用 get_fund_rates 获取数据失败，并发尝试 _get_fund_history_simple_no_retry: {funds_need_fallback}")
             from concurrent.futures import ThreadPoolExecutor, as_completed
             fallback_results = {}
             with ThreadPoolExecutor(max_workers=5) as executor:
                 future_to_fund = {
-                    executor.submit(DataFetcher.get_fund_history_simple, fc, cache_key): fc
+                    executor.submit(DataFetcher._get_fund_history_simple_no_retry, fc, cache_key): fc
                     for fc in funds_need_fallback
                 }
-                for future in as_completed(future_to_fund, timeout=30):
+                for future in as_completed(future_to_fund, timeout=15):
                     fc = future_to_fund[future]
                     try:
-                        fallback_results[fc] = future.result(timeout=10)
+                        fallback_results[fc] = future.result(timeout=8)
                     except Exception as e:
-                        print(f"get_fund_history_simple 获取基金 {fc} 数据失败: {e}")
+                        print(f"_get_fund_history_simple_no_retry 获取基金 {fc} 数据失败: {e}")
 
             for fc in funds_need_fallback:
                 history_data = fallback_results.get(fc)
@@ -2209,7 +2209,11 @@ def manage_holding():
             logger.info(f"基金代码: {fund_codes}")
 
             # 使用批量并发方法获取所有持仓基金数据，与自选基金保持一致
-            fund_data_dict = get_fund_realtime_rates_batch(db, fund_codes, force_refresh=False)
+            try:
+                fund_data_dict = get_fund_realtime_rates_batch(db, fund_codes, force_refresh=False)
+            except Exception as e:
+                logger.error(f"批量获取基金实时数据失败: {e}")
+                fund_data_dict = {}
 
             logger.info(f"获取到的基金数据: {fund_data_dict}")
 
