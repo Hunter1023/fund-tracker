@@ -1559,56 +1559,113 @@ def search_fund():
 def get_fund_detail(fund_code):
     """
     获取基金详情
+    优先从数据库读取缓存数据，如果数据不是最新的再从API获取
     :param fund_code: 基金代码
     :return: 基金详情
     """
+    from datetime import datetime, timedelta
+    db = next(get_db())
     try:
-        # 获取基金估值数据
-        fund_data = DataFetcher.get_fund_valuation(fund_code)
-    except Exception as e:
-        print(f"获取基金估值失败: {e}")
-        fund_data = None
+        # 先尝试从数据库获取基金信息和缓存数据
+        fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
 
-    try:
-        # 获取基金历史净值和涨跌幅数据
-        history_data = DataFetcher.get_fund_history(fund_code)
-    except Exception as e:
-        print(f"获取基金历史数据失败: {e}")
-        history_data = None
+        # 检查数据库中是否有有效的缓存数据
+        use_cache = False
+        if fund and fund.realtime_data:
+            fsrq = fund.realtime_data.fsrq
+            updated_at = fund.realtime_data.updated_at
 
-    # 即使估值数据不可用，只要有历史数据，就返回数据
-    if not fund_data and not history_data:
-        return jsonify({'error': '获取基金数据失败'}), 404
+            if fsrq and updated_at:
+                now = now_cst_naive()
+                today_str = now.strftime('%Y-%m-%d')
 
-    # 如果估值数据不可用，使用基本结构
-    if not fund_data:
-        fund_data = {
-            'fund_code': fund_code,
-            'fund_name': '',
-            'net_value': '',
-            'unit_net_value': None,
-            'estimate_net_value': None,
-            'estimate_change_rate': '-',
-            'estimate_time': ''
-        }
+                # 如果fsrq是当日，说明数据是最新的，使用缓存
+                if fsrq == today_str:
+                    use_cache = True
+                    print(f"基金 {fund_code} 使用数据库缓存数据，fsrq={fsrq}")
 
-    # 获取基金重仓股数据
-    try:
-        holdings = DataFetcher.get_fund_holding(fund_code)
-        fund_data['holdings'] = holdings
-    except Exception as e:
-        print(f"获取基金重仓股失败: {e}")
-        fund_data['holdings'] = []
+        if use_cache:
+            # 使用数据库缓存的数据
+            fund_data = {
+                'fund_code': fund_code,
+                'fund_name': fund.fund_name,
+                'net_value': fund.realtime_data.net_value_date or '',
+                'unit_net_value': fund.realtime_data.unit_net_value,
+                'estimate_net_value': fund.realtime_data.estimate_net_value,
+                'estimate_change_rate': str(fund.realtime_data.estimate_change_rate) if fund.realtime_data.estimate_change_rate is not None else '-',
+                'estimate_time': fund.realtime_data.estimate_time or '',
+                'one_month_rate': fund.realtime_data.one_month_rate or 0,
+                'three_month_rate': fund.realtime_data.three_month_rate or 0,
+                'one_year_rate': fund.realtime_data.one_year_rate or 0,
+                'daily_change_rate': fund.realtime_data.daily_change_rate or 0,
+                'fsrq': fund.realtime_data.fsrq or ''
+            }
+        else:
+            # 缓存数据不是最新的，从API获取
+            print(f"基金 {fund_code} 缓存数据不是最新，从API获取")
+            try:
+                fund_data = DataFetcher.get_fund_valuation(fund_code)
+            except Exception as e:
+                print(f"获取基金估值失败: {e}")
+                fund_data = None
 
-    # 添加历史数据
-    if history_data:
-        fund_data['one_month_rate'] = history_data.get('one_month_rate', 0)
-        fund_data['three_month_rate'] = history_data.get('three_month_rate', 0)
-        fund_data['one_year_rate'] = history_data.get('one_year_rate', 0)
-        fund_data['daily_change_rate'] = history_data.get('daily_change_rate', 0)
-        fund_data['fsrq'] = history_data.get('fsrq', '')
+            try:
+                history_data = DataFetcher.get_fund_history(fund_code)
+            except Exception as e:
+                print(f"获取基金历史数据失败: {e}")
+                history_data = None
 
-    return jsonify(fund_data)
+            # 即使估值数据不可用，只要有历史数据，就返回数据
+            if not fund_data and not history_data:
+                return jsonify({'error': '获取基金数据失败'}), 404
+
+            # 如果估值数据不可用，使用基本结构
+            if not fund_data:
+                fund_data = {
+                    'fund_code': fund_code,
+                    'fund_name': fund.fund_name if fund else '',
+                    'net_value': '',
+                    'unit_net_value': None,
+                    'estimate_net_value': None,
+                    'estimate_change_rate': '-',
+                    'estimate_time': ''
+                }
+
+            # 添加历史数据到fund_data
+            if history_data:
+                fund_data['one_month_rate'] = history_data.get('one_month_rate', 0)
+                fund_data['three_month_rate'] = history_data.get('three_month_rate', 0)
+                fund_data['one_year_rate'] = history_data.get('one_year_rate', 0)
+                fund_data['daily_change_rate'] = history_data.get('daily_change_rate', 0)
+                fund_data['fsrq'] = history_data.get('fsrq', '')
+
+                # 更新数据库缓存
+                if fund:
+                    if not fund.realtime_data:
+                        fund.realtime_data = FundRealtimeData(fund_id=fund.id)
+                    fund.realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
+                    fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
+                    fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
+                    fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
+                    fund.realtime_data.fsrq = history_data.get('fsrq', '')
+                    fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+                    if fund_data:
+                        fund.realtime_data.estimate_change_rate = fund_data.get('estimate_change_rate')
+                        fund.realtime_data.estimate_time = fund_data.get('estimate_time', '')
+                    fund.realtime_data.updated_at = datetime.now()
+                    db.commit()
+
+        # 获取基金重仓股数据（重仓股数据不缓存，每次实时获取）
+        try:
+            holdings = DataFetcher.get_fund_holding(fund_code)
+            fund_data['holdings'] = holdings
+        except Exception as e:
+            print(f"获取基金重仓股失败: {e}")
+            fund_data['holdings'] = []
+
+        return jsonify(fund_data)
+    finally:
+        db.close()
 
 @app.route('/api/fund/<fund_code>/history', methods=['GET'])
 def get_fund_history(fund_code):
