@@ -508,6 +508,98 @@ class DataFetcher:
             }
 
     @staticmethod
+    def _get_fund_history_simple_no_retry(fund_code, timestamp=None):
+        url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Referer': f'https://fundf10.eastmoney.com/jjjz_{fund_code}.html'
+        }
+
+        one_month_rate = 0
+        three_month_rate = 0
+        one_year_rate = 0
+        daily_change_rate = 0
+        unit_net_value = 0
+        fsrq = ''
+
+        try:
+            response = requests.get(url, headers=headers, timeout=8)
+            data = response.json()
+
+            if data.get('Datas'):
+                fsrq = data['Datas'].get('FSRQ', '')
+                field_mappings = {
+                    'one_month': ['SYL_1M', 'syl_1m', 'SYL_Y', 'syl_y', 'syly', 'SYLY'],
+                    'three_month': ['SYL_3M', 'syl_3m', 'SYL_3Y', 'syl_3y', 'syl3y', 'SYL3Y'],
+                    'one_year': ['SYL_1N', 'syl_1n', 'syl1n', 'SYL1N'],
+                    'daily': ['JZZZL', 'jzzzl', 'RZDF', 'rzdf'],
+                    'unit_net_value': ['DWJZ', 'dwjz']
+                }
+
+                for field in field_mappings['unit_net_value']:
+                    if field in data['Datas']:
+                        try:
+                            unit_net_value = float(data['Datas'][field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+                for field in field_mappings['one_month']:
+                    if field in data['Datas']:
+                        try:
+                            one_month_rate = float(data['Datas'][field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+                for field in field_mappings['three_month']:
+                    if field in data['Datas']:
+                        try:
+                            three_month_rate = float(data['Datas'][field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+                for field in field_mappings['one_year']:
+                    if field in data['Datas']:
+                        try:
+                            one_year_rate = float(data['Datas'][field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+                for field in field_mappings['daily']:
+                    if field in data['Datas']:
+                        try:
+                            daily_change_rate = float(data['Datas'][field])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+            return {
+                'fund_code': fund_code,
+                'net_values': [],
+                'one_month_rate': one_month_rate,
+                'three_month_rate': three_month_rate,
+                'one_year_rate': one_year_rate,
+                'daily_change_rate': daily_change_rate,
+                'fsrq': fsrq,
+                'unit_net_value': unit_net_value
+            }
+        except Exception as e:
+            print(f"获取基金 {fund_code} 涨跌幅数据失败(无重试): {e}")
+            return {
+                'fund_code': fund_code,
+                'net_values': [],
+                'one_month_rate': 0,
+                'three_month_rate': 0,
+                'one_year_rate': 0,
+                'daily_change_rate': 0,
+                'fsrq': '',
+                'unit_net_value': 0
+            }
+
+    @staticmethod
     @lru_cache(maxsize=256)
     @retry_on_failure(max_retries=5, delay=2, backoff=2)
     def get_fund_history_simple(fund_code, timestamp=None):
