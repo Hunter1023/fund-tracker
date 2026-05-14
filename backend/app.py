@@ -1242,6 +1242,8 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
         now = now_cst_naive()
         is_trading_day = now.weekday() < 5
         is_trading_hours = now.hour >= 9 and now.hour < 15
+        is_evening_hours = now.hour >= 19 and now.hour < 23
+
         if is_trading_day and is_trading_hours:
             if realtime_data.updated_at:
                 time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
@@ -1250,6 +1252,10 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
         else:
             # 非交易日或非交易时间，不需要刷新估算涨幅
             need_refresh_estimate = False
+
+        # 晚间时段（19:00-23:00）是基金净值和日涨幅发布时间，需要强制刷新日涨幅数据
+        if is_trading_day and is_evening_hours:
+            need_refresh_rates = True
 
         # 如果涨跌幅数据无效，或者需要刷新涨跌幅，或者需要刷新估算，就整体刷新
         if need_refresh_rates or need_refresh_estimate or not rates_valid:
