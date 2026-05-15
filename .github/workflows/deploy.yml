@@ -28,6 +28,11 @@ jobs:
           cat > .env << EOF
           # 基金追踪器 环境配置（自动生成于 $(date '+%Y-%m-%d %H:%M:%S')）
 
+          # 数据库配置
+          POSTGRES_USER=${{ secrets.POSTGRES_USER || 'fund_user' }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'fund_password' }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB || 'fund_tracker' }}
+
           # JWT 密钥
           JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
 
