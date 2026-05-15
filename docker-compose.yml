@@ -3,7 +3,6 @@ services:
   postgres:
     image: postgres:15-alpine
     restart: always
-    env_file: .env
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -27,7 +26,6 @@ services:
     volumes:
       # 使用Docker命名卷持久化数据
       - app-data:/app/data
-    env_file: .env
     environment:
       # PostgreSQL数据库配置
       - DB_USER=${POSTGRES_USER}
