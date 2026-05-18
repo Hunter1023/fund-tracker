@@ -538,13 +538,18 @@ def update_all_funds_history():
                 if fund:
                     # 更新或创建实时数据记录
                     realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
-                    if realtime_data:
-                        realtime_data.net_values = json.dumps(history_data.get('net_values', []))
-                        realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
-                        realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
-                        realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
-                        realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
-                        realtime_data.fsrq = history_data.get('fsrq', '')
+                    if not realtime_data:
+                        realtime_data = FundRealtimeData(fund_id=fund.id)
+                        db.add(realtime_data)
+                    
+                    realtime_data.net_values = json.dumps(history_data.get('net_values', []))
+                    realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
+                    realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
+                    realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
+                    realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
+                    realtime_data.fsrq = history_data.get('fsrq', '')
+                    realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+                    realtime_data.updated_at = datetime.now()  # 关键：更新 updated_at 字段
                     db.flush()
 
                 print(f"成功更新基金 {fund_code} 的历史净值数据")
