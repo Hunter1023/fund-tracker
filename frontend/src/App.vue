@@ -743,6 +743,12 @@ watch(activeTab, async (newTab) => {
         await watchlistRef.value.loadHoldingCodes();
       }
       await watchlistRef.value.loadWatchlist();
+      
+      // 预加载自选基金的历史净值数据（后台并行执行，不阻塞UI）
+      if (watchlistRef.value.watchlist) {
+        const fundCodes = watchlistRef.value.watchlist.map(item => item.fund_code);
+        fundApi.preloadFundHistory(fundCodes).catch(console.error);
+      }
     } catch (error) {
       console.error("加载自选基金失败:", error);
     }
@@ -754,6 +760,12 @@ watch(activeTab, async (newTab) => {
     try {
       await holdingsRef.value.loadHoldings();
       await holdingsRef.value.loadPlatforms();
+      
+      // 预加载持仓基金的历史净值数据（后台并行执行，不阻塞UI）
+      if (holdingsRef.value.holdings) {
+        const fundCodes = holdingsRef.value.holdings.map(item => item.fund_code);
+        fundApi.preloadFundHistory(fundCodes).catch(console.error);
+      }
     } catch (error) {
       console.error("加载持仓基金失败:", error);
     }
