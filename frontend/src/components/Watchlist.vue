@@ -434,6 +434,7 @@ defineExpose({
   loadWatchlist,
   loadHoldingCodes,
   addToWatchlist,
+  watchlist: funds,
 });
 </script>
 

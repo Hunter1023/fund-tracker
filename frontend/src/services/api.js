@@ -216,6 +216,14 @@ export const fundApi = {
     return response;
   },
   getCompleteInfo: async (fundCode) => {
+    const now = Date.now();
+    // 检查前端缓存是否有效
+    if (
+      cache.fundHistory.data[fundCode] &&
+      now - cache.fundHistory.timestamp[fundCode] < cache.expiry
+    ) {
+      return { data: { history_data: cache.fundHistory.data[fundCode] } };
+    }
     const response = await api.get(`/fund/${fundCode}/complete`);
     if (response.data.history_data) {
       cache.fundHistory.data[fundCode] = response.data.history_data;
@@ -224,6 +232,44 @@ export const fundApi = {
     return response;
   },
   get: (fundCode) => api.get(`/fund/${fundCode}`),
+  
+  preloadFundHistory: async (fundCodes) => {
+    const now = Date.now();
+    const promises = [];
+    
+    for (const fundCode of fundCodes) {
+      // 跳过已缓存的基金
+      if (
+        cache.fundHistory.data[fundCode] &&
+        now - cache.fundHistory.timestamp[fundCode] < cache.expiry
+      ) {
+        continue;
+      }
+      
+      // 并行获取历史数据
+      promises.push(
+        api.get(`/fund/${fundCode}/history`).then((response) => {
+          cache.fundHistory.data[fundCode] = response.data;
+          cache.fundHistory.timestamp[fundCode] = Date.now();
+          return { fundCode, success: true };
+        }).catch((error) => {
+          console.warn(`预加载基金 ${fundCode} 历史数据失败:`, error);
+          return { fundCode, success: false, error };
+        })
+      );
+    }
+    
+    if (promises.length > 0) {
+      console.log(`开始预加载 ${promises.length} 个基金的历史数据...`);
+      const results = await Promise.all(promises);
+      const successCount = results.filter(r => r.success).length;
+      console.log(`预加载完成: 成功 ${successCount} 个, 失败 ${results.length - successCount} 个`);
+      return results;
+    } else {
+      console.log("所有基金历史数据已在缓存中，无需预加载");
+      return [];
+    }
+  },
 };
 
 export const watchlistApi = {
