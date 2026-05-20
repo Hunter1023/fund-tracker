@@ -1305,10 +1305,22 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
 
             if not skip_db_write:
                 should_update_rates = True
+                
+                # 检查是否应该更新涨跌幅数据
+                # 1. 如果新数据的日期比数据库中的旧，不更新（避免覆盖较新的数据）
+                # 2. 如果新数据的涨跌幅全部为0，不更新（避免用空数据覆盖已有数据）
                 if realtime_data and realtime_data.fsrq and data.get('fsrq', ''):
                     today = now_cst_naive().strftime('%Y-%m-%d')
+                    # 如果数据库中的日期是今天，且新数据的日期比数据库中的旧，不更新
                     if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
                         should_update_rates = False
+                    # 如果新数据的日期是今天，但涨跌幅全为0，不更新（API可能还未返回当天数据）
+                    if data.get('fsrq', '') == today:
+                        if (data.get('daily_change_rate') == 0 or data.get('daily_change_rate') is None) and \
+                           (data.get('one_month_rate') == 0 or data.get('one_month_rate') is None) and \
+                           (data.get('unit_net_value') == 0 or data.get('unit_net_value') is None):
+                            should_update_rates = False
+                            logger.info(f"基金 {fund_code} 晚间数据未更新：新数据日期为今天但涨跌幅为空，等待下一个更新周期")
 
                 if realtime_data:
                     for key, value in data.items():
