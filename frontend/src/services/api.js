@@ -160,7 +160,10 @@ export const userApi = {
   linkEmail: (email, code) => api.post("/user/email/link", { email, code }),
 
   setPassword: (password, confirmPassword) =>
-    api.post("/user/password/set", { password, confirm_password: confirmPassword }),
+    api.post("/user/password/set", {
+      password,
+      confirm_password: confirmPassword,
+    }),
 
   linkGithub: (code) => api.post("/user/github/link", { code }),
 
@@ -222,7 +225,18 @@ export const fundApi = {
       cache.fundHistory.data[fundCode] &&
       now - cache.fundHistory.timestamp[fundCode] < cache.expiry
     ) {
-      return { data: { history_data: cache.fundHistory.data[fundCode] } };
+      const cachedData = cache.fundHistory.data[fundCode];
+      // 判断缓存的数据格式
+      if (cachedData.net_values) {
+        // 预加载的数据格式（来自 /fund/{fundCode}/history）
+        return { data: { history_data: cachedData } };
+      } else if (cachedData.history_data) {
+        // 直接调用 complete 接口返回的格式
+        return { data: cachedData };
+      } else {
+        // 未知格式，尝试使用缓存数据作为 history_data
+        return { data: { history_data: cachedData } };
+      }
     }
     const response = await api.get(`/fund/${fundCode}/complete`);
     if (response.data.history_data) {
@@ -232,11 +246,11 @@ export const fundApi = {
     return response;
   },
   get: (fundCode) => api.get(`/fund/${fundCode}`),
-  
+
   preloadFundHistory: async (fundCodes) => {
     const now = Date.now();
     const promises = [];
-    
+
     for (const fundCode of fundCodes) {
       // 跳过已缓存的基金
       if (
@@ -245,25 +259,30 @@ export const fundApi = {
       ) {
         continue;
       }
-      
+
       // 并行获取历史数据
       promises.push(
-        api.get(`/fund/${fundCode}/history`).then((response) => {
-          cache.fundHistory.data[fundCode] = response.data;
-          cache.fundHistory.timestamp[fundCode] = Date.now();
-          return { fundCode, success: true };
-        }).catch((error) => {
-          console.warn(`预加载基金 ${fundCode} 历史数据失败:`, error);
-          return { fundCode, success: false, error };
-        })
+        api
+          .get(`/fund/${fundCode}/history`)
+          .then((response) => {
+            cache.fundHistory.data[fundCode] = response.data;
+            cache.fundHistory.timestamp[fundCode] = Date.now();
+            return { fundCode, success: true };
+          })
+          .catch((error) => {
+            console.warn(`预加载基金 ${fundCode} 历史数据失败:`, error);
+            return { fundCode, success: false, error };
+          }),
       );
     }
-    
+
     if (promises.length > 0) {
       console.log(`开始预加载 ${promises.length} 个基金的历史数据...`);
       const results = await Promise.all(promises);
-      const successCount = results.filter(r => r.success).length;
-      console.log(`预加载完成: 成功 ${successCount} 个, 失败 ${results.length - successCount} 个`);
+      const successCount = results.filter((r) => r.success).length;
+      console.log(
+        `预加载完成: 成功 ${successCount} 个, 失败 ${results.length - successCount} 个`,
+      );
       return results;
     } else {
       console.log("所有基金历史数据已在缓存中，无需预加载");
