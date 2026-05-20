@@ -743,11 +743,19 @@ watch(activeTab, async (newTab) => {
         await watchlistRef.value.loadHoldingCodes();
       }
       await watchlistRef.value.loadWatchlist();
-      
+
       // 预加载自选基金的历史净值数据（后台并行执行，不阻塞UI）
-      if (watchlistRef.value.watchlist) {
-        const fundCodes = watchlistRef.value.watchlist.map(item => item.fund_code);
+      if (watchlistRef.value.watchlist && watchlistRef.value.watchlist.value) {
+        const fundCodes = watchlistRef.value.watchlist.value.map(
+          (item) => item.fund_code,
+        );
+        console.log(
+          `[预加载] 自选标签：准备预加载 ${fundCodes.length} 个基金的历史数据`,
+          fundCodes,
+        );
         fundApi.preloadFundHistory(fundCodes).catch(console.error);
+      } else {
+        console.log("[预加载] 自选标签：没有可预加载的基金");
       }
     } catch (error) {
       console.error("加载自选基金失败:", error);
@@ -760,11 +768,19 @@ watch(activeTab, async (newTab) => {
     try {
       await holdingsRef.value.loadHoldings();
       await holdingsRef.value.loadPlatforms();
-      
+
       // 预加载持仓基金的历史净值数据（后台并行执行，不阻塞UI）
-      if (holdingsRef.value.holdings) {
-        const fundCodes = holdingsRef.value.holdings.map(item => item.fund_code);
+      if (holdingsRef.value.holdings && holdingsRef.value.holdings.value) {
+        const fundCodes = holdingsRef.value.holdings.value.map(
+          (item) => item.fund_code,
+        );
+        console.log(
+          `[预加载] 持仓标签：准备预加载 ${fundCodes.length} 个基金的历史数据`,
+          fundCodes,
+        );
         fundApi.preloadFundHistory(fundCodes).catch(console.error);
+      } else {
+        console.log("[预加载] 持仓标签：没有可预加载的基金");
       }
     } catch (error) {
       console.error("加载持仓基金失败:", error);

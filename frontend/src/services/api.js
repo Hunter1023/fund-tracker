@@ -250,6 +250,10 @@ export const fundApi = {
   preloadFundHistory: async (fundCodes) => {
     const now = Date.now();
     const promises = [];
+    let cachedCount = 0;
+    let needLoadCount = 0;
+
+    console.log(`[预加载] 开始处理 ${fundCodes.length} 个基金`);
 
     for (const fundCode of fundCodes) {
       // 跳过已缓存的基金
@@ -257,35 +261,40 @@ export const fundApi = {
         cache.fundHistory.data[fundCode] &&
         now - cache.fundHistory.timestamp[fundCode] < cache.expiry
       ) {
+        cachedCount++;
         continue;
       }
 
+      needLoadCount++;
       // 并行获取历史数据
       promises.push(
         api
           .get(`/fund/${fundCode}/history`)
           .then((response) => {
+            console.log(`[预加载] 基金 ${fundCode} 加载成功，数据长度:`, response.data?.net_values?.length || 0);
             cache.fundHistory.data[fundCode] = response.data;
             cache.fundHistory.timestamp[fundCode] = Date.now();
             return { fundCode, success: true };
           })
           .catch((error) => {
-            console.warn(`预加载基金 ${fundCode} 历史数据失败:`, error);
+            console.warn(`[预加载] 基金 ${fundCode} 加载失败:`, error);
             return { fundCode, success: false, error };
           }),
       );
     }
 
+    console.log(`[预加载] 缓存命中: ${cachedCount} 个, 需要加载: ${needLoadCount} 个`);
+
     if (promises.length > 0) {
-      console.log(`开始预加载 ${promises.length} 个基金的历史数据...`);
+      console.log(`[预加载] 开始加载 ${promises.length} 个基金的历史数据...`);
       const results = await Promise.all(promises);
       const successCount = results.filter((r) => r.success).length;
       console.log(
-        `预加载完成: 成功 ${successCount} 个, 失败 ${results.length - successCount} 个`,
+        `[预加载] 加载完成: 成功 ${successCount} 个, 失败 ${results.length - successCount} 个`,
       );
       return results;
     } else {
-      console.log("所有基金历史数据已在缓存中，无需预加载");
+      console.log("[预加载] 所有基金历史数据已在缓存中，无需加载");
       return [];
     }
   },
