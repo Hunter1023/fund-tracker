@@ -1305,22 +1305,34 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
 
             if not skip_db_write:
                 should_update_rates = True
-                
+
                 # 检查是否应该更新涨跌幅数据
-                # 1. 如果新数据的日期比数据库中的旧，不更新（避免覆盖较新的数据）
-                # 2. 如果新数据的涨跌幅全部为0，不更新（避免用空数据覆盖已有数据）
                 if realtime_data and realtime_data.fsrq and data.get('fsrq', ''):
                     today = now_cst_naive().strftime('%Y-%m-%d')
-                    # 如果数据库中的日期是今天，且新数据的日期比数据库中的旧，不更新
-                    if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
+                    new_fsrq = data.get('fsrq', '')
+                    old_fsrq = realtime_data.fsrq
+
+                    # 情况1：新数据的日期比数据库中的旧，不更新（避免覆盖较新的数据）
+                    if new_fsrq < old_fsrq:
                         should_update_rates = False
-                    # 如果新数据的日期是今天，但涨跌幅全为0，不更新（API可能还未返回当天数据）
-                    if data.get('fsrq', '') == today:
-                        if (data.get('daily_change_rate') == 0 or data.get('daily_change_rate') is None) and \
-                           (data.get('one_month_rate') == 0 or data.get('one_month_rate') is None) and \
-                           (data.get('unit_net_value') == 0 or data.get('unit_net_value') is None):
-                            should_update_rates = False
-                            logger.info(f"基金 {fund_code} 晚间数据未更新：新数据日期为今天但涨跌幅为空，等待下一个更新周期")
+                        logger.info(f"基金 {fund_code} 跳过更新：新数据日期 {new_fsrq} 早于数据库日期 {old_fsrq}")
+
+                    # 情况2：新数据的日期和数据库相同，但新数据的净值和涨跌幅都为空
+                    # 这可能是API异常，不更新
+                    elif new_fsrq == old_fsrq:
+                        new_nav = data.get('unit_net_value')
+                        new_rate = data.get('daily_change_rate')
+                        old_nav = realtime_data.unit_net_value
+                        old_rate = realtime_data.daily_change_rate
+
+                        # 如果新数据净值和涨跌幅都为空/0，但数据库中有有效数据，不更新
+                        if (new_nav is None or new_nav == 0) and (new_rate is None or new_rate == 0):
+                            if (old_nav is not None and old_nav != 0) or (old_rate is not None and old_rate != 0):
+                                should_update_rates = False
+                                logger.info(f"基金 {fund_code} 跳过更新：新数据净值和涨跌幅为空，但数据库有有效数据")
+
+                    # 情况3：新数据的日期比数据库新，正常更新
+                    # 情况4：数据库中没有数据，正常更新
 
                 if realtime_data:
                     for key, value in data.items():
