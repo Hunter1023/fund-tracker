@@ -85,7 +85,7 @@ class DataFetcher:
                     return result
         except Exception as e:
             print(f"主数据源获取基金 {fund_code} 估值失败: {e}")
-        
+
         # 尝试备用数据源 (东方财富)
         try:
             url = f"{DATA_SOURCES['fund_valuation_backup']}?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
@@ -110,7 +110,7 @@ class DataFetcher:
                     return result
         except Exception as e:
             print(f"备用数据源获取基金 {fund_code} 估值失败: {e}")
-        
+
         return None
 
     @staticmethod
@@ -837,7 +837,8 @@ class DataFetcher:
         :return: 历史净值数据和涨跌幅数据
         """
         if timestamp is None:
-            timestamp = int(time.time() / 86400)
+            # 按小时缓存，避免同一天内缓存空数据
+            timestamp = int(time.time() / 3600)
 
         @lru_cache(maxsize=128)
         def _get_fund_history(fund_code, timestamp):
