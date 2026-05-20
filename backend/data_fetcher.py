@@ -60,6 +60,7 @@ class DataFetcher:
 
     @staticmethod
     def _get_fund_valuation_no_retry(fund_code, timestamp=None):
+        # 尝试主数据源 (1234567.com.cn)
         url = f"{DATA_SOURCES['fund_valuation']}{fund_code}.js"
         try:
             response = requests.get(url, timeout=5)
@@ -70,7 +71,7 @@ class DataFetcher:
                 data_str = response.text[start+1:end]
                 data_str = data_str.rstrip(';')
                 data = json.loads(data_str)
-                return {
+                result = {
                     'fund_code': data.get('fundcode'),
                     'fund_name': data.get('name'),
                     'net_value': data.get('jzrq'),
@@ -79,11 +80,38 @@ class DataFetcher:
                     'estimate_change_rate': data.get('gszzl'),
                     'estimate_time': data.get('gztime')
                 }
-            else:
-                return None
+                # 验证数据有效性
+                if result.get('estimate_net_value') or result.get('unit_net_value'):
+                    return result
         except Exception as e:
-            print(f"获取基金估值失败: {e}")
-            return None
+            print(f"主数据源获取基金 {fund_code} 估值失败: {e}")
+        
+        # 尝试备用数据源 (东方财富)
+        try:
+            url = f"{DATA_SOURCES['fund_valuation_backup']}?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
+            headers = {
+                'Referer': f'https://fundf10.eastmoney.com/jjjz_{fund_code}.html'
+            }
+            response = requests.get(url, headers=headers, timeout=5)
+            response.encoding = 'utf-8'
+            data = response.json()
+            if data and data.get('Datas'):
+                datas = data['Datas']
+                result = {
+                    'fund_code': fund_code,
+                    'fund_name': datas.get('NAME', ''),
+                    'net_value': datas.get('JZRQ', ''),
+                    'unit_net_value': datas.get('DWJZ', ''),
+                    'estimate_net_value': datas.get('GSZ', ''),
+                    'estimate_change_rate': datas.get('GSZZL', ''),
+                    'estimate_time': datas.get('GZTIME', '')
+                }
+                if result.get('estimate_net_value') or result.get('unit_net_value'):
+                    return result
+        except Exception as e:
+            print(f"备用数据源获取基金 {fund_code} 估值失败: {e}")
+        
+        return None
 
     @staticmethod
     @lru_cache(maxsize=512)

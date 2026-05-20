@@ -10,6 +10,7 @@ load_dotenv(_project_root / '.env')
 # 数据源API地址
 DATA_SOURCES = {
     'fund_valuation': 'http://fundgz.1234567.com.cn/js/',
+    'fund_valuation_backup': 'https://fundmobapi.eastmoney.com/FundMApi/FundEstimate.ashx',
     'eastmoney': 'http://fundf10.eastmoney.com/',
     'tencent_stock': 'http://qt.gtimg.cn/q='
 }
