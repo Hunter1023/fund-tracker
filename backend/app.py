@@ -45,6 +45,27 @@ db = SQLAlchemy(app)
 CORS(app, supports_credentials=True)
 jwt = JWTManager(app)
 
+# 自定义 JWT 错误处理器
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    logger.error(f"JWT token 过期: {jwt_header}")
+    return jsonify({'error': 'Token 已过期，请重新登录'}), 401
+
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    logger.error(f"JWT token 无效: {error}")
+    return jsonify({'error': 'Token 无效'}), 401
+
+@jwt.unauthorized_loader
+def unauthorized_callback(error):
+    logger.error(f"未授权访问: {error}")
+    return jsonify({'error': '请先登录'}), 401
+
+@jwt.revoked_token_loader
+def revoked_token_callback(jwt_header, jwt_payload):
+    logger.error(f"JWT token 已被撤销")
+    return jsonify({'error': 'Token 已被撤销'}), 401
+
 register_auth_routes(app)
 register_user_profile_routes(app)
 
@@ -3199,6 +3220,17 @@ def update_platform_order():
         return jsonify({'error': str(e)}), 500
     finally:
         db.close()
+
+# 全局错误处理器
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    error_trace = traceback.format_exc()
+    logger.error(f"未处理的异常: {e}")
+    logger.error(f"错误堆栈: {error_trace}")
+    print(f"未处理的异常: {e}")
+    print(f"错误堆栈: {error_trace}")
+    return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     import argparse
