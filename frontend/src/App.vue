@@ -745,8 +745,12 @@ watch(activeTab, async (newTab) => {
       await watchlistRef.value.loadWatchlist();
 
       // 预加载自选基金的历史净值数据（后台并行执行，不阻塞UI）
-      if (watchlistRef.value.watchlist && watchlistRef.value.watchlist.value) {
-        const fundCodes = watchlistRef.value.watchlist.value.map(
+      // Vue 3 的 defineExpose 会自动解包 ref，所以直接访问 watchlist 即可
+      if (
+        watchlistRef.value.watchlist &&
+        watchlistRef.value.watchlist.length > 0
+      ) {
+        const fundCodes = watchlistRef.value.watchlist.map(
           (item) => item.fund_code,
         );
         console.log(
@@ -770,8 +774,9 @@ watch(activeTab, async (newTab) => {
       await holdingsRef.value.loadPlatforms();
 
       // 预加载持仓基金的历史净值数据（后台并行执行，不阻塞UI）
-      if (holdingsRef.value.holdings && holdingsRef.value.holdings.value) {
-        const fundCodes = holdingsRef.value.holdings.value.map(
+      // Vue 3 的 defineExpose 会自动解包 ref，所以直接访问 holdings 即可
+      if (holdingsRef.value.holdings && holdingsRef.value.holdings.length > 0) {
+        const fundCodes = holdingsRef.value.holdings.map(
           (item) => item.fund_code,
         );
         console.log(
