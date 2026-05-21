@@ -288,6 +288,7 @@ import {
   fundApi,
   getStoredToken,
   getStoredUser,
+  holdingApi,
   setAuthData,
   tagsApi,
   watchlistApi,
