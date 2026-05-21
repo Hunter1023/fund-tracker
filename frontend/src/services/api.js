@@ -255,6 +255,39 @@ export const fundApi = {
 
     console.log(`[预加载] 开始处理 ${fundCodes.length} 个基金`);
 
+    // 带重试的请求函数
+    const fetchWithRetry = async (fundCode, maxRetries = 2, delay = 1000) => {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          // 使用 complete 接口获取包含交易记录的数据
+          const response = await api.get(`/fund/${fundCode}/complete`);
+          const netValuesLength = response.data?.history_data?.net_values?.length || 0;
+          
+          // 检查数据是否有效
+          if (netValuesLength > 0) {
+            console.log(`[预加载] 基金 ${fundCode} 加载成功，数据长度: ${netValuesLength}`);
+            cache.fundHistory.data[fundCode] = response.data;
+            cache.fundHistory.timestamp[fundCode] = Date.now();
+            return { fundCode, success: true };
+          } else if (attempt < maxRetries) {
+            console.log(`[预加载] 基金 ${fundCode} 数据为空，第 ${attempt} 次重试...`);
+            await new Promise(resolve => setTimeout(resolve, delay * attempt));
+          } else {
+            console.warn(`[预加载] 基金 ${fundCode} 数据为空，已达最大重试次数`);
+            return { fundCode, success: false, reason: 'empty_data' };
+          }
+        } catch (error) {
+          if (attempt < maxRetries) {
+            console.log(`[预加载] 基金 ${fundCode} 请求失败，第 ${attempt} 次重试...`);
+            await new Promise(resolve => setTimeout(resolve, delay * attempt));
+          } else {
+            console.warn(`[预加载] 基金 ${fundCode} 请求失败，已达最大重试次数:`, error);
+            return { fundCode, success: false, error };
+          }
+        }
+      }
+    };
+
     for (const fundCode of fundCodes) {
       // 跳过已缓存的基金
       if (
@@ -266,21 +299,8 @@ export const fundApi = {
       }
 
       needLoadCount++;
-      // 并行获取历史数据
-      promises.push(
-        api
-          .get(`/fund/${fundCode}/history`)
-          .then((response) => {
-            console.log(`[预加载] 基金 ${fundCode} 加载成功，数据长度:`, response.data?.net_values?.length || 0);
-            cache.fundHistory.data[fundCode] = response.data;
-            cache.fundHistory.timestamp[fundCode] = Date.now();
-            return { fundCode, success: true };
-          })
-          .catch((error) => {
-            console.warn(`[预加载] 基金 ${fundCode} 加载失败:`, error);
-            return { fundCode, success: false, error };
-          }),
-      );
+      // 并行获取历史数据（带重试）
+      promises.push(fetchWithRetry(fundCode));
     }
 
     console.log(`[预加载] 缓存命中: ${cachedCount} 个, 需要加载: ${needLoadCount} 个`);
