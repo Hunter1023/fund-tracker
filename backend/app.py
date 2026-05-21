@@ -1737,34 +1737,44 @@ def get_fund_history(fund_code):
     :return: 历史净值数据和近1个月涨幅
     """
     from datetime import datetime, timedelta
+    print(f"[DEBUG] 收到历史净值请求: fund_code={fund_code}")
+    logger.info(f"收到历史净值请求: fund_code={fund_code}")
+
     force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
     db = next(get_db())
     try:
         fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
 
         if not force_refresh and fund and fund.realtime_data and fund.realtime_data.net_values:
-            updated_at = fund.realtime_data.updated_at
-            fsrq = fund.realtime_data.fsrq or ''
+            # 先解析缓存的历史净值数据
+            cached_net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
 
-            now = now_cst_naive()
-            is_weekday = now.weekday() < 5
+            # 如果缓存数据为空，跳过缓存，强制重新获取
+            if not cached_net_values:
+                print(f"[DEBUG] 基金 {fund_code} 缓存的历史净值数据为空，需要重新获取")
+            else:
+                updated_at = fund.realtime_data.updated_at
+                fsrq = fund.realtime_data.fsrq or ''
 
-            data_is_fresh = False
-            if updated_at and (now - updated_at.replace(tzinfo=None)) < timedelta(days=1):
-                if is_weekday and fsrq:
-                    today_str = now.strftime('%Y-%m-%d')
-                    if now.weekday() == 0:
-                        yesterday_str = (now - timedelta(days=3)).strftime('%Y-%m-%d')
+                now = now_cst_naive()
+                is_weekday = now.weekday() < 5
+
+                data_is_fresh = False
+                if updated_at and (now - updated_at.replace(tzinfo=None)) < timedelta(days=1):
+                    if is_weekday and fsrq:
+                        today_str = now.strftime('%Y-%m-%d')
+                        if now.weekday() == 0:
+                            yesterday_str = (now - timedelta(days=3)).strftime('%Y-%m-%d')
+                        else:
+                            yesterday_str = (now - timedelta(days=1)).strftime('%Y-%m-%d')
+
+                        if fsrq == today_str or fsrq == yesterday_str:
+                            data_is_fresh = True
                     else:
-                        yesterday_str = (now - timedelta(days=1)).strftime('%Y-%m-%d')
-
-                    if fsrq == today_str or fsrq == yesterday_str:
                         data_is_fresh = True
-                else:
-                    data_is_fresh = True
 
-            if data_is_fresh:
-                net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
+                if data_is_fresh:
+                    net_values = cached_net_values
                 return jsonify({
                     'fund_code': fund_code,
                     'net_values': net_values,
@@ -1778,16 +1788,49 @@ def get_fund_history(fund_code):
 
         history_data = DataFetcher.get_fund_history(fund_code, int(time.time()))
 
+        # 检查获取的数据是否有效（包含历史净值或涨跌幅数据）
+        has_valid_net_values = history_data.get('net_values') and len(history_data.get('net_values', [])) > 0
+        has_valid_rates = any([
+            history_data.get('one_month_rate', 0) != 0,
+            history_data.get('three_month_rate', 0) != 0,
+            history_data.get('one_year_rate', 0) != 0,
+            history_data.get('daily_change_rate', 0) != 0,
+            history_data.get('unit_net_value', 0) != 0
+        ])
+
+        # 如果获取的数据无效，返回数据库中的现有数据而不更新
+        if not has_valid_net_values and not has_valid_rates:
+            print(f"[DEBUG] 基金 {fund_code} 从第三方接口获取数据无效，使用数据库缓存")
+            if fund and fund.realtime_data and fund.realtime_data.net_values:
+                cached_net_values = json.loads(fund.realtime_data.net_values) if fund.realtime_data.net_values else []
+                return jsonify({
+                    'fund_code': fund_code,
+                    'net_values': cached_net_values,
+                    'one_month_rate': fund.realtime_data.one_month_rate or 0,
+                    'three_month_rate': fund.realtime_data.three_month_rate or 0,
+                    'one_year_rate': fund.realtime_data.one_year_rate or 0,
+                    'daily_change_rate': fund.realtime_data.daily_change_rate or 0,
+                    'fsrq': fund.realtime_data.fsrq or '',
+                    'unit_net_value': fund.realtime_data.unit_net_value or 0
+                })
+
+        # 数据有效，更新数据库
         if fund:
             if not fund.realtime_data:
                 fund.realtime_data = FundRealtimeData(fund_id=fund.id)
-            fund.realtime_data.net_values = json.dumps(history_data.get('net_values', []))
-            fund.realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
-            fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
-            fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
-            fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
-            fund.realtime_data.fsrq = history_data.get('fsrq', '')
-            fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+
+            # 只有当获取到有效数据时才更新 net_values
+            if has_valid_net_values:
+                fund.realtime_data.net_values = json.dumps(history_data.get('net_values', []))
+            # 涨跌幅数据如果有效则更新
+            if has_valid_rates:
+                fund.realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
+                fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
+                fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
+                fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
+                fund.realtime_data.fsrq = history_data.get('fsrq', '')
+                fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+
             fund.realtime_data.updated_at = datetime.now()
             db.commit()
 

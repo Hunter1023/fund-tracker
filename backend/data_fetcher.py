@@ -51,6 +51,25 @@ def retry_on_failure(max_retries=3, delay=1, backoff=2, exceptions=(requests.Req
         return wrapper
     return decorator
 
+# 全局缓存字典，用于存储成功获取的数据
+_fund_data_cache = {}
+_cache_lock = threading.Lock()
+
+def get_cached_fund_data(fund_code):
+    """获取缓存的基金数据"""
+    with _cache_lock:
+        return _fund_data_cache.get(fund_code)
+
+def set_cached_fund_data(fund_code, data):
+    """设置缓存的基金数据（仅存储有效数据）"""
+    with _cache_lock:
+        if data and (data.get('one_month_rate') != 0 or
+                     data.get('three_month_rate') != 0 or
+                     data.get('one_year_rate') != 0 or
+                     data.get('daily_change_rate') != 0 or
+                     data.get('unit_net_value') != 0):
+            _fund_data_cache[fund_code] = data
+
 class DataFetcher:
     """数据获取类"""
 
@@ -316,7 +335,7 @@ class DataFetcher:
                         except (ValueError, TypeError):
                             continue
 
-            return {
+            result = {
                 'fund_code': fund_code,
                 'one_month_rate': one_month_rate,
                 'three_month_rate': three_month_rate,
@@ -325,8 +344,19 @@ class DataFetcher:
                 'fsrq': fsrq,
                 'unit_net_value': unit_net_value
             }
+
+            # 缓存成功获取的数据
+            if one_month_rate != 0 or three_month_rate != 0 or one_year_rate != 0 or daily_change_rate != 0 or unit_net_value != 0:
+                set_cached_fund_data(fund_code, result)
+
+            return result
         except Exception as e:
             print(f"批量获取基金 {fund_code} 涨跌幅数据失败: {e}")
+            # 失败时返回缓存数据
+            cached_data = get_cached_fund_data(fund_code)
+            if cached_data:
+                print(f"使用缓存数据返回基金 {fund_code} 的涨跌幅数据")
+                return cached_data
             return {
                 'fund_code': fund_code,
                 'one_month_rate': one_month_rate,
@@ -338,9 +368,20 @@ class DataFetcher:
             }
 
     @staticmethod
-    @lru_cache(maxsize=512)
-    @retry_on_failure(max_retries=5, delay=2, backoff=2)
     def get_fund_rates(fund_code, timestamp=None):
+        # 使用 timestamp 作为缓存键的一部分，实现按时间过期
+        cache_key = f"{fund_code}_{timestamp or int(time.time() // 3600)}"
+        return DataFetcher._get_fund_rates_cached(cache_key, fund_code, timestamp)
+
+    @staticmethod
+    @lru_cache(maxsize=512)
+    def _get_fund_rates_cached(cache_key, fund_code, timestamp):
+        # 实际的数据获取逻辑，带重试
+        return DataFetcher._get_fund_rates_with_retry(fund_code, timestamp)
+
+    @staticmethod
+    @retry_on_failure(max_retries=5, delay=2, backoff=2)
+    def _get_fund_rates_with_retry(fund_code, timestamp):
         """
         只获取基金涨跌幅数据（不获取历史净值数组）
         :param fund_code: 基金代码
@@ -852,34 +893,85 @@ class DataFetcher:
 
             net_values = []
             try:
-                page_index = 1
-                page_size = 100
+                # real-time-fund 项目使用的东方财富K线接口
+                # klt=103 表示日线数据，lmt=500 表示获取最近500条记录
+                net_values_url = f"https://push2.eastmoney.com/api/qt/fund/kline/get?secid=0.{fund_code}&klt=103&fqt=0&end=20990101&lmt=500"
+                headers = {
+                    "Referer": f"https://fund.eastmoney.com/{fund_code}.html",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "application/json, text/plain, */*",
+                    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                    "Connection": "keep-alive"
+                }
+                print(f"基金 {fund_code} 正在请求历史净值: {net_values_url}")
+                net_values_response = requests.get(net_values_url, headers=headers, timeout=10)
+                print(f"基金 {fund_code} 请求状态码: {net_values_response.status_code}")
 
-                while True:
-                    net_values_url = f"https://api.fund.eastmoney.com/f10/lsjz?fundCode={fund_code}&pageIndex={page_index}&pageSize={page_size}"
-                    headers = {
-                        "Referer": f"https://fundf10.eastmoney.com/jjjz_{fund_code}.html",
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-                    }
-                    net_values_response = requests.get(net_values_url, headers=headers, timeout=10)
-                    net_values_data = net_values_response.json()
+                if net_values_response.status_code == 404:
+                    print(f"基金 {fund_code} K线接口返回404，跳过并尝试LSJZ接口")
+                else:
+                    net_values_response.encoding = 'utf-8'
+                    try:
+                        net_values_data = net_values_response.json()
+                        print(f"基金 {fund_code} 返回数据结构: keys={list(net_values_data.keys())}")
+                        if net_values_data.get('data'):
+                            print(f"基金 {fund_code} data字段存在，包含keys={list(net_values_data['data'].keys())}")
+                            if net_values_data['data'].get('klines'):
+                                klines = net_values_data['data']['klines']
+                                print(f"基金 {fund_code} klines长度: {len(klines)}")
+                                for kline in klines:
+                                    parts = kline.split(',')
+                                    if len(parts) >= 6:
+                                        net_values.append({
+                                            'date': parts[0],
+                                            'unit_net_value': parts[2],
+                                            'cumulative_net_value': parts[5],
+                                            'change_rate': '0'
+                                        })
+                                print(f"基金 {fund_code} 历史净值加载成功，获取 {len(net_values)} 条数据")
+                            else:
+                                print(f"基金 {fund_code} klines字段为空或不存在")
+                        else:
+                            print(f"基金 {fund_code} data字段为空或不存在，完整响应: {json.dumps(net_values_data)[:500]}")
+                    except json.JSONDecodeError:
+                        print(f"基金 {fund_code} 历史净值接口返回非JSON数据: {net_values_response.text[:200]}")
 
-                    if net_values_data.get('Data') and net_values_data['Data'].get('LSJZList'):
-                        for item in net_values_data['Data']['LSJZList']:
-                            if item.get('DWJZ'):
-                                net_values.append({
-                                    'date': item.get('FSRQ'),
-                                    'unit_net_value': item.get('DWJZ'),
-                                    'cumulative_net_value': item.get('LJJZ'),
-                                    'change_rate': item.get('JZZZL')
-                                })
+                # 如果K线接口失败，回退到传统LSJZ接口
+                if not net_values:
+                    print(f"基金 {fund_code} K线接口返回空数据，尝试LSJZ接口")
+                    page_index = 1
+                    page_size = 100
+                    while True:
+                        lsjz_url = f"https://api.fund.eastmoney.com/f10/lsjz?fundCode={fund_code}&pageIndex={page_index}&pageSize={page_size}"
+                        lsjz_headers = {
+                            "Referer": f"https://fundf10.eastmoney.com/jjjz_{fund_code}.html",
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        }
+                        print(f"基金 {fund_code} 正在请求LSJZ接口: {lsjz_url}")
+                        lsjz_response = requests.get(lsjz_url, headers=lsjz_headers, timeout=10)
+                        print(f"基金 {fund_code} LSJZ接口状态码: {lsjz_response.status_code}")
+                        try:
+                            lsjz_data = lsjz_response.json()
+                            print(f"基金 {fund_code} LSJZ返回数据: {json.dumps(lsjz_data)[:300]}")
+                            if lsjz_data.get('Data') and lsjz_data['Data'].get('LSJZList'):
+                                for item in lsjz_data['Data']['LSJZList']:
+                                    if item.get('DWJZ'):
+                                        net_values.append({
+                                            'date': item.get('FSRQ'),
+                                            'unit_net_value': item.get('DWJZ'),
+                                            'cumulative_net_value': item.get('LJJZ'),
+                                            'change_rate': item.get('JZZZL')
+                                        })
 
-                        total_count = net_values_data.get('TotalCount', 0)
-                        if len(net_values) >= total_count or len(net_values) >= 500:
+                                total_count = lsjz_data.get('TotalCount', 0)
+                                if len(net_values) >= total_count or len(net_values) >= 500:
+                                    break
+                                page_index += 1
+                            else:
+                                break
+                        except Exception as e:
+                            print(f"基金 {fund_code} LSJZ接口解析失败: {e}")
                             break
-                        page_index += 1
-                    else:
-                        break
             except Exception as e:
                 print(f"获取基金历史净值失败，但涨跌幅数据仍可用: {e}")
 
@@ -1018,24 +1110,32 @@ class DataFetcher:
                     'Referer': 'https://m.fund.eastmoney.com/'
                 }
 
-                response = requests.get(url, headers=headers, timeout=10)
-                data = response.json()
+                try:
+                    response = requests.get(url, headers=headers, timeout=10)
+                    response.raise_for_status()  # 检查HTTP错误
+                    data = response.json()
 
-                if data.get('Datas'):
-                    for item in data['Datas']:
-                        fund_code = item.get('FCODE', '')
-                        if fund_code:
-                            results[fund_code] = {
-                                'fund_code': fund_code,
-                                'one_month_rate': float(item.get('SYL_Y', 0) or 0),
-                                'three_month_rate': float(item.get('SYL_3Y', 0) or 0),
-                                'one_year_rate': float(item.get('SYL_1N', 0) or 0),
-                                'daily_change_rate': float(item.get('RZDF', 0) or 0),
-                                'fsrq': item.get('FSRQ', ''),
-                                'unit_net_value': float(item.get('DWJZ', 0) or 0)
-                            }
+                    if data.get('Datas'):
+                        for item in data['Datas']:
+                            fund_code = item.get('FCODE', '')
+                            if fund_code:
+                                results[fund_code] = {
+                                    'fund_code': fund_code,
+                                    'one_month_rate': float(item.get('SYL_Y', 0) or 0),
+                                    'three_month_rate': float(item.get('SYL_3Y', 0) or 0),
+                                    'one_year_rate': float(item.get('SYL_1N', 0) or 0),
+                                    'daily_change_rate': float(item.get('RZDF', 0) or 0),
+                                    'fsrq': item.get('FSRQ', ''),
+                                    'unit_net_value': float(item.get('DWJZ', 0) or 0)
+                                }
+                    else:
+                        print(f"东方财富批量接口返回数据为空，批次: {fcodes[:50]}...")
+                except requests.exceptions.RequestException as e:
+                    print(f"东方财富批量接口请求失败(批次: {fcodes[:50]}...): {e}")
+                except json.JSONDecodeError as e:
+                    print(f"东方财富批量接口返回非JSON数据(批次: {fcodes[:50]}...): {e}")
         except Exception as e:
-            print(f"东方财富批量接口请求失败: {e}")
+            print(f"东方财富批量接口处理异常: {e}")
 
         return results
 
@@ -1163,22 +1263,30 @@ class DataFetcher:
                     'Referer': 'https://m.fund.eastmoney.com/'
                 }
 
-                response = requests.get(url, headers=headers, timeout=10)
-                data = response.json()
+                try:
+                    response = requests.get(url, headers=headers, timeout=10)
+                    response.raise_for_status()  # 检查HTTP错误
+                    data = response.json()
 
-                if data.get('Datas'):
-                    for item in data['Datas']:
-                        fund_code = item.get('FCODE', '')
-                        if fund_code:
-                            results[fund_code] = {
-                                'fund_code': fund_code,
-                                'estimate_net_value': float(item.get('GSZ', 0) or 0),
-                                'estimate_change_rate': float(item.get('GSZZL', 0) or 0),
-                                'estimate_time': item.get('GZTIME', ''),
-                                'net_value': item.get('DWJZ', ''),
-                                'unit_net_value': float(item.get('DWJZ', 0) or 0)
-                            }
+                    if data.get('Datas'):
+                        for item in data['Datas']:
+                            fund_code = item.get('FCODE', '')
+                            if fund_code:
+                                results[fund_code] = {
+                                    'fund_code': fund_code,
+                                    'estimate_net_value': float(item.get('GSZ', 0) or 0),
+                                    'estimate_change_rate': float(item.get('GSZZL', 0) or 0),
+                                    'estimate_time': item.get('GZTIME', ''),
+                                    'net_value': item.get('DWJZ', ''),
+                                    'unit_net_value': float(item.get('DWJZ', 0) or 0)
+                                }
+                    else:
+                        print(f"东方财富估值批量接口返回数据为空，批次: {fcodes[:50]}...")
+                except requests.exceptions.RequestException as e:
+                    print(f"东方财富估值批量接口请求失败(批次: {fcodes[:50]}...): {e}")
+                except json.JSONDecodeError as e:
+                    print(f"东方财富估值批量接口返回非JSON数据(批次: {fcodes[:50]}...): {e}")
         except Exception as e:
-            print(f"东方财富估值批量接口请求失败: {e}")
+            print(f"东方财富估值批量接口处理异常: {e}")
 
         return results
