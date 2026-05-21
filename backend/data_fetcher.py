@@ -947,7 +947,7 @@ class DataFetcher:
     @staticmethod
     def get_fund_rates_batch(fund_codes, timestamp=None):
         """
-        批量并发获取多个基金的涨跌幅数据
+        批量并发获取多个基金的涨跌幅数据（使用 real-time-fund 风格的批量接口）
         :param fund_codes: 基金代码列表
         :param timestamp: 时间戳（用于缓存过期）
         :return: 基金数据字典 {fund_code: data}
@@ -955,29 +955,151 @@ class DataFetcher:
         if not fund_codes:
             return {}
 
+        # 使用 real-time-fund 风格的批量接口
+        return DataFetcher._get_fund_rates_batch_realtime_style(fund_codes)
+
+    @staticmethod
+    def _get_fund_rates_batch_realtime_style(fund_codes):
+        """
+        使用 real-time-fund 风格的批量接口获取基金数据
+        主要使用东方财富批量接口 + 腾讯基金备用接口
+        """
         results = {}
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_fund = {
-                executor.submit(DataFetcher._get_fund_rates_no_retry, fund_code, timestamp): fund_code
-                for fund_code in fund_codes
-            }
+        # 1. 首先尝试东方财富批量接口
+        batch_result = DataFetcher._fetch_eastmoney_batch(fund_codes)
+        results.update(batch_result)
 
-            for future in as_completed(future_to_fund, timeout=20):
-                fund_code = future_to_fund[future]
-                try:
-                    data = future.result(timeout=10)
-                    results[fund_code] = data
-                except Exception as e:
-                    print(f"获取基金 {fund_code} 数据失败: {e}")
-                    results[fund_code] = None
+        # 2. 对于未获取到数据的基金，使用腾讯基金接口补充
+        missing_codes = [code for code in fund_codes if code not in results or results[code] is None]
+        if missing_codes:
+            tencent_result = DataFetcher._fetch_tencent_batch(missing_codes)
+            results.update(tencent_result)
+
+        # 3. 最后使用单只基金接口补充剩余的
+        remaining_codes = [code for code in fund_codes if code not in results or results[code] is None]
+        if remaining_codes:
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_fund = {
+                    executor.submit(DataFetcher._get_fund_rates_no_retry, fund_code, None): fund_code
+                    for fund_code in remaining_codes
+                }
+                for future in as_completed(future_to_fund, timeout=15):
+                    fund_code = future_to_fund[future]
+                    try:
+                        data = future.result(timeout=8)
+                        if data:
+                            results[fund_code] = data
+                    except Exception as e:
+                        print(f"单只基金接口获取 {fund_code} 数据失败: {e}")
 
         return results
 
     @staticmethod
+    def _fetch_eastmoney_batch(fund_codes):
+        """
+        使用东方财富批量接口获取基金数据
+        real-time-fund 使用的接口
+        """
+        results = {}
+        if not fund_codes:
+            return results
+
+        try:
+            # 东方财富批量接口，一次最多支持约100个基金代码
+            max_per_request = 50
+            for i in range(0, len(fund_codes), max_per_request):
+                batch = fund_codes[i:i+max_per_request]
+                fcodes = ",".join(batch)
+
+                url = f"https://fundmobapi.eastmoney.com/FundMApi/FundInfoCombineNew.ashx?Fcodes={fcodes}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Referer': 'https://m.fund.eastmoney.com/'
+                }
+
+                response = requests.get(url, headers=headers, timeout=10)
+                data = response.json()
+
+                if data.get('Datas'):
+                    for item in data['Datas']:
+                        fund_code = item.get('FCODE', '')
+                        if fund_code:
+                            results[fund_code] = {
+                                'fund_code': fund_code,
+                                'one_month_rate': float(item.get('SYL_Y', 0) or 0),
+                                'three_month_rate': float(item.get('SYL_3Y', 0) or 0),
+                                'one_year_rate': float(item.get('SYL_1N', 0) or 0),
+                                'daily_change_rate': float(item.get('RZDF', 0) or 0),
+                                'fsrq': item.get('FSRQ', ''),
+                                'unit_net_value': float(item.get('DWJZ', 0) or 0)
+                            }
+        except Exception as e:
+            print(f"东方财富批量接口请求失败: {e}")
+
+        return results
+
+    @staticmethod
+    def _fetch_tencent_batch(fund_codes):
+        """
+        使用腾讯基金接口获取基金数据（作为备用）
+        real-time-fund 使用的接口
+        """
+        results = {}
+        if not fund_codes:
+            return results
+
+        try:
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_fund = {
+                    executor.submit(DataFetcher._fetch_tencent_single, fund_code): fund_code
+                    for fund_code in fund_codes
+                }
+
+                for future in as_completed(future_to_fund, timeout=10):
+                    fund_code = future_to_fund[future]
+                    try:
+                        data = future.result(timeout=5)
+                        if data:
+                            results[fund_code] = data
+                    except Exception as e:
+                        print(f"腾讯基金接口获取 {fund_code} 数据失败: {e}")
+        except Exception as e:
+            print(f"腾讯基金批量请求失败: {e}")
+
+        return results
+
+    @staticmethod
+    def _fetch_tencent_single(fund_code):
+        """
+        使用腾讯基金单只接口获取数据
+        """
+        try:
+            url = f"https://qt.gtimg.cn/q=ofund_{fund_code}"
+            response = requests.get(url, timeout=5)
+            data = response.text
+
+            if data:
+                parts = data.split('~')
+                if len(parts) >= 45:
+                    return {
+                        'fund_code': fund_code,
+                        'one_month_rate': float(parts[8] or 0),
+                        'three_month_rate': float(parts[9] or 0),
+                        'one_year_rate': float(parts[10] or 0),
+                        'daily_change_rate': float(parts[3] or 0),
+                        'fsrq': parts[46] if len(parts) > 46 else '',
+                        'unit_net_value': float(parts[4] or 0)
+                    }
+        except Exception as e:
+            print(f"腾讯基金接口获取 {fund_code} 数据失败: {e}")
+
+        return None
+
+    @staticmethod
     def get_fund_valuation_batch(fund_codes, timestamp=None):
         """
-        批量并发获取多个基金的估值数据
+        批量并发获取多个基金的估值数据（使用 real-time-fund 风格的批量接口）
         :param fund_codes: 基金代码列表
         :param timestamp: 时间戳（用于缓存过期）
         :return: 基金数据字典 {fund_code: data}
@@ -985,21 +1107,78 @@ class DataFetcher:
         if not fund_codes:
             return {}
 
+        # 使用 real-time-fund 风格的批量估值接口
+        return DataFetcher._get_fund_valuation_batch_realtime_style(fund_codes)
+
+    @staticmethod
+    def _get_fund_valuation_batch_realtime_style(fund_codes):
+        """
+        使用 real-time-fund 风格的批量估值接口
+        """
         results = {}
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_fund = {
-                executor.submit(DataFetcher._get_fund_valuation_no_retry, fund_code, timestamp): fund_code
-                for fund_code in fund_codes
-            }
+        # 1. 首先尝试东方财富批量估值接口
+        batch_result = DataFetcher._fetch_eastmoney_valuation_batch(fund_codes)
+        results.update(batch_result)
 
-            for future in as_completed(future_to_fund, timeout=15):
-                fund_code = future_to_fund[future]
-                try:
-                    data = future.result(timeout=5)
-                    results[fund_code] = data
-                except Exception as e:
-                    print(f"获取基金 {fund_code} 估值数据失败: {e}")
-                    results[fund_code] = None
+        # 2. 对于未获取到数据的基金，使用原有方法补充
+        missing_codes = [code for code in fund_codes if code not in results or results[code] is None]
+        if missing_codes:
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_fund = {
+                    executor.submit(DataFetcher._get_fund_valuation_no_retry, fund_code, None): fund_code
+                    for fund_code in missing_codes
+                }
+                for future in as_completed(future_to_fund, timeout=15):
+                    fund_code = future_to_fund[future]
+                    try:
+                        data = future.result(timeout=5)
+                        if data:
+                            results[fund_code] = data
+                    except Exception as e:
+                        print(f"估值接口获取 {fund_code} 数据失败: {e}")
+
+        return results
+
+    @staticmethod
+    def _fetch_eastmoney_valuation_batch(fund_codes):
+        """
+        使用东方财富批量估值接口
+        real-time-fund 使用的接口
+        """
+        results = {}
+        if not fund_codes:
+            return results
+
+        try:
+            # 东方财富估值批量接口
+            max_per_request = 50
+            for i in range(0, len(fund_codes), max_per_request):
+                batch = fund_codes[i:i+max_per_request]
+                fcodes = ",".join(batch)
+
+                url = f"https://fundmobapi.eastmoney.com/FundMApi/FundEstimate.ashx?Fcodes={fcodes}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Referer': 'https://m.fund.eastmoney.com/'
+                }
+
+                response = requests.get(url, headers=headers, timeout=10)
+                data = response.json()
+
+                if data.get('Datas'):
+                    for item in data['Datas']:
+                        fund_code = item.get('FCODE', '')
+                        if fund_code:
+                            results[fund_code] = {
+                                'fund_code': fund_code,
+                                'estimate_net_value': float(item.get('GSZ', 0) or 0),
+                                'estimate_change_rate': float(item.get('GSZZL', 0) or 0),
+                                'estimate_time': item.get('GZTIME', ''),
+                                'net_value': item.get('DWJZ', ''),
+                                'unit_net_value': float(item.get('DWJZ', 0) or 0)
+                            }
+        except Exception as e:
+            print(f"东方财富估值批量接口请求失败: {e}")
 
         return results
