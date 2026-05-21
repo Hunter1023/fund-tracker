@@ -708,6 +708,40 @@ function handleOutsideClickForUserMenu(event) {
   }
 }
 
+// 预加载所有基金历史数据（页面加载时立即执行）
+const preloadAllFundHistory = async () => {
+  try {
+    // 并行获取自选和持仓基金列表
+    const [watchlistResponse, holdingsResponse] = await Promise.all([
+      watchlistApi.get().catch(() => ({ data: [] })),
+      holdingApi.get().catch(() => ({ data: [] })),
+    ]);
+
+    const watchlistFunds = watchlistResponse.data || [];
+    const holdingsFunds = holdingsResponse.data || [];
+
+    // 获取所有基金代码（去重）
+    const fundCodes = [
+      ...new Set([
+        ...watchlistFunds.map((item) => item.fund_code),
+        ...holdingsFunds.map((item) => item.fund_code),
+      ]),
+    ];
+
+    if (fundCodes.length > 0) {
+      console.log(
+        `[预加载] 页面加载时预加载 ${fundCodes.length} 个基金的历史数据`,
+        fundCodes,
+      );
+      fundApi.preloadFundHistory(fundCodes).catch(console.error);
+    } else {
+      console.log("[预加载] 页面加载时没有可预加载的基金");
+    }
+  } catch (error) {
+    console.error("预加载基金历史数据失败:", error);
+  }
+};
+
 // 初始化加载默认标签的数据
 onMounted(async () => {
   await initAuth();
@@ -727,6 +761,9 @@ onMounted(async () => {
   } catch (error) {
     console.error("加载自选数据失败:", error);
   }
+
+  // 页面加载时立即预加载所有基金历史数据（不阻塞UI）
+  preloadAllFundHistory();
 });
 
 // 监听标签切换，只在切换时加载数据
