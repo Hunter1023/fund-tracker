@@ -710,10 +710,16 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             else:
                 need_refresh_rates = True
 
-            # 晚间时段（19:00-23:00）强制刷新日涨跌幅数据
+            # 晚间时段（19:00-23:00）刷新日涨跌幅数据，但有缓存时间限制
             is_evening_hours = now.hour >= 19 and now.hour < 23
             if is_trading_day and is_evening_hours:
-                need_refresh_rates = True
+                # 晚间时段：如果数据超过1小时未更新才刷新
+                if realtime_data.updated_at:
+                    time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
+                    if time_diff > timedelta(hours=1):
+                        need_refresh_rates = True
+                else:
+                    need_refresh_rates = True
 
             if is_trading_day and realtime_data.fsrq:
                 today_str = now.strftime('%Y-%m-%d')
