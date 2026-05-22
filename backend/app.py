@@ -2357,6 +2357,12 @@ def manage_holding():
                 return jsonify({'error': '获取持仓列表失败'}), 500
 
             # 批量获取所有基金的实时数据（使用与自选基金相同的批量方法）
+            # 过滤掉 fund 为 None 的持仓
+            valid_holdings = [h for h in holdings if h.fund is not None]
+            if len(valid_holdings) != len(holdings):
+                logger.warning(f"过滤掉 {len(holdings) - len(valid_holdings)} 个无效持仓（fund 为 None）")
+            holdings = valid_holdings
+
             fund_codes = [holding.fund.fund_code for holding in holdings]
             logger.info(f"基金代码: {fund_codes}")
 
