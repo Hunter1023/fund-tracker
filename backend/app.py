@@ -2379,11 +2379,17 @@ def manage_holding():
             now = now_cst_naive()
             is_trading_day = now.weekday() < 5
 
-            for holding in holdings:
+            try:
+                for holding in holdings:
                 # 检查请求时间是否超时
                 if datetime.now().timestamp() - start_time > MAX_REQUEST_TIME:
                     logger.warning("请求超时，返回部分数据")
                     break
+
+                # 检查持仓关联的基金是否存在
+                if not holding.fund:
+                    logger.warning(f"持仓 {holding.id} 关联的基金不存在，跳过")
+                    continue
 
                 fund_data = fund_data_dict.get(holding.fund.fund_code)
                 tags = tags_dict.get(holding.fund.id, '')
@@ -2500,6 +2506,10 @@ def manage_holding():
                         'tags': tags,
                         'platform': holding.platform or '默认'
                     })
+            except Exception as e:
+                logger.error(f"处理持仓数据时发生异常: {e}")
+                # 即使发生异常，也返回已处理的数据，避免返回空数组
+                logger.warning(f"异常发生前已处理 {len(holding_list)} 个持仓数据，返回部分结果")
 
             logger.info(f"返回 {len(holding_list)} 个持仓数据")
             return jsonify(holding_list)
