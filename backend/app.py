@@ -804,19 +804,31 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
 
         if funds_need_fallback:
             print(f"以下基金使用 get_fund_rates 获取数据失败，并发尝试 _get_fund_history_simple_no_retry: {funds_need_fallback}")
-            from concurrent.futures import ThreadPoolExecutor, as_completed
+            from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
             fallback_results = {}
             with ThreadPoolExecutor(max_workers=5) as executor:
                 future_to_fund = {
                     executor.submit(DataFetcher._get_fund_history_simple_no_retry, fc, cache_key): fc
                     for fc in funds_need_fallback
                 }
-                for future in as_completed(future_to_fund, timeout=15):
-                    fc = future_to_fund[future]
-                    try:
-                        fallback_results[fc] = future.result(timeout=8)
-                    except Exception as e:
-                        print(f"_get_fund_history_simple_no_retry 获取基金 {fc} 数据失败: {e}")
+                try:
+                    for future in as_completed(future_to_fund, timeout=15):
+                        fc = future_to_fund[future]
+                        try:
+                            fallback_results[fc] = future.result(timeout=8)
+                        except Exception as e:
+                            print(f"_get_fund_history_simple_no_retry 获取基金 {fc} 数据失败: {e}")
+                except TimeoutError:
+                    print(f"fallback请求超时，已获取 {len(fallback_results)} 个，剩余 {len(funds_need_fallback) - len(fallback_results)} 个未完成")
+                    # 超时情况下，继续处理已完成的任务
+                    for future in future_to_fund:
+                        if future.done():
+                            fc = future_to_fund[future]
+                            if fc not in fallback_results:
+                                try:
+                                    fallback_results[fc] = future.result()
+                                except Exception as e:
+                                    print(f"获取超时任务 {fc} 结果失败: {e}")
 
             for fc in funds_need_fallback:
                 history_data = fallback_results.get(fc)

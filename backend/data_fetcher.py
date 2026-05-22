@@ -4,7 +4,7 @@ import time
 from functools import lru_cache, wraps
 from bs4 import BeautifulSoup
 from config import DATA_SOURCES
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 import threading
 
 def retry_on_failure(max_retries=3, delay=1, backoff=2, exceptions=(requests.RequestException, requests.Timeout, ConnectionError, json.JSONDecodeError)):
@@ -1076,14 +1076,28 @@ class DataFetcher:
                     executor.submit(DataFetcher._get_fund_rates_no_retry, fund_code, None): fund_code
                     for fund_code in remaining_codes
                 }
-                for future in as_completed(future_to_fund, timeout=15):
-                    fund_code = future_to_fund[future]
-                    try:
-                        data = future.result(timeout=8)
-                        if data:
-                            results[fund_code] = data
-                    except Exception as e:
-                        print(f"单只基金接口获取 {fund_code} 数据失败: {e}")
+                try:
+                    for future in as_completed(future_to_fund, timeout=15):
+                        fund_code = future_to_fund[future]
+                        try:
+                            data = future.result(timeout=8)
+                            if data:
+                                results[fund_code] = data
+                        except Exception as e:
+                            print(f"单只基金接口获取 {fund_code} 数据失败: {e}")
+                except TimeoutError:
+                    print(f"部分基金数据获取超时，已获取 {len(results)} 个，剩余 {len(remaining_codes) - len(results)} 个未完成")
+                    # 超时情况下，继续处理已完成的任务
+                    for future in future_to_fund:
+                        if future.done():
+                            fund_code = future_to_fund[future]
+                            if fund_code not in results:
+                                try:
+                                    data = future.result()
+                                    if data:
+                                        results[fund_code] = data
+                                except Exception as e:
+                                    print(f"获取超时任务 {fund_code} 结果失败: {e}")
 
         return results
 
@@ -1156,14 +1170,28 @@ class DataFetcher:
                     for fund_code in fund_codes
                 }
 
-                for future in as_completed(future_to_fund, timeout=10):
-                    fund_code = future_to_fund[future]
-                    try:
-                        data = future.result(timeout=5)
-                        if data:
-                            results[fund_code] = data
-                    except Exception as e:
-                        print(f"腾讯基金接口获取 {fund_code} 数据失败: {e}")
+                try:
+                    for future in as_completed(future_to_fund, timeout=10):
+                        fund_code = future_to_fund[future]
+                        try:
+                            data = future.result(timeout=5)
+                            if data:
+                                results[fund_code] = data
+                        except Exception as e:
+                            print(f"腾讯基金接口获取 {fund_code} 数据失败: {e}")
+                except TimeoutError:
+                    print(f"腾讯基金批量请求超时，已获取 {len(results)} 个，剩余 {len(fund_codes) - len(results)} 个未完成")
+                    # 超时情况下，继续处理已完成的任务
+                    for future in future_to_fund:
+                        if future.done():
+                            fund_code = future_to_fund[future]
+                            if fund_code not in results:
+                                try:
+                                    data = future.result()
+                                    if data:
+                                        results[fund_code] = data
+                                except Exception as e:
+                                    print(f"获取超时任务 {fund_code} 结果失败: {e}")
         except Exception as e:
             print(f"腾讯基金批量请求失败: {e}")
 
@@ -1229,14 +1257,28 @@ class DataFetcher:
                     executor.submit(DataFetcher._get_fund_valuation_no_retry, fund_code, None): fund_code
                     for fund_code in missing_codes
                 }
-                for future in as_completed(future_to_fund, timeout=15):
-                    fund_code = future_to_fund[future]
-                    try:
-                        data = future.result(timeout=5)
-                        if data:
-                            results[fund_code] = data
-                    except Exception as e:
-                        print(f"估值接口获取 {fund_code} 数据失败: {e}")
+                try:
+                    for future in as_completed(future_to_fund, timeout=15):
+                        fund_code = future_to_fund[future]
+                        try:
+                            data = future.result(timeout=5)
+                            if data:
+                                results[fund_code] = data
+                        except Exception as e:
+                            print(f"估值接口获取 {fund_code} 数据失败: {e}")
+                except TimeoutError:
+                    print(f"估值批量请求超时，已获取 {len(results)} 个，剩余 {len(missing_codes) - (len(results) - len(batch_result))} 个未完成")
+                    # 超时情况下，继续处理已完成的任务
+                    for future in future_to_fund:
+                        if future.done():
+                            fund_code = future_to_fund[future]
+                            if fund_code not in results:
+                                try:
+                                    data = future.result()
+                                    if data:
+                                        results[fund_code] = data
+                                except Exception as e:
+                                    print(f"获取超时任务 {fund_code} 结果失败: {e}")
 
         return results
 
