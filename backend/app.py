@@ -2381,131 +2381,131 @@ def manage_holding():
 
             try:
                 for holding in holdings:
-                # 检查请求时间是否超时
-                if datetime.now().timestamp() - start_time > MAX_REQUEST_TIME:
-                    logger.warning("请求超时，返回部分数据")
-                    break
+                    # 检查请求时间是否超时
+                    if datetime.now().timestamp() - start_time > MAX_REQUEST_TIME:
+                        logger.warning("请求超时，返回部分数据")
+                        break
 
-                # 检查持仓关联的基金是否存在
-                if not holding.fund:
-                    logger.warning(f"持仓 {holding.id} 关联的基金不存在，跳过")
-                    continue
+                    # 检查持仓关联的基金是否存在
+                    if not holding.fund:
+                        logger.warning(f"持仓 {holding.id} 关联的基金不存在，跳过")
+                        continue
 
-                fund_data = fund_data_dict.get(holding.fund.fund_code)
-                tags = tags_dict.get(holding.fund.id, '')
+                    fund_data = fund_data_dict.get(holding.fund.fund_code)
+                    tags = tags_dict.get(holding.fund.id, '')
 
-                if fund_data:
-                    unit_net_value = fund_data.get('unit_net_value')
-                    fsrq = fund_data.get('fsrq', '')
-                    daily_change_rate = fund_data.get('daily_change_rate', '-')
-                    estimate_change_rate = fund_data.get('estimate_change_rate', '-')
+                    if fund_data:
+                        unit_net_value = fund_data.get('unit_net_value')
+                        fsrq = fund_data.get('fsrq', '')
+                        daily_change_rate = fund_data.get('daily_change_rate', '-')
+                        estimate_change_rate = fund_data.get('estimate_change_rate', '-')
 
-                    today = now_cst_naive().strftime('%Y-%m-%d')
-                    is_today = (fsrq == today)
+                        today = now_cst_naive().strftime('%Y-%m-%d')
+                        is_today = (fsrq == today)
 
-                    if unit_net_value:
-                        current_value = holding.shares * float(unit_net_value)
+                        if unit_net_value:
+                            current_value = holding.shares * float(unit_net_value)
+                        else:
+                            current_value = holding.current_value or holding.cost
+                        profit_loss = current_value - holding.cost
+                        profit_loss_rate = (profit_loss / holding.cost * 100) if holding.cost > 0 else 0
+
+                        if not is_trading_day:
+                            estimate_change_rate = '-'
+                            estimate_profit = None
+                        elif unit_net_value:
+                            estimate_time = fund_data.get('estimate_time', '')
+                            estimate_is_today = False
+                            if estimate_time:
+                                estimate_date = estimate_time.split(' ')[0] if ' ' in estimate_time else estimate_time
+                                estimate_is_today = (estimate_date == today)
+
+                            if is_today and daily_change_rate != '-' and daily_change_rate is not None and daily_change_rate != 0:
+                                change_rate = float(daily_change_rate)
+                                estimate_profit = current_value * (change_rate / 100)
+                            elif estimate_is_today and estimate_change_rate != '-' and estimate_change_rate is not None:
+                                change_rate = float(estimate_change_rate)
+                                estimate_profit = current_value * (change_rate / 100)
+                            else:
+                                estimate_profit = None
+                                if not estimate_is_today:
+                                    estimate_change_rate = '-'
+                        else:
+                            estimate_profit = 0
+
+                        holding_list.append({
+                            'fund_code': holding.fund.fund_code,
+                            'fund_name': holding.fund.fund_name,
+                            'cost': holding.cost,
+                            'shares': holding.shares,
+                            'avg_cost': holding.avg_cost,
+                            'current_value': current_value,
+                            'profit_loss': profit_loss,
+                            'profit_loss_rate': profit_loss_rate,
+                            'estimate_change_rate': estimate_change_rate,
+                            'estimate_profit': estimate_profit,
+                            'estimate_time': fund_data.get('estimate_time', ''),
+                            'daily_change_rate': fund_data.get('daily_change_rate', '-'),
+                            'fsrq': fund_data.get('fsrq', ''),
+                            'one_month_rate': fund_data.get('one_month_rate', 0),
+                            'tags': tags,
+                            'platform': holding.platform or '默认'
+                        })
                     else:
-                        current_value = holding.current_value or holding.cost
-                    profit_loss = current_value - holding.cost
-                    profit_loss_rate = (profit_loss / holding.cost * 100) if holding.cost > 0 else 0
+                        # 降级策略：优先使用数据库中的实时数据，其次使用存储的旧值，最后使用成本价
+                        realtime_data = db.query(FundRealtimeData).filter(
+                            FundRealtimeData.fund_id == holding.fund.id
+                        ).first()
 
-                    if not is_trading_day:
+                        current_value = holding.current_value
+                        profit_loss = holding.profit_loss
+                        profit_loss_rate = holding.profit_loss_rate
+                        daily_change_rate = '-'
+                        fsrq = ''
+                        one_month_rate = 0
                         estimate_change_rate = '-'
                         estimate_profit = None
-                    elif unit_net_value:
-                        estimate_time = fund_data.get('estimate_time', '')
-                        estimate_is_today = False
-                        if estimate_time:
-                            estimate_date = estimate_time.split(' ')[0] if ' ' in estimate_time else estimate_time
-                            estimate_is_today = (estimate_date == today)
 
-                        if is_today and daily_change_rate != '-' and daily_change_rate is not None and daily_change_rate != 0:
-                            change_rate = float(daily_change_rate)
-                            estimate_profit = current_value * (change_rate / 100)
-                        elif estimate_is_today and estimate_change_rate != '-' and estimate_change_rate is not None:
-                            change_rate = float(estimate_change_rate)
-                            estimate_profit = current_value * (change_rate / 100)
-                        else:
-                            estimate_profit = None
-                            if not estimate_is_today:
-                                estimate_change_rate = '-'
-                    else:
-                        estimate_profit = 0
+                        # 如果数据库中有实时数据，尝试使用它来计算
+                        if realtime_data:
+                            fsrq = realtime_data.fsrq or ''
+                            one_month_rate = realtime_data.one_month_rate or 0
+                            daily_change_rate = realtime_data.daily_change_rate or '-'
 
-                    holding_list.append({
-                        'fund_code': holding.fund.fund_code,
-                        'fund_name': holding.fund.fund_name,
-                        'cost': holding.cost,
-                        'shares': holding.shares,
-                        'avg_cost': holding.avg_cost,
-                        'current_value': current_value,
-                        'profit_loss': profit_loss,
-                        'profit_loss_rate': profit_loss_rate,
-                        'estimate_change_rate': estimate_change_rate,
-                        'estimate_profit': estimate_profit,
-                        'estimate_time': fund_data.get('estimate_time', ''),
-                        'daily_change_rate': fund_data.get('daily_change_rate', '-'),
-                        'fsrq': fund_data.get('fsrq', ''),
-                        'one_month_rate': fund_data.get('one_month_rate', 0),
-                        'tags': tags,
-                        'platform': holding.platform or '默认'
-                    })
-                else:
-                    # 降级策略：优先使用数据库中的实时数据，其次使用存储的旧值，最后使用成本价
-                    realtime_data = db.query(FundRealtimeData).filter(
-                        FundRealtimeData.fund_id == holding.fund.id
-                    ).first()
+                            if realtime_data.unit_net_value:
+                                try:
+                                    current_value = holding.shares * float(realtime_data.unit_net_value)
+                                    profit_loss = current_value - holding.cost
+                                    profit_loss_rate = (profit_loss / holding.cost * 100) if holding.cost > 0 else 0
+                                except (ValueError, TypeError):
+                                    pass
 
-                    current_value = holding.current_value
-                    profit_loss = holding.profit_loss
-                    profit_loss_rate = holding.profit_loss_rate
-                    daily_change_rate = '-'
-                    fsrq = ''
-                    one_month_rate = 0
-                    estimate_change_rate = '-'
-                    estimate_profit = None
+                        # 最终降级到成本价
+                        if current_value is None or current_value == 0:
+                            current_value = holding.cost
+                        if profit_loss is None:
+                            profit_loss = 0
+                        if profit_loss_rate is None:
+                            profit_loss_rate = 0
 
-                    # 如果数据库中有实时数据，尝试使用它来计算
-                    if realtime_data:
-                        fsrq = realtime_data.fsrq or ''
-                        one_month_rate = realtime_data.one_month_rate or 0
-                        daily_change_rate = realtime_data.daily_change_rate or '-'
-
-                        if realtime_data.unit_net_value:
-                            try:
-                                current_value = holding.shares * float(realtime_data.unit_net_value)
-                                profit_loss = current_value - holding.cost
-                                profit_loss_rate = (profit_loss / holding.cost * 100) if holding.cost > 0 else 0
-                            except (ValueError, TypeError):
-                                pass
-
-                    # 最终降级到成本价
-                    if current_value is None or current_value == 0:
-                        current_value = holding.cost
-                    if profit_loss is None:
-                        profit_loss = 0
-                    if profit_loss_rate is None:
-                        profit_loss_rate = 0
-
-                    holding_list.append({
-                        'fund_code': holding.fund.fund_code,
-                        'fund_name': holding.fund.fund_name,
-                        'cost': holding.cost,
-                        'shares': holding.shares,
-                        'avg_cost': holding.avg_cost,
-                        'current_value': current_value,
-                        'profit_loss': profit_loss,
-                        'profit_loss_rate': profit_loss_rate,
-                        'estimate_change_rate': estimate_change_rate,
-                        'estimate_profit': estimate_profit,
-                        'estimate_time': '',
-                        'daily_change_rate': daily_change_rate,
-                        'fsrq': fsrq,
-                        'one_month_rate': one_month_rate,
-                        'tags': tags,
-                        'platform': holding.platform or '默认'
-                    })
+                        holding_list.append({
+                            'fund_code': holding.fund.fund_code,
+                            'fund_name': holding.fund.fund_name,
+                            'cost': holding.cost,
+                            'shares': holding.shares,
+                            'avg_cost': holding.avg_cost,
+                            'current_value': current_value,
+                            'profit_loss': profit_loss,
+                            'profit_loss_rate': profit_loss_rate,
+                            'estimate_change_rate': estimate_change_rate,
+                            'estimate_profit': estimate_profit,
+                            'estimate_time': '',
+                            'daily_change_rate': daily_change_rate,
+                            'fsrq': fsrq,
+                            'one_month_rate': one_month_rate,
+                            'tags': tags,
+                            'platform': holding.platform or '默认'
+                        })
             except Exception as e:
                 logger.error(f"处理持仓数据时发生异常: {e}")
                 # 即使发生异常，也返回已处理的数据，避免返回空数组
