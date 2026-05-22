@@ -424,8 +424,10 @@ function handleConfirmDelete() {
 }
 
 async function handleConfirm() {
-  // 只刷新自选列表，添加自选基金不需要刷新持仓数据
+  // 刷新自选列表
   await loadWatchlist();
+  // 刷新持仓数据（处理删除持仓的情况）
+  await loadHoldingCodes();
 }
 
 onMounted(() => {});

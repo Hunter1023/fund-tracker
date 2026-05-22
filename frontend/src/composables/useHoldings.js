@@ -1,9 +1,44 @@
 import { computed, ref } from "vue";
 import { fundApi, holdingApi, platformApi } from "../services/api";
 
+const CACHE_KEY = "fund_holdings_cache";
+const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24小时过期
+
+function getCachedHoldings() {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const data = JSON.parse(cached);
+      // 检查缓存是否过期
+      if (Date.now() - data.timestamp < CACHE_EXPIRY) {
+        return data.holdings;
+      }
+    }
+  } catch (error) {
+    console.error("读取缓存失败:", error);
+  }
+  return null;
+}
+
+function setCachedHoldings(holdingsData) {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        holdings: holdingsData,
+        timestamp: Date.now(),
+      }),
+    );
+  } catch (error) {
+    console.error("写入缓存失败:", error);
+  }
+}
+
 export function useHoldings() {
   const holdings = ref([]);
   const isLoaded = ref(false);
+  let isLoading = false;
+  const isRefreshing = ref(false);
   const savedSortField = localStorage.getItem("holdings_sort_field");
   const savedSortDirection = localStorage.getItem("holdings_sort_direction");
   const sortField = ref(savedSortField || "current_value");
@@ -165,14 +200,46 @@ export function useHoldings() {
     };
   });
 
-  async function loadHoldings() {
+  async function loadHoldings(forceRefresh = false) {
+    if (isLoading) return;
+    isLoading = true;
+
     try {
+      // 非强制刷新时，先尝试读取缓存数据
+      if (!forceRefresh) {
+        const cachedHoldings = getCachedHoldings();
+        if (cachedHoldings && cachedHoldings.length > 0) {
+          holdings.value = [...cachedHoldings];
+          isLoaded.value = true;
+        }
+      }
+
+      // 标记正在刷新
+      isRefreshing.value = true;
+
+      // 发起请求获取最新数据
       const response = await holdingApi.get();
-      holdings.value = Array.isArray(response.data) ? [...response.data] : [];
+      const newHoldings = Array.isArray(response.data)
+        ? [...response.data]
+        : [];
+
+      // 更新缓存
+      if (newHoldings.length > 0) {
+        setCachedHoldings(newHoldings);
+      }
+
+      // 更新本地数据
+      holdings.value = newHoldings;
       isLoaded.value = true;
     } catch (error) {
       console.error("加载持仓失败:", error);
-      holdings.value = [];
+      // 如果没有缓存数据，才设置为空数组
+      if (!isLoaded.value) {
+        holdings.value = [];
+      }
+    } finally {
+      isLoading = false;
+      isRefreshing.value = false;
     }
   }
 
@@ -458,6 +525,7 @@ export function useHoldings() {
   return {
     holdings,
     isLoaded,
+    isRefreshing,
     sortField,
     sortDirection,
     transactionType,

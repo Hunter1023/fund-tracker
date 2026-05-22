@@ -394,8 +394,10 @@ function openFundDetail(holding) {
 function handleDetailConfirm(updatedHolding) {
   if (updatedHolding) {
     updateHoldingLocally(updatedHolding);
+  } else {
+    // 删除持仓后需要重新加载持仓列表
+    loadHoldings();
   }
-  // 不再重新加载持仓列表，因为addHolding函数已经在本地更新了数据
 }
 
 function handleSelectFund(fund) {
