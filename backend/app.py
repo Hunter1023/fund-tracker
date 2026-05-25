@@ -233,7 +233,7 @@ def update_all_funds_data():
     logger.info(f"[{datetime.now()}] 开始更新基金数据...")
     db = next(get_db())
     try:
-        # 获取所有需要更新的基金（自选基金 + 持仓基金）
+        # 获取所有需要更新的基金（自选基金 + 持仓基金 + 公开基金）
         watchlist_funds = db.query(Watchlist).all()
         holding_funds = db.query(FundHolding).all()
 
@@ -244,6 +244,10 @@ def update_all_funds_data():
         for holding in holding_funds:
             if holding.fund:
                 fund_codes.add(holding.fund.fund_code)
+        
+        # 添加公开基金到更新列表
+        if DEFAULT_PUBLIC_FUNDS:
+            fund_codes.update(DEFAULT_PUBLIC_FUNDS)
 
         logger.info(f"需要更新 {len(fund_codes)} 个基金的数据")
 
