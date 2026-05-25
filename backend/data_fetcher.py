@@ -1071,7 +1071,7 @@ class DataFetcher:
         # 3. 最后使用单只基金接口补充剩余的
         remaining_codes = [code for code in fund_codes if code not in results or results[code] is None]
         if remaining_codes:
-            with ThreadPoolExecutor(max_workers=10) as executor:
+            with ThreadPoolExecutor(max_workers=3) as executor:
                 future_to_fund = {
                     executor.submit(DataFetcher._get_fund_rates_no_retry, fund_code, None): fund_code
                     for fund_code in remaining_codes
@@ -1164,7 +1164,7 @@ class DataFetcher:
             return results
 
         try:
-            with ThreadPoolExecutor(max_workers=10) as executor:
+            with ThreadPoolExecutor(max_workers=3) as executor:
                 future_to_fund = {
                     executor.submit(DataFetcher._fetch_tencent_single, fund_code): fund_code
                     for fund_code in fund_codes
@@ -1252,7 +1252,7 @@ class DataFetcher:
         # 2. 对于未获取到数据的基金，使用原有方法补充
         missing_codes = [code for code in fund_codes if code not in results or results[code] is None]
         if missing_codes:
-            with ThreadPoolExecutor(max_workers=10) as executor:
+            with ThreadPoolExecutor(max_workers=3) as executor:
                 future_to_fund = {
                     executor.submit(DataFetcher._get_fund_valuation_no_retry, fund_code, None): fund_code
                     for fund_code in missing_codes

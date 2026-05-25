@@ -80,10 +80,36 @@ export function useWatchlist() {
     return counts;
   });
 
+  const CACHE_KEY = "watchlist_cache";
+  const CACHE_EXPIRY_KEY = "watchlist_cache_expiry";
+  const CACHE_EXPIRY_MS = 60 * 1000; // 1 分钟缓存
+
   async function loadWatchlist() {
     try {
+      // 尝试从缓存加载数据
+      const cached = localStorage.getItem(CACHE_KEY);
+      const expiry = localStorage.getItem(CACHE_EXPIRY_KEY);
+      
+      if (cached && expiry) {
+        const now = Date.now();
+        if (now < parseInt(expiry)) {
+          // 缓存未过期，使用缓存数据
+          funds.value = JSON.parse(cached);
+          return;
+        } else {
+          // 缓存已过期，清除
+          localStorage.removeItem(CACHE_KEY);
+          localStorage.removeItem(CACHE_EXPIRY_KEY);
+        }
+      }
+      
+      // 从 API 加载数据
       const response = await watchlistApi.get();
       funds.value = response.data;
+      
+      // 保存到缓存
+      localStorage.setItem(CACHE_KEY, JSON.stringify(response.data));
+      localStorage.setItem(CACHE_EXPIRY_KEY, String(Date.now() + CACHE_EXPIRY_MS));
     } catch (error) {
       console.error("加载自选失败:", error);
     }
