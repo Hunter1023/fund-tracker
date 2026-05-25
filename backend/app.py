@@ -785,55 +785,71 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
 
     cache_key = int(time.time() / 60)
     valuation_data_dict = {}
+    rates_data_dict = {}
+
     funds_always_need_estimate = funds_to_refresh if need_estimate_refresh else []
     funds_conditional_estimate = funds_to_get_estimate if (need_estimate_refresh or any(realtime_data_map.get(fc) and realtime_data_map[fc].estimate_change_rate is None for fc in funds_to_get_estimate)) else []
     all_funds_for_estimate = funds_always_need_estimate + funds_conditional_estimate
-    if all_funds_for_estimate:
-        valuation_data_dict = DataFetcher.get_fund_valuation_batch(all_funds_for_estimate, cache_key)
 
-    # 并发获取需要刷新的基金数据
-    rates_data_dict = {}
-    if funds_to_refresh:
-        rates_data_dict = DataFetcher.get_fund_rates_batch(funds_to_refresh, cache_key)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = []
 
-        funds_need_fallback = []
-        for fund_code in funds_to_refresh:
-            rates_data = rates_data_dict.get(fund_code)
-            if not rates_data or (rates_data.get('one_month_rate') == 0 and rates_data.get('three_month_rate') == 0 and rates_data.get('one_year_rate') == 0 and rates_data.get('daily_change_rate') == 0):
-                funds_need_fallback.append(fund_code)
+        if all_funds_for_estimate:
+            futures.append(executor.submit(DataFetcher.get_fund_valuation_batch, all_funds_for_estimate, cache_key))
 
-        if funds_need_fallback:
-            print(f"以下基金使用 get_fund_rates 获取数据失败，并发尝试 _get_fund_history_simple_no_retry: {funds_need_fallback}")
-            from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
-            fallback_results = {}
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                future_to_fund = {
-                    executor.submit(DataFetcher._get_fund_history_simple_no_retry, fc, cache_key): fc
-                    for fc in funds_need_fallback
-                }
-                try:
-                    for future in as_completed(future_to_fund, timeout=15):
+        if funds_to_refresh:
+            futures.append(executor.submit(DataFetcher.get_fund_rates_batch, funds_to_refresh, cache_key))
+
+        for future in as_completed(futures):
+            result = future.result()
+            if isinstance(result, dict):
+                if result:
+                    first_key = next(iter(result))
+                    first_value = result[first_key]
+                    if isinstance(first_value, dict) and 'estimate_net_value' in first_value:
+                        valuation_data_dict = result
+                    else:
+                        rates_data_dict = result
+
+    funds_need_fallback = []
+    for fund_code in funds_to_refresh:
+        rates_data = rates_data_dict.get(fund_code)
+        if not rates_data or (rates_data.get('one_month_rate') == 0 and rates_data.get('three_month_rate') == 0 and rates_data.get('one_year_rate') == 0 and rates_data.get('daily_change_rate') == 0):
+            funds_need_fallback.append(fund_code)
+
+    if funds_need_fallback:
+        print(f"以下基金使用 get_fund_rates 获取数据失败，并发尝试 _get_fund_history_simple_no_retry: {funds_need_fallback}")
+        from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
+        fallback_results = {}
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_fund = {
+                executor.submit(DataFetcher._get_fund_history_simple_no_retry, fc, cache_key): fc
+                for fc in funds_need_fallback
+            }
+            try:
+                for future in as_completed(future_to_fund, timeout=15):
+                    fc = future_to_fund[future]
+                    try:
+                        fallback_results[fc] = future.result(timeout=8)
+                    except Exception as e:
+                        print(f"_get_fund_history_simple_no_retry 获取基金 {fc} 数据失败: {e}")
+            except TimeoutError:
+                print(f"fallback请求超时，已获取 {len(fallback_results)} 个，剩余 {len(funds_need_fallback) - len(fallback_results)} 个未完成")
+                # 超时情况下，继续处理已完成的任务
+                for future in future_to_fund:
+                    if future.done():
                         fc = future_to_fund[future]
-                        try:
-                            fallback_results[fc] = future.result(timeout=8)
-                        except Exception as e:
-                            print(f"_get_fund_history_simple_no_retry 获取基金 {fc} 数据失败: {e}")
-                except TimeoutError:
-                    print(f"fallback请求超时，已获取 {len(fallback_results)} 个，剩余 {len(funds_need_fallback) - len(fallback_results)} 个未完成")
-                    # 超时情况下，继续处理已完成的任务
-                    for future in future_to_fund:
-                        if future.done():
-                            fc = future_to_fund[future]
-                            if fc not in fallback_results:
-                                try:
-                                    fallback_results[fc] = future.result()
-                                except Exception as e:
-                                    print(f"获取超时任务 {fc} 结果失败: {e}")
+                        if fc not in fallback_results:
+                            try:
+                                fallback_results[fc] = future.result()
+                            except Exception as e:
+                                print(f"获取超时任务 {fc} 结果失败: {e}")
 
-            for fc in funds_need_fallback:
-                history_data = fallback_results.get(fc)
-                if history_data:
-                    rates_data_dict[fc] = {
+        for fc in funds_need_fallback:
+            history_data = fallback_results.get(fc)
+            if history_data:
+                rates_data_dict[fc] = {
                         'fund_code': fc,
                         'one_month_rate': history_data.get('one_month_rate', 0),
                         'three_month_rate': history_data.get('three_month_rate', 0),
@@ -2081,7 +2097,10 @@ def add_fund():
         db.close()
 
 def _get_public_watchlist(db):
+    import time
     from datetime import datetime
+    start_time = time.time()
+
     fund_codes = DEFAULT_PUBLIC_FUNDS
     if not fund_codes:
         return jsonify([])
@@ -2092,45 +2111,51 @@ def _get_public_watchlist(db):
             continue
         existing = db.query(Fund).filter(Fund.fund_code == fund_code).first()
         if not existing:
-            search_results = DataFetcher.search_fund(fund_code)
-            fund_name = fund_code
-            if search_results:
-                for item in search_results:
-                    if item.get('fund_code') == fund_code:
-                        fund_name = item.get('fund_name', fund_code)
-                        break
             new_fund = Fund(
                 fund_code=fund_code,
-                fund_name=fund_name
+                fund_name=fund_code
             )
             db.add(new_fund)
-            db.commit()
-            print(f"公开自选: 已自动创建基金 {fund_code} - {fund_name}")
+    db.commit()
+    logger.info(f"[DEBUG] 创建/检查基金耗时: {time.time() - start_time:.2f}s")
 
     now = now_cst_naive()
     is_trading_day = now.weekday() < 5
 
-    funds_data_dict = get_fund_realtime_rates_batch(db, fund_codes, force_refresh=False)
     funds = []
     for fund_code in fund_codes:
         fund_code = fund_code.strip()
         if not fund_code:
             continue
-        fund_data = funds_data_dict.get(fund_code)
-        if fund_data:
-            fund_data['tags'] = ''
-            if not is_trading_day:
-                fund_data['estimate_change_rate'] = '-'
-            funds.append(fund_data)
-        else:
-            fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+        fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+        if not fund:
+            continue
+
+        realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
+
+        if realtime_data:
             funds.append({
                 'fund_code': fund_code,
-                'fund_name': fund.fund_name if fund else fund_code,
+                'fund_name': fund.fund_name,
+                'net_value': realtime_data.net_value_date or '',
+                'unit_net_value': realtime_data.unit_net_value or 0,
+                'estimate_net_value': realtime_data.estimate_net_value or '',
+                'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data.estimate_change_rate is not None else '-',
+                'estimate_time': realtime_data.estimate_time or '',
+                'one_month_rate': realtime_data.one_month_rate or 0,
+                'three_month_rate': realtime_data.three_month_rate or 0,
+                'one_year_rate': realtime_data.one_year_rate or 0,
+                'daily_change_rate': realtime_data.daily_change_rate or '-',
+                'tags': ''
+            })
+        else:
+            funds.append({
+                'fund_code': fund_code,
+                'fund_name': fund.fund_name,
                 'net_value': '',
                 'unit_net_value': '',
                 'estimate_net_value': '',
-                'estimate_change_rate': None,
+                'estimate_change_rate': '-',
                 'estimate_time': '',
                 'one_month_rate': 0,
                 'three_month_rate': 0,
@@ -2138,6 +2163,8 @@ def _get_public_watchlist(db):
                 'daily_change_rate': '-',
                 'tags': ''
             })
+
+    logger.info(f"[DEBUG] _get_public_watchlist 总耗时: {time.time() - start_time:.2f}s")
     return jsonify(funds)
 
 @app.route('/api/watchlist', methods=['GET', 'POST', 'DELETE'])

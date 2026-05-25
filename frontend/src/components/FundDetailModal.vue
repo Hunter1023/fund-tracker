@@ -759,46 +759,20 @@ watch(selectedRange, async () => {
   await loadHistoryData();
 });
 
-// 缓存历史数据和交易记录
-const cachedFundData = ref({});
-
 async function loadHistoryData() {
   if (!props.fundData || !props.fundData.fund_code) return;
 
   const fundCode = props.fundData.fund_code;
 
-  // 检查是否已有缓存数据
-  if (
-    cachedFundData.value[fundCode] &&
-    cachedFundData.value[fundCode].historyData
-  ) {
-    // 使用缓存数据，只需要过滤时间范围
-    const filteredData = filterDataByRange(
-      cachedFundData.value[fundCode].historyData.net_values,
-      selectedRange.value,
-    );
-    chartLoading.value = false;
-    await nextTick();
-    if (chartCanvas.value) {
-      renderChart(filteredData, cachedFundData.value[fundCode].transactions);
-    }
-    return;
-  }
-
   chartLoading.value = true;
   try {
-    // 使用新的综合接口获取数据
+    // 使用综合接口获取数据（会自动使用全局缓存）
     const completeResponse = await fundApi.getCompleteInfo(fundCode);
     const completeData = completeResponse.data;
 
-    const historyData = completeData.history_data;
+    // 从响应中提取数据，兼容不同的返回格式
+    const historyData = completeData.history_data || completeData;
     const transactions = completeData.transactions || [];
-
-    // 缓存数据
-    cachedFundData.value[fundCode] = {
-      historyData,
-      transactions,
-    };
 
     const filteredData = filterDataByRange(
       historyData.net_values,
@@ -824,12 +798,6 @@ async function loadHistoryData() {
 
       const historyData = historyResponse.data;
       const transactions = transactionResponse.data || [];
-
-      // 缓存数据
-      cachedFundData.value[fundCode] = {
-        historyData,
-        transactions,
-      };
 
       const filteredData = filterDataByRange(
         historyData.net_values,
