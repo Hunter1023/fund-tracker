@@ -233,7 +233,7 @@ def update_all_funds_data():
     logger.info(f"[{datetime.now()}] 开始更新基金数据...")
     db = next(get_db())
     try:
-        # 获取所有需要更新的基金（自选基金 + 持仓基金）
+        # 获取所有需要更新的基金（自选基金 + 持仓基金 + 公开基金）
         watchlist_funds = db.query(Watchlist).all()
         holding_funds = db.query(FundHolding).all()
 
@@ -244,6 +244,10 @@ def update_all_funds_data():
         for holding in holding_funds:
             if holding.fund:
                 fund_codes.add(holding.fund.fund_code)
+
+        # 添加公开基金到更新列表
+        if DEFAULT_PUBLIC_FUNDS:
+            fund_codes.update(DEFAULT_PUBLIC_FUNDS)
 
         logger.info(f"需要更新 {len(fund_codes)} 个基金的数据")
 
@@ -703,7 +707,9 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
     now = now_cst_naive()
     is_trading_day = now.weekday() < 5
     is_trading_hours = now.hour >= 9 and now.hour < 15
-    need_estimate_refresh = is_trading_day and is_trading_hours
+    # 收盘后时段（15:00-19:00）：需要获取15:00的最终估值
+    is_post_trading_hours = now.hour >= 15 and now.hour < 19
+    need_estimate_refresh = is_trading_day and (is_trading_hours or is_post_trading_hours)
 
     for fund_code in fund_codes:
         fund = fund_map.get(fund_code)
@@ -755,6 +761,21 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 if realtime_data.updated_at:
                     time_diff = now - realtime_data.updated_at.replace(tzinfo=None)
                     if time_diff > timedelta(seconds=60):
+                        need_refresh_estimate = True
+
+                # 收盘后时段（15:00-19:00）：如果缓存的估算时间早于15:00，强制刷新获取最终估值
+                if is_post_trading_hours:
+                    if realtime_data.estimate_time:
+                        try:
+                            estimate_time = datetime.strptime(realtime_data.estimate_time, '%Y-%m-%d %H:%M')
+                            # 如果估算时间早于当天15:00，强制刷新
+                            if estimate_time.hour < 15:
+                                need_refresh_estimate = True
+                        except:
+                            # 解析失败，也强制刷新
+                            need_refresh_estimate = True
+                    else:
+                        # 没有估算时间，强制刷新
                         need_refresh_estimate = True
 
             if rates_all_zero or need_refresh_rates or need_refresh_estimate:
@@ -2097,9 +2118,7 @@ def add_fund():
         db.close()
 
 def _get_public_watchlist(db):
-    import time
     from datetime import datetime
-    start_time = time.time()
 
     fund_codes = DEFAULT_PUBLIC_FUNDS
     if not fund_codes:
@@ -2117,54 +2136,68 @@ def _get_public_watchlist(db):
             )
             db.add(new_fund)
     db.commit()
-    logger.info(f"[DEBUG] 创建/检查基金耗时: {time.time() - start_time:.2f}s")
 
     now = now_cst_naive()
     is_trading_day = now.weekday() < 5
 
+    # 使用智能刷新机制，与自选基金保持一致
+    funds_data_dict = get_fund_realtime_rates_batch(db, fund_codes, force_refresh=False)
     funds = []
     for fund_code in fund_codes:
         fund_code = fund_code.strip()
         if not fund_code:
             continue
-        fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
-        if not fund:
-            continue
+        fund_data = funds_data_dict.get(fund_code)
 
-        realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
+        # 检查数据是否有效（不为空且至少有一个非零值）
+        has_valid_data = fund_data and any([
+            fund_data.get('estimate_change_rate'),
+            fund_data.get('daily_change_rate'),
+            fund_data.get('one_month_rate', 0) != 0,
+            fund_data.get('three_month_rate', 0) != 0,
+            fund_data.get('one_year_rate', 0) != 0,
+            fund_data.get('unit_net_value')
+        ])
 
-        if realtime_data:
-            funds.append({
-                'fund_code': fund_code,
-                'fund_name': fund.fund_name,
-                'net_value': realtime_data.net_value_date or '',
-                'unit_net_value': realtime_data.unit_net_value or 0,
-                'estimate_net_value': realtime_data.estimate_net_value or '',
-                'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data.estimate_change_rate is not None else '-',
-                'estimate_time': realtime_data.estimate_time or '',
-                'one_month_rate': realtime_data.one_month_rate or 0,
-                'three_month_rate': realtime_data.three_month_rate or 0,
-                'one_year_rate': realtime_data.one_year_rate or 0,
-                'daily_change_rate': realtime_data.daily_change_rate or '-',
-                'tags': ''
-            })
+        if has_valid_data:
+            fund_data['tags'] = ''
+            if not is_trading_day:
+                fund_data['estimate_change_rate'] = '-'
+            funds.append(fund_data)
         else:
-            funds.append({
-                'fund_code': fund_code,
-                'fund_name': fund.fund_name,
-                'net_value': '',
-                'unit_net_value': '',
-                'estimate_net_value': '',
-                'estimate_change_rate': '-',
-                'estimate_time': '',
-                'one_month_rate': 0,
-                'three_month_rate': 0,
-                'one_year_rate': 0,
-                'daily_change_rate': '-',
-                'tags': ''
-            })
-
-    logger.info(f"[DEBUG] _get_public_watchlist 总耗时: {time.time() - start_time:.2f}s")
+            # 从数据库缓存中获取数据
+            fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
+            if fund and fund.realtime_data:
+                rt = fund.realtime_data
+                funds.append({
+                    'fund_code': fund_code,
+                    'fund_name': fund.fund_name,
+                    'net_value': rt.net_value_date or '',
+                    'unit_net_value': rt.unit_net_value or '',
+                    'estimate_net_value': rt.estimate_net_value or '',
+                    'estimate_change_rate': str(rt.estimate_change_rate) if rt.estimate_change_rate is not None else '-',
+                    'estimate_time': rt.estimate_time or '',
+                    'one_month_rate': rt.one_month_rate or 0,
+                    'three_month_rate': rt.three_month_rate or 0,
+                    'one_year_rate': rt.one_year_rate or 0,
+                    'daily_change_rate': rt.daily_change_rate or '-',
+                    'tags': ''
+                })
+            else:
+                funds.append({
+                    'fund_code': fund_code,
+                    'fund_name': fund.fund_name if fund else fund_code,
+                    'net_value': '',
+                    'unit_net_value': '',
+                    'estimate_net_value': '',
+                    'estimate_change_rate': '-',
+                    'estimate_time': '',
+                    'one_month_rate': 0,
+                    'three_month_rate': 0,
+                    'one_year_rate': 0,
+                    'daily_change_rate': '-',
+                    'tags': ''
+                })
     return jsonify(funds)
 
 @app.route('/api/watchlist', methods=['GET', 'POST', 'DELETE'])
