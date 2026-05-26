@@ -284,6 +284,7 @@ import Watchlist from "./components/Watchlist.vue";
 import { useHoldings } from "./composables/useHoldings";
 import {
   authApi,
+  clearAllCache,
   clearAuthData,
   fundApi,
   getStoredToken,
@@ -402,12 +403,14 @@ async function handleGithubCallback() {
 }
 
 function handleLoginSuccess(user) {
+  // 清除旧账号的缓存数据（不清token，因为新token已设置）
+  clearAllCache();
   currentUser.value = user;
   showAuthModal.value = false;
   activeTab.value = "holding";
   nextTick(() => {
     if (holdingsRef.value?.loadHoldings) {
-      holdingsRef.value.loadHoldings();
+      holdingsRef.value.loadHoldings(true);
       holdingsRef.value.loadPlatforms();
     }
     if (watchlistRef.value?.loadWatchlist) {
@@ -846,7 +849,7 @@ function startGlobalRefresh() {
       if (holdingsRef.value?.loadHoldings) {
         promises.push(holdingsRef.value.loadHoldings(true));
       } else {
-        console.log('[定时刷新] holdingsRef不可用:', !!holdingsRef.value);
+        console.log("[定时刷新] holdingsRef不可用:", !!holdingsRef.value);
       }
       await Promise.all(promises);
     } finally {

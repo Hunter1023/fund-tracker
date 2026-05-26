@@ -128,6 +128,10 @@ export function clearAllCache() {
   cache.tags.data = null;
   cache.fundHistory.data = {};
   cache.fundHistory.timestamp = {};
+  // 清除localStorage中的持仓和自选缓存，避免切换账号后显示旧数据
+  localStorage.removeItem("fund_holdings_cache");
+  localStorage.removeItem("watchlist_cache");
+  localStorage.removeItem("watchlist_cache_expiry");
 }
 
 export const authApi = {
