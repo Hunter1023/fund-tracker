@@ -223,14 +223,16 @@ export function useHoldings() {
         ? [...response.data]
         : [];
 
-      // 更新缓存
+      // 只在API返回有效数据时更新，避免偶发空响应导致页面空白
       if (newHoldings.length > 0) {
         setCachedHoldings(newHoldings);
+        holdings.value = newHoldings;
+        isLoaded.value = true;
+      } else if (!isLoaded.value) {
+        // 首次加载且API返回空，才设置为空数组
+        holdings.value = [];
+        isLoaded.value = true;
       }
-
-      // 更新本地数据
-      holdings.value = newHoldings;
-      isLoaded.value = true;
     } catch (error) {
       console.error("加载持仓失败:", error);
       // 如果没有缓存数据，才设置为空数组
