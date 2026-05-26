@@ -2412,7 +2412,32 @@ def manage_holding():
             except Exception as e:
                 logger.error(f"批量获取基金实时数据失败: {e}")
                 fund_data_dict = {}
-
+            
+            # 如果实时数据获取失败或返回空，尝试从数据库读取缓存数据
+            if not fund_data_dict:
+                logger.warning("实时数据获取失败，尝试从数据库读取缓存数据")
+                for holding in holdings:
+                    if holding.fund and holding.fund.fund_code not in fund_data_dict:
+                        realtime_data = db.query(FundRealtimeData).filter(
+                            FundRealtimeData.fund_id == holding.fund.id
+                        ).first()
+                        if realtime_data:
+                            fund_data_dict[holding.fund.fund_code] = {
+                                'fund_code': holding.fund.fund_code,
+                                'fund_name': holding.fund.fund_name,
+                                'net_value': realtime_data.fsrq or realtime_data.net_value_date,
+                                'unit_net_value': realtime_data.unit_net_value,
+                                'estimate_net_value': realtime_data.estimate_net_value,
+                                'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data.estimate_change_rate is not None else '-',
+                                'estimate_time': realtime_data.estimate_time,
+                                'one_month_rate': realtime_data.one_month_rate,
+                                'three_month_rate': realtime_data.three_month_rate,
+                                'one_year_rate': realtime_data.one_year_rate,
+                                'daily_change_rate': realtime_data.daily_change_rate,
+                                'fsrq': realtime_data.fsrq,
+                                'net_values': []
+                            }
+            
             logger.info(f"获取到的基金数据: {fund_data_dict}")
 
             # 批量获取所有基金的标签（板块）
