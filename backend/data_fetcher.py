@@ -53,15 +53,25 @@ def retry_on_failure(max_retries=3, delay=1, backoff=2, exceptions=(requests.Req
 
 # 全局缓存字典，用于存储成功获取的数据
 _fund_data_cache = {}
+_fund_data_cache_time = {}
 _cache_lock = threading.Lock()
+CACHE_EXPIRY_SECONDS = 300  # 缓存5分钟
 
 def get_cached_fund_data(fund_code):
-    """获取缓存的基金数据"""
+    """获取缓存的基金数据，检查是否过期"""
     with _cache_lock:
+        cache_time = _fund_data_cache_time.get(fund_code)
+        if cache_time:
+            elapsed = time.time() - cache_time
+            if elapsed > CACHE_EXPIRY_SECONDS:
+                # 缓存已过期，删除
+                _fund_data_cache.pop(fund_code, None)
+                _fund_data_cache_time.pop(fund_code, None)
+                return None
         return _fund_data_cache.get(fund_code)
 
 def set_cached_fund_data(fund_code, data):
-    """设置缓存的基金数据（仅存储有效数据）"""
+    """设置缓存的基金数据（仅存储有效数据，带过期时间）"""
     with _cache_lock:
         if data and (data.get('one_month_rate') != 0 or
                      data.get('three_month_rate') != 0 or
@@ -69,6 +79,7 @@ def set_cached_fund_data(fund_code, data):
                      data.get('daily_change_rate') != 0 or
                      data.get('unit_net_value') != 0):
             _fund_data_cache[fund_code] = data
+            _fund_data_cache_time[fund_code] = time.time()
 
 class DataFetcher:
     """数据获取类"""
@@ -985,8 +996,8 @@ class DataFetcher:
 
                 if unit_net_value == 0 and latest_lsjz_nav > 0:
                     unit_net_value = latest_lsjz_nav
-                    fsrq = latest_lsjz_date
-                    print(f"基金 {fund_code} get_fund_rates未返回净值，使用LSJZList数据: unit_net_value={unit_net_value}, fsrq={fsrq}")
+                    # 不更新fsrq，保留get_fund_rates返回的最新日期
+                    print(f"基金 {fund_code} get_fund_rates未返回净值，使用LSJZList数据更新unit_net_value: {unit_net_value}")
                 elif fsrq == latest_lsjz_date and latest_lsjz_nav > 0 and unit_net_value != latest_lsjz_nav:
                     print(f"基金 {fund_code} 净值数据不一致(API: {unit_net_value}, LSJZList: {latest_lsjz_nav}, 日期: {fsrq})，使用LSJZList数据")
                     unit_net_value = latest_lsjz_nav
