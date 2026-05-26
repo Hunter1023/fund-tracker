@@ -217,11 +217,36 @@ export function useHoldings() {
       // 标记正在刷新
       isRefreshing.value = true;
 
-      // 发起请求获取最新数据
-      const response = await holdingApi.get();
-      const newHoldings = Array.isArray(response.data)
-        ? [...response.data]
-        : [];
+      // 发起请求获取最新数据（带重试机制）
+      let newHoldings = [];
+      let retryCount = 0;
+      const maxRetries = 3;
+
+      while (retryCount < maxRetries && newHoldings.length === 0) {
+        if (retryCount > 0) {
+          // 重试前等待500ms
+          console.log(`[持仓] 第${retryCount}次重试，等待500ms...`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        try {
+          const response = await holdingApi.get();
+          newHoldings = Array.isArray(response.data) ? [...response.data] : [];
+          console.log(`[持仓] 请求${retryCount + 1}次，返回${newHoldings.length}条数据`);
+          
+          // 如果返回空数组且还有重试机会，继续重试
+          if (newHoldings.length === 0 && retryCount < maxRetries - 1) {
+            console.log(`[持仓] 第${retryCount + 1}次请求返回空数据，准备重试...`);
+          }
+        } catch (err) {
+          console.error(`持仓请求失败 (尝试 ${retryCount + 1}/${maxRetries}):`, err);
+          // 网络异常时也继续重试（除非是最后一次）
+          if (retryCount >= maxRetries - 1) {
+            break;
+          }
+        }
+        retryCount++;
+      }
 
       // 只在API返回有效数据时更新，避免偶发空响应导致页面空白
       if (newHoldings.length > 0) {
