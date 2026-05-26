@@ -2,7 +2,7 @@ import { computed, ref } from "vue";
 import { fundApi, holdingApi, platformApi } from "../services/api";
 
 const CACHE_KEY = "fund_holdings_cache";
-const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24小时过期
+const CACHE_EXPIRY = 60 * 1000; // 1分钟过期
 
 function getCachedHoldings() {
   try {
@@ -201,7 +201,7 @@ export function useHoldings() {
   });
 
   async function loadHoldings(forceRefresh = false) {
-    if (isLoading) return;
+    if (!forceRefresh && isLoading) return;
     isLoading = true;
 
     try {

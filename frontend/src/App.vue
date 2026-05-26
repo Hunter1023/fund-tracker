@@ -288,7 +288,6 @@ import {
   fundApi,
   getStoredToken,
   getStoredUser,
-  holdingApi,
   setAuthData,
   tagsApi,
   watchlistApi,
@@ -839,14 +838,17 @@ function startGlobalRefresh() {
     if (isRefreshing) return;
     isRefreshing = true;
     try {
-      if (activeTab.value === "holding" && holdingsRef.value?.loadHoldings) {
-        await holdingsRef.value.loadHoldings();
-      } else if (
-        activeTab.value === "watchlist" &&
-        watchlistRef.value?.loadWatchlist
-      ) {
-        await watchlistRef.value.loadWatchlist();
+      // 同时刷新持仓和自选，而不是只刷新当前tab
+      const promises = [];
+      if (watchlistRef.value?.loadWatchlist) {
+        promises.push(watchlistRef.value.loadWatchlist());
       }
+      if (holdingsRef.value?.loadHoldings) {
+        promises.push(holdingsRef.value.loadHoldings(true));
+      } else {
+        console.log('[定时刷新] holdingsRef不可用:', !!holdingsRef.value);
+      }
+      await Promise.all(promises);
     } finally {
       isRefreshing = false;
     }
@@ -863,21 +865,29 @@ function stopGlobalRefresh() {
 async function handleManualRefresh() {
   isManualRefresh.value = true;
   try {
-    if (activeTab.value === "holding" && holdingsRef.value?.loadHoldings) {
-      await holdingsRef.value.loadHoldings();
-    } else if (
-      activeTab.value === "watchlist" &&
-      watchlistRef.value?.loadWatchlist
-    ) {
-      await watchlistRef.value.loadWatchlist();
+    const promises = [];
+    if (watchlistRef.value?.loadWatchlist) {
+      promises.push(watchlistRef.value.loadWatchlist());
     }
+    if (holdingsRef.value?.loadHoldings) {
+      promises.push(holdingsRef.value.loadHoldings(true));
+    }
+    await Promise.all(promises);
   } finally {
     isManualRefresh.value = false;
   }
 }
 
+// 页面从后台恢复时强制刷新数据
+function handleVisibilityChange() {
+  if (document.visibilityState === "visible") {
+    handleManualRefresh();
+  }
+}
+
 onMounted(() => {
   startGlobalRefresh();
+  document.addEventListener("visibilitychange", handleVisibilityChange);
 });
 
 onUnmounted(() => {
@@ -885,6 +895,7 @@ onUnmounted(() => {
   window.removeEventListener("auth-changed", handleAuthChanged);
   document.removeEventListener("click", handleClickOutside);
   document.removeEventListener("click", handleOutsideClickForUserMenu);
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
 </script>
 
