@@ -58,15 +58,10 @@ jobs:
       - name: Stop existing containers
         run: docker compose down
 
-      - name: Remove old images to force rebuild
-        run: |
-          docker rmi -f fund-tracker-backend:latest 2>/dev/null || true
-          docker rmi -f fund-tracker-frontend:latest 2>/dev/null || true
-          docker builder prune -f
-
       - name: Build and start containers
         run: docker compose up -d --build
         env:
+          DOCKER_BUILDKIT: 1
           TUNNEL_TOKEN: ${{ secrets.TUNNEL_TOKEN }}
 
       - name: Wait for services to be healthy
