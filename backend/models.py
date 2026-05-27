@@ -10,7 +10,16 @@ import uuid
 Base = declarative_base()
 
 try:
-    engine = create_engine(DATABASE_URL, echo=False, connect_args=CONNECT_ARGS)
+    engine = create_engine(
+        DATABASE_URL,
+        echo=False,
+        connect_args=CONNECT_ARGS,
+        pool_size=20,           # 连接池大小
+        max_overflow=30,        # 最大溢出连接数
+        pool_timeout=30,        # 等待连接超时时间
+        pool_recycle=300,       # 连接回收时间（秒），防止连接失效
+        pool_pre_ping=True      # 连接前检查连接是否有效
+    )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     print("数据库连接成功")
 except Exception as e:

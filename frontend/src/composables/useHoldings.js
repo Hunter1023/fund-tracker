@@ -201,11 +201,10 @@ export function useHoldings() {
   });
 
   async function loadHoldings(forceRefresh = false) {
-    if (!forceRefresh && isLoading) return;
+    if (isLoading) return;
     isLoading = true;
 
     try {
-      // 非强制刷新时，先尝试读取缓存数据
       if (!forceRefresh) {
         const cachedHoldings = getCachedHoldings();
         if (cachedHoldings && cachedHoldings.length > 0) {
@@ -214,53 +213,96 @@ export function useHoldings() {
         }
       }
 
-      // 标记正在刷新
       isRefreshing.value = true;
 
-      // 发起请求获取最新数据（带重试机制）
       let newHoldings = [];
-      let retryCount = 0;
-      const maxRetries = 3;
-
-      while (retryCount < maxRetries && newHoldings.length === 0) {
-        if (retryCount > 0) {
-          // 重试前等待500ms
-          console.log(`[持仓] 第${retryCount}次重试，等待500ms...`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-
-        try {
-          const response = await holdingApi.get();
-          newHoldings = Array.isArray(response.data) ? [...response.data] : [];
-          console.log(`[持仓] 请求${retryCount + 1}次，返回${newHoldings.length}条数据`);
-          
-          // 如果返回空数组且还有重试机会，继续重试
-          if (newHoldings.length === 0 && retryCount < maxRetries - 1) {
-            console.log(`[持仓] 第${retryCount + 1}次请求返回空数据，准备重试...`);
-          }
-        } catch (err) {
-          console.error(`持仓请求失败 (尝试 ${retryCount + 1}/${maxRetries}):`, err);
-          // 网络异常时也继续重试（除非是最后一次）
-          if (retryCount >= maxRetries - 1) {
-            break;
-          }
-        }
-        retryCount++;
+      try {
+        const response = await holdingApi.get();
+        newHoldings = Array.isArray(response.data) ? [...response.data] : [];
+        console.log(`[持仓] 请求返回${newHoldings.length}条数据`);
+      } catch (err) {
+        console.error(`持仓请求失败:`, err);
       }
 
-      // 只在API返回有效数据时更新，避免偶发空响应导致页面空白
       if (newHoldings.length > 0) {
-        setCachedHoldings(newHoldings);
-        holdings.value = newHoldings;
+        // 智能合并：0值不覆盖非0值，旧日期不覆盖新日期
+        const mergedHoldings = newHoldings.map((newH) => {
+          const existing = holdings.value.find(
+            (h) =>
+              h.fund_code === newH.fund_code &&
+              (h.platform || "默认") === (newH.platform || "默认"),
+          );
+          if (!existing) return newH;
+
+          const merged = { ...newH };
+
+          // 判断日期新旧：新数据日期更旧时，保留旧数据的有效值
+          const newFsrq = merged.fsrq || "";
+          const oldFsrq = existing.fsrq || "";
+          const newDateIsOlder = newFsrq && oldFsrq && newFsrq < oldFsrq;
+
+          const preserveFields = [
+            "one_month_rate",
+            "three_month_rate",
+            "one_year_rate",
+            "daily_change_rate",
+            "estimate_profit",
+          ];
+          for (const field of preserveFields) {
+            const newVal = merged[field];
+            const oldVal = existing[field];
+            // 0/null/undefined/'-' 不覆盖非0有效值
+            if (
+              (!newVal || newVal === 0 || newVal === "-" || newVal === "0") &&
+              oldVal &&
+              oldVal !== 0 &&
+              oldVal !== "-"
+            ) {
+              merged[field] = oldVal;
+            }
+            // 旧日期不覆盖新日期的有效值
+            if (newDateIsOlder && oldVal && oldVal !== 0 && oldVal !== "-") {
+              merged[field] = oldVal;
+            }
+          }
+          // fsrq: 空值不覆盖非空值，旧日期不覆盖新日期
+          if (!merged.fsrq && existing.fsrq) {
+            merged.fsrq = existing.fsrq;
+          }
+          if (newDateIsOlder && oldFsrq) {
+            merged.fsrq = existing.fsrq;
+          }
+          // estimate_change_rate: '0'/'-' 不覆盖有效值，旧日期不覆盖新日期
+          if (
+            ((merged.estimate_change_rate === "0" ||
+              merged.estimate_change_rate === "0.00" ||
+              merged.estimate_change_rate === "-") &&
+              existing.estimate_change_rate &&
+              existing.estimate_change_rate !== "0" &&
+              existing.estimate_change_rate !== "0.00" &&
+              existing.estimate_change_rate !== "-") ||
+            (newDateIsOlder &&
+              existing.estimate_change_rate &&
+              existing.estimate_change_rate !== "0" &&
+              existing.estimate_change_rate !== "0.00" &&
+              existing.estimate_change_rate !== "-")
+          ) {
+            merged.estimate_change_rate = existing.estimate_change_rate;
+          }
+          return merged;
+        });
+
+        setCachedHoldings(mergedHoldings);
+        holdings.value = mergedHoldings;
         isLoaded.value = true;
       } else if (!isLoaded.value) {
-        // 首次加载且API返回空，才设置为空数组
         holdings.value = [];
         isLoaded.value = true;
+      } else if (holdings.value.length > 0) {
+        console.warn("持仓请求返回空数组，保留现有持仓数据");
       }
     } catch (error) {
       console.error("加载持仓失败:", error);
-      // 如果没有缓存数据，才设置为空数组
       if (!isLoaded.value) {
         holdings.value = [];
       }
