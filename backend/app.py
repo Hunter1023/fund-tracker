@@ -1062,6 +1062,11 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 'net_values': '[]'
             }
 
+        # 一致性修复：如果fsrq比net_value_date旧且daily_change_rate非0，用net_value_date补全fsrq
+        if realtime_data and data.get('fsrq') and data.get('net_value_date'):
+            if data['fsrq'] < data['net_value_date'] and data.get('daily_change_rate') and data['daily_change_rate'] != 0:
+                data['fsrq'] = data['net_value_date']
+
         if realtime_data:
             should_update_rates = True
             if realtime_data.fsrq and data.get('fsrq', ''):
@@ -1503,6 +1508,11 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                     data['fsrq'] = realtime_data.fsrq
                 if data.get('unit_net_value') is None and realtime_data.unit_net_value:
                     data['unit_net_value'] = realtime_data.unit_net_value
+
+            # 一致性修复：如果fsrq比net_value_date旧且daily_change_rate非0，用net_value_date补全fsrq
+            if realtime_data and data.get('fsrq') and data.get('net_value_date'):
+                if data['fsrq'] < data['net_value_date'] and data.get('daily_change_rate') and data['daily_change_rate'] != 0:
+                    data['fsrq'] = data['net_value_date']
 
             # 只有需要完整历史数据时才更新 net_values，否则保留数据库中的值
             if need_history_data:
@@ -2384,10 +2394,14 @@ def manage_watchlist():
                         FundRealtimeData.fund_id == item.fund.id
                     ).first()
                     if realtime_data:
+                        # 一致性修复：fsrq应与net_value_date同步，取较新的日期
+                        effective_fsrq = realtime_data.fsrq
+                        if realtime_data.net_value_date and (not effective_fsrq or realtime_data.net_value_date > effective_fsrq):
+                            effective_fsrq = realtime_data.net_value_date
                         funds_data_dict[item.fund.fund_code] = {
                             'fund_code': item.fund.fund_code,
                             'fund_name': item.fund.fund_name,
-                            'net_value': realtime_data.fsrq or realtime_data.net_value_date,
+                            'net_value': effective_fsrq or realtime_data.net_value_date,
                             'unit_net_value': realtime_data.unit_net_value,
                             'estimate_net_value': realtime_data.estimate_net_value,
                             'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data.estimate_change_rate is not None else '-',
@@ -2396,7 +2410,7 @@ def manage_watchlist():
                             'three_month_rate': realtime_data.three_month_rate,
                             'one_year_rate': realtime_data.one_year_rate,
                             'daily_change_rate': realtime_data.daily_change_rate,
-                            'fsrq': realtime_data.fsrq,
+                            'fsrq': effective_fsrq,
                             'net_values': []
                         }
 
@@ -2475,10 +2489,14 @@ def manage_watchlist():
                         FundRealtimeData.fund_id == holding.fund.id
                     ).first()
                     if realtime_data:
+                        # 一致性修复：fsrq应与net_value_date同步，取较新的日期
+                        effective_fsrq = realtime_data.fsrq
+                        if realtime_data.net_value_date and (not effective_fsrq or realtime_data.net_value_date > effective_fsrq):
+                            effective_fsrq = realtime_data.net_value_date
                         holding_funds_data_dict[holding.fund.fund_code] = {
                             'fund_code': holding.fund.fund_code,
                             'fund_name': holding.fund.fund_name,
-                            'net_value': realtime_data.fsrq or realtime_data.net_value_date,
+                            'net_value': effective_fsrq or realtime_data.net_value_date,
                             'unit_net_value': realtime_data.unit_net_value,
                             'estimate_net_value': realtime_data.estimate_net_value,
                             'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data.estimate_change_rate is not None else '-',
@@ -2487,7 +2505,7 @@ def manage_watchlist():
                             'three_month_rate': realtime_data.three_month_rate,
                             'one_year_rate': realtime_data.one_year_rate,
                             'daily_change_rate': realtime_data.daily_change_rate,
-                            'fsrq': realtime_data.fsrq,
+                            'fsrq': effective_fsrq,
                             'net_values': []
                         }
 
@@ -2661,10 +2679,14 @@ def manage_holding():
                         FundRealtimeData.fund_id == holding.fund.id
                     ).first()
                     if realtime_data:
+                        # 一致性修复：fsrq应与net_value_date同步，取较新的日期
+                        effective_fsrq = realtime_data.fsrq
+                        if realtime_data.net_value_date and (not effective_fsrq or realtime_data.net_value_date > effective_fsrq):
+                            effective_fsrq = realtime_data.net_value_date
                         fund_data_dict[holding.fund.fund_code] = {
                             'fund_code': holding.fund.fund_code,
                             'fund_name': holding.fund.fund_name,
-                            'net_value': realtime_data.fsrq or realtime_data.net_value_date,
+                            'net_value': effective_fsrq or realtime_data.net_value_date,
                             'unit_net_value': realtime_data.unit_net_value,
                             'estimate_net_value': realtime_data.estimate_net_value,
                             'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data.estimate_change_rate is not None else '-',
@@ -2673,7 +2695,7 @@ def manage_holding():
                             'three_month_rate': realtime_data.three_month_rate,
                             'one_year_rate': realtime_data.one_year_rate,
                             'daily_change_rate': realtime_data.daily_change_rate,
-                            'fsrq': realtime_data.fsrq,
+                            'fsrq': effective_fsrq,
                             'net_values': []
                         }
 
@@ -2808,7 +2830,11 @@ def manage_holding():
 
                         # 如果数据库中有实时数据，尝试使用它来计算
                         if realtime_data:
-                            fsrq = realtime_data.fsrq or ''
+                            # 一致性修复：fsrq应与net_value_date同步
+                            effective_fsrq = realtime_data.fsrq or ''
+                            if realtime_data.net_value_date and (not effective_fsrq or realtime_data.net_value_date > effective_fsrq):
+                                effective_fsrq = realtime_data.net_value_date
+                            fsrq = effective_fsrq
                             one_month_rate = realtime_data.one_month_rate or 0
                             daily_change_rate = realtime_data.daily_change_rate or '-'
 
