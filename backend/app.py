@@ -3650,6 +3650,8 @@ def delete_platform(platform_id):
         if holdings:
             return jsonify({'error': f'该平台下有{len(holdings)}个持仓，无法删除'}), 400
 
+        db.query(Transaction).filter(Transaction.platform_id == platform_id, Transaction.user_id == user_id).delete(synchronize_session=False)
+
         db.delete(platform)
         db.commit()
         return jsonify({'success': True})

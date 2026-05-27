@@ -374,8 +374,8 @@ class DataFetcher:
             response = requests.get(url, headers=headers, timeout=8)
             content = response.text
 
-            # 提取涨跌幅: syl_1n=近1月, syl_3y=近3月, syl_1y=近1年
-            m = _re.search(r'var\s+syl_1n\s*=\s*"([-+]?\d+\.?\d*)"', content)
+            # 提取涨跌幅: syl_1n=近1年, syl_3y=近3月, syl_1y=近1月
+            m = _re.search(r'var\s+syl_1y\s*=\s*"([-+]?\d+\.?\d*)"', content)
             if m:
                 try:
                     one_month_rate = float(m.group(1))
@@ -389,7 +389,7 @@ class DataFetcher:
                 except (ValueError, TypeError):
                     pass
 
-            m = _re.search(r'var\s+syl_1y\s*=\s*"([-+]?\d+\.?\d*)"', content)
+            m = _re.search(r'var\s+syl_1n\s*=\s*"([-+]?\d+\.?\d*)"', content)
             if m:
                 try:
                     one_year_rate = float(m.group(1))
@@ -968,9 +968,40 @@ class DataFetcher:
                     except json.JSONDecodeError:
                         print(f"基金 {fund_code} 历史净值接口返回非JSON数据: {net_values_response.text[:200]}")
 
-                # 如果K线接口失败，回退到传统LSJZ接口
+                # 如果K线接口失败，回退到pingzhongdata接口（Data_netWorthTrend）
                 if not net_values:
-                    print(f"基金 {fund_code} K线接口返回空数据，尝试LSJZ接口")
+                    print(f"基金 {fund_code} K线接口返回空数据，尝试pingzhongdata接口")
+                    try:
+                        import re as _re
+                        from datetime import datetime as _dt
+                        pz_url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v=20160518155842"
+                        pz_headers = {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Referer': f'http://fundf10.eastmoney.com/jjjz_{fund_code}.html'
+                        }
+                        pz_response = requests.get(pz_url, headers=pz_headers, timeout=10)
+                        pz_content = pz_response.text
+
+                        m = _re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', pz_content, _re.DOTALL)
+                        if m:
+                            net_worth_data = json.loads(m.group(1))
+                            for item in net_worth_data:
+                                date_str = _dt.fromtimestamp(item['x'] / 1000).strftime('%Y-%m-%d')
+                                net_values.append({
+                                    'date': date_str,
+                                    'unit_net_value': str(item.get('y', 0)),
+                                    'cumulative_net_value': '',
+                                    'change_rate': str(item.get('equityReturn', 0) or 0)
+                                })
+                            print(f"基金 {fund_code} pingzhongdata接口加载成功，获取 {len(net_values)} 条数据")
+                        else:
+                            print(f"基金 {fund_code} pingzhongdata接口未找到Data_netWorthTrend数据")
+                    except Exception as e:
+                        print(f"基金 {fund_code} pingzhongdata接口获取历史净值失败: {e}")
+
+                # 如果pingzhongdata也失败，回退到传统LSJZ接口
+                if not net_values:
+                    print(f"基金 {fund_code} pingzhongdata接口返回空数据，尝试LSJZ接口")
                     page_index = 1
                     page_size = 100
                     while True:
