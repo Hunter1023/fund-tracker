@@ -96,19 +96,66 @@ export function useWatchlist() {
           // 缓存未过期，使用缓存数据
           funds.value = JSON.parse(cached);
           return;
-        } else {
-          // 缓存已过期，清除
-          localStorage.removeItem(CACHE_KEY);
-          localStorage.removeItem(CACHE_EXPIRY_KEY);
         }
       }
       
       // 从 API 加载数据
       const response = await watchlistApi.get();
-      funds.value = response.data;
+      const newFunds = response.data;
+
+      // 智能合并：0值不覆盖非0值，旧日期不覆盖新日期
+      if (funds.value.length > 0 && Array.isArray(newFunds)) {
+        const mergedFunds = newFunds.map((newF) => {
+          const existing = funds.value.find((f) => f.fund_code === newF.fund_code);
+          if (!existing) return newF;
+
+          const merged = { ...newF };
+
+          // 判断日期新旧
+          const newFsrq = merged.fsrq || '';
+          const oldFsrq = existing.fsrq || '';
+          const newDateIsOlder = newFsrq && oldFsrq && newFsrq < oldFsrq;
+
+          const preserveFields = [
+            'one_month_rate', 'three_month_rate', 'one_year_rate',
+            'daily_change_rate'
+          ];
+          for (const field of preserveFields) {
+            const newVal = merged[field];
+            const oldVal = existing[field];
+            // 0/null/undefined/'-' 不覆盖非0有效值
+            if ((!newVal || newVal === 0 || newVal === '-' || newVal === '0') && oldVal && oldVal !== 0 && oldVal !== '-') {
+              merged[field] = oldVal;
+            }
+            // 旧日期不覆盖新日期的有效值
+            if (newDateIsOlder && oldVal && oldVal !== 0 && oldVal !== '-') {
+              merged[field] = oldVal;
+            }
+          }
+          // fsrq: 空值不覆盖非空值，旧日期不覆盖新日期
+          if (!merged.fsrq && existing.fsrq) {
+            merged.fsrq = existing.fsrq;
+          }
+          if (newDateIsOlder && oldFsrq) {
+            merged.fsrq = existing.fsrq;
+          }
+          // estimate_change_rate: '0'/'-' 不覆盖有效值，旧日期不覆盖新日期
+          if (
+            ((merged.estimate_change_rate === '0' || merged.estimate_change_rate === '0.00' || merged.estimate_change_rate === '-')
+              && existing.estimate_change_rate && existing.estimate_change_rate !== '0' && existing.estimate_change_rate !== '0.00' && existing.estimate_change_rate !== '-')
+            || (newDateIsOlder && existing.estimate_change_rate && existing.estimate_change_rate !== '0' && existing.estimate_change_rate !== '0.00' && existing.estimate_change_rate !== '-')
+          ) {
+            merged.estimate_change_rate = existing.estimate_change_rate;
+          }
+          return merged;
+        });
+        funds.value = mergedFunds;
+      } else {
+        funds.value = newFunds;
+      }
       
       // 保存到缓存
-      localStorage.setItem(CACHE_KEY, JSON.stringify(response.data));
+      localStorage.setItem(CACHE_KEY, JSON.stringify(funds.value));
       localStorage.setItem(CACHE_EXPIRY_KEY, String(Date.now() + CACHE_EXPIRY_MS));
     } catch (error) {
       console.error("加载自选失败:", error);

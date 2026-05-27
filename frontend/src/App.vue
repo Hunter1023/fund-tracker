@@ -310,7 +310,7 @@ const watchlistFunds = ref([]);
 // 获取持仓相关方法
 const { addHolding } = useHoldings();
 const holdingsFunds = ref([]);
-let globalRefreshInterval = null;
+let globalRefreshTimer = null;
 
 // 基金详情模态框
 const showFundDetailModal = ref(false);
@@ -835,33 +835,44 @@ watch(
 // 全局刷新函数
 let isRefreshing = false;
 
+async function scheduleGlobalRefresh() {
+  if (isRefreshing) {
+    console.log("[定时刷新] 上一次刷新还未完成，1分钟后重试调度");
+    globalRefreshTimer = setTimeout(scheduleGlobalRefresh, 60 * 1000);
+    return;
+  }
+
+  isRefreshing = true;
+  console.log("[定时刷新] 开始刷新...");
+  try {
+    const promises = [];
+    if (watchlistRef.value?.loadWatchlist) {
+      promises.push(watchlistRef.value.loadWatchlist());
+    }
+    if (holdingsRef.value?.loadHoldings) {
+      promises.push(holdingsRef.value.loadHoldings(true));
+    } else {
+      console.log("[定时刷新] holdingsRef不可用:", !!holdingsRef.value);
+    }
+    await Promise.all(promises);
+    console.log("[定时刷新] 刷新完成");
+  } catch (error) {
+    console.error("[定时刷新] 刷新失败:", error);
+  } finally {
+    isRefreshing = false;
+    globalRefreshTimer = setTimeout(scheduleGlobalRefresh, 60 * 1000);
+  }
+}
+
 function startGlobalRefresh() {
   stopGlobalRefresh();
-  globalRefreshInterval = setInterval(async () => {
-    if (isRefreshing) return;
-    isRefreshing = true;
-    try {
-      // 同时刷新持仓和自选，而不是只刷新当前tab
-      const promises = [];
-      if (watchlistRef.value?.loadWatchlist) {
-        promises.push(watchlistRef.value.loadWatchlist());
-      }
-      if (holdingsRef.value?.loadHoldings) {
-        promises.push(holdingsRef.value.loadHoldings(true));
-      } else {
-        console.log("[定时刷新] holdingsRef不可用:", !!holdingsRef.value);
-      }
-      await Promise.all(promises);
-    } finally {
-      isRefreshing = false;
-    }
-  }, 60 * 1000);
+  globalRefreshTimer = setTimeout(scheduleGlobalRefresh, 60 * 1000);
 }
 
 function stopGlobalRefresh() {
-  if (globalRefreshInterval) {
-    clearInterval(globalRefreshInterval);
-    globalRefreshInterval = null;
+  if (globalRefreshTimer) {
+    clearTimeout(globalRefreshTimer);
+    globalRefreshTimer = null;
   }
 }
 
