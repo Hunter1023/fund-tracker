@@ -314,15 +314,21 @@ def preload_all_funds_history():
                 if not fund:
                     continue
 
-                # 检查是否已有未过期的数据
+                # 检查是否已有未过期且有效的数据
                 if fund.realtime_data and fund.realtime_data.net_values:
-                    updated_at = fund.realtime_data.updated_at
-                    if updated_at:
-                        # 使用当前时间，忽略时区差异
-                        now = datetime.now()
-                        if (now - updated_at.replace(tzinfo=None)) < timedelta(days=1):
-                            print(f"基金 {fund_code} 的历史净值数据已是最新，跳过")
-                            continue
+                    try:
+                        existing_net_values = json.loads(fund.realtime_data.net_values)
+                        if not existing_net_values:
+                            print(f"基金 {fund_code} 的历史净值数据为空，需要重新加载")
+                        else:
+                            updated_at = fund.realtime_data.updated_at
+                            if updated_at:
+                                now = datetime.now()
+                                if (now - updated_at.replace(tzinfo=None)) < timedelta(days=1):
+                                    print(f"基金 {fund_code} 的历史净值数据已是最新，跳过")
+                                    continue
+                    except:
+                        print(f"基金 {fund_code} 的历史净值数据格式错误，需要重新加载")
 
                 # 从第三方接口获取历史净值数据
                 history_data = DataFetcher.get_fund_history(fund_code)

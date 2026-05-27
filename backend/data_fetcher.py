@@ -985,6 +985,8 @@ class DataFetcher:
                         m = _re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', pz_content, _re.DOTALL)
                         if m:
                             net_worth_data = json.loads(m.group(1))
+                            # 按时间戳倒序排列，最新的在前面
+                            net_worth_data.sort(key=lambda x: x['x'], reverse=True)
                             for item in net_worth_data:
                                 date_str = _dt.fromtimestamp(item['x'] / 1000).strftime('%Y-%m-%d')
                                 net_values.append({
@@ -1046,9 +1048,13 @@ class DataFetcher:
                 except (ValueError, TypeError):
                     latest_lsjz_nav = 0
 
+                # 如果fsrq为空，从历史净值数据中获取最新日期
+                if not fsrq and latest_lsjz_date:
+                    fsrq = latest_lsjz_date
+                    print(f"基金 {fund_code} get_fund_rates未返回日期，使用LSJZList最新日期: {fsrq}")
+
                 if unit_net_value == 0 and latest_lsjz_nav > 0:
                     unit_net_value = latest_lsjz_nav
-                    # 不更新fsrq，保留get_fund_rates返回的最新日期
                     print(f"基金 {fund_code} get_fund_rates未返回净值，使用LSJZList数据更新unit_net_value: {unit_net_value}")
                 elif fsrq == latest_lsjz_date and latest_lsjz_nav > 0 and unit_net_value != latest_lsjz_nav:
                     print(f"基金 {fund_code} 净值数据不一致(API: {unit_net_value}, LSJZList: {latest_lsjz_nav}, 日期: {fsrq})，使用LSJZList数据")
