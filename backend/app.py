@@ -2629,12 +2629,26 @@ def manage_holding():
 
             all_cached = len(fund_data_dict) >= len(set(fund_codes))
 
+            # 检查是否有fsrq过期的缓存（需要同步等待刷新）
+            has_stale_data = False
+            now_check = now_cst_naive()
+            today_str = now_check.strftime('%Y-%m-%d')
+            if now_check.weekday() == 0:
+                yesterday_str = (now_check - timedelta(days=3)).strftime('%Y-%m-%d')
+            else:
+                yesterday_str = (now_check - timedelta(days=1)).strftime('%Y-%m-%d')
+            for fc, fd in fund_data_dict.items():
+                fd_fsrq = fd.get('fsrq', '')
+                if fd_fsrq and fd_fsrq != today_str and fd_fsrq != yesterday_str:
+                    has_stale_data = True
+                    break
+
             try:
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
                 future = executor.submit(get_fund_realtime_rates_batch, db, fund_codes, False)
-                if all_cached:
+                if all_cached and not has_stale_data:
                     executor.shutdown(wait=False)
-                    logger.info("所有基金已有缓存，后台异步刷新")
+                    logger.info("所有基金已有缓存且数据未过期，后台异步刷新")
                 else:
                     try:
                         fresh_data = future.result(timeout=8)
