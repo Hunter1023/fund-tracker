@@ -344,11 +344,8 @@ def preload_all_funds_history():
                 fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
                 fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
 
-                if fund.realtime_data.fsrq and new_fsrq < fund.realtime_data.fsrq:
-                    print(f"基金 {fund_code} 新数据日期({new_fsrq})早于已有日期({fund.realtime_data.fsrq})，保留已有净值数据")
-                else:
-                    fund.realtime_data.fsrq = new_fsrq
-                    fund.realtime_data.unit_net_value = new_unit_net_value
+                fund.realtime_data.fsrq = new_fsrq
+                fund.realtime_data.unit_net_value = new_unit_net_value
 
                 fund.realtime_data.updated_at = datetime.now()
                 db.commit()
@@ -687,37 +684,24 @@ def _merge_fund_data(cached_dict, fresh_data):
         # 判断日期新旧：如果新数据日期更旧，则涨跌幅类字段不覆盖
         new_fsrq = fresh.get('fsrq', '') or ''
         old_fsrq = cached.get('fsrq', '') or ''
-        new_date_is_older = False
-        if new_fsrq and old_fsrq and new_fsrq < old_fsrq:
-            new_date_is_older = True
 
         for key, new_value in fresh.items():
             old_value = cached.get(key)
-            # 涨跌幅类字段：0值不覆盖非0值，旧日期不覆盖新日期
             if key in ('one_month_rate', 'three_month_rate', 'one_year_rate', 'daily_change_rate'):
                 if (new_value == 0 or new_value is None) and old_value and old_value != 0:
                     continue
-                if new_date_is_older and old_value is not None and old_value != 0:
-                    continue
-            # fsrq：空值不覆盖非空值，旧日期不覆盖新日期
             if key == 'fsrq':
                 if (not new_value or new_value == '') and old_value:
                     continue
-                if new_date_is_older and old_value:
-                    continue
-            # unit_net_value：0/None不覆盖非0值，旧日期不覆盖新日期
             if key == 'unit_net_value':
                 if (new_value == 0 or new_value is None or new_value == '') and old_value and old_value != 0:
-                    continue
-                if new_date_is_older and old_value and old_value != 0:
                     continue
             # estimate_change_rate：'-'不覆盖有效值
             if key == 'estimate_change_rate':
                 if (new_value == '-' or new_value is None) and old_value and old_value != '-':
                     continue
-            # estimate_net_value：旧日期不覆盖新日期
             if key == 'estimate_net_value':
-                if new_date_is_older and old_value:
+                if (new_value == 0 or new_value is None or new_value == '') and old_value and old_value != 0:
                     continue
             # estimate_time：旧时间不覆盖新时间
             if key == 'estimate_time':
@@ -992,10 +976,10 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
         else:
             # 准备数据
             net_value_date = ''
-            if fund_data:
-                net_value_date = fund_data.get('net_value', '')
-            elif rates_data:
+            if rates_data:
                 net_value_date = rates_data.get('fsrq', '')
+            elif fund_data:
+                net_value_date = fund_data.get('net_value', '')
 
             unit_net_value = None
             if rates_data and rates_data.get('unit_net_value') is not None and rates_data.get('unit_net_value') != '' and rates_data.get('unit_net_value') != 0:
@@ -1037,21 +1021,6 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 if unit_net_value is None and realtime_data.unit_net_value:
                     unit_net_value = realtime_data.unit_net_value
 
-                # API返回的日期比数据库旧，保留数据库的新日期数据
-                if fsrq and realtime_data.fsrq and fsrq < realtime_data.fsrq:
-                    # 新数据日期更旧，保留数据库中的涨跌幅和净值
-                    if realtime_data.one_month_rate:
-                        one_month_rate = realtime_data.one_month_rate
-                    if realtime_data.three_month_rate:
-                        three_month_rate = realtime_data.three_month_rate
-                    if realtime_data.one_year_rate:
-                        one_year_rate = realtime_data.one_year_rate
-                    if realtime_data.daily_change_rate:
-                        daily_change_rate = realtime_data.daily_change_rate
-                    fsrq = realtime_data.fsrq
-                    if realtime_data.unit_net_value:
-                        unit_net_value = realtime_data.unit_net_value
-
             data = {
                 'fund_code': fund_code,
                 'fund_name': fund.fund_name,
@@ -1068,36 +1037,19 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 'net_values': '[]'
             }
 
-        # 一致性修复：如果fsrq比net_value_date旧且daily_change_rate非0，用net_value_date补全fsrq
-        if realtime_data and data.get('fsrq') and data.get('net_value_date'):
-            if data['fsrq'] < data['net_value_date'] and data.get('daily_change_rate') and data['daily_change_rate'] != 0:
-                data['fsrq'] = data['net_value_date']
-
         if realtime_data:
-            should_update_rates = True
-            if realtime_data.fsrq and data.get('fsrq', ''):
-                if data['fsrq'] < realtime_data.fsrq:
-                    should_update_rates = False
-
             for key, value in data.items():
                 if key in ('fund_code', 'fund_name'):
-                    continue
-                # net_value_date 和 fsrq 应同步更新，避免日期不一致
-                if not should_update_rates and key in ('fsrq', 'daily_change_rate', 'unit_net_value', 'one_month_rate', 'three_month_rate', 'one_year_rate', 'net_value_date'):
                     continue
                 if key in ('estimate_net_value', 'estimate_change_rate', 'estimate_time') and value is None:
                     continue
                 if key == 'estimate_time' and value == '':
                     continue
-                # 0值不覆盖数据库中的非0值（防止API返回0覆盖有效缓存）
                 if key in ('one_month_rate', 'three_month_rate', 'one_year_rate', 'daily_change_rate', 'unit_net_value'):
                     old_value = getattr(realtime_data, key, None)
                     if (value == 0 or value is None) and old_value and old_value != 0:
                         continue
                 if key == 'fsrq' and (not value or value == '') and getattr(realtime_data, 'fsrq', None):
-                    continue
-                # fsrq旧日期不覆盖新日期
-                if key == 'fsrq' and value and getattr(realtime_data, 'fsrq', None) and value < getattr(realtime_data, 'fsrq', ''):
                     continue
                 setattr(realtime_data, key, value)
             realtime_data.updated_at = datetime.now()  # 更新时间戳
@@ -1515,12 +1467,6 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                 if data.get('unit_net_value') is None and realtime_data.unit_net_value:
                     data['unit_net_value'] = realtime_data.unit_net_value
 
-            # 一致性修复：如果fsrq比net_value_date旧且daily_change_rate非0，用net_value_date补全fsrq
-            if realtime_data and data.get('fsrq') and data.get('net_value_date'):
-                if data['fsrq'] < data['net_value_date'] and data.get('daily_change_rate') and data['daily_change_rate'] != 0:
-                    data['fsrq'] = data['net_value_date']
-
-            # 只有需要完整历史数据时才更新 net_values，否则保留数据库中的值
             if need_history_data:
                 data['net_values'] = json.dumps(history_data.get('net_values', []))
             elif realtime_data and realtime_data.net_values:
@@ -1531,53 +1477,17 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                 data['net_values'] = json.dumps([])
 
             if not skip_db_write:
-                should_update_rates = True
-
-                # 检查是否应该更新涨跌幅数据
-                if realtime_data and realtime_data.fsrq and data.get('fsrq', ''):
-                    today = now_cst_naive().strftime('%Y-%m-%d')
-                    new_fsrq = data.get('fsrq', '')
-                    old_fsrq = realtime_data.fsrq
-
-                    # 情况1：新数据的日期比数据库中的旧，不更新（避免覆盖较新的数据）
-                    if new_fsrq < old_fsrq:
-                        should_update_rates = False
-                        logger.info(f"基金 {fund_code} 跳过更新：新数据日期 {new_fsrq} 早于数据库日期 {old_fsrq}")
-
-                    # 情况2：新数据的日期和数据库相同，但新数据的净值和涨跌幅都为空
-                    # 这可能是API异常，不更新
-                    elif new_fsrq == old_fsrq:
-                        new_nav = data.get('unit_net_value')
-                        new_rate = data.get('daily_change_rate')
-                        old_nav = realtime_data.unit_net_value
-                        old_rate = realtime_data.daily_change_rate
-
-                        # 如果新数据净值和涨跌幅都为空/0，但数据库中有有效数据，不更新
-                        if (new_nav is None or new_nav == 0) and (new_rate is None or new_rate == 0):
-                            if (old_nav is not None and old_nav != 0) or (old_rate is not None and old_rate != 0):
-                                should_update_rates = False
-                                logger.info(f"基金 {fund_code} 跳过更新：新数据净值和涨跌幅为空，但数据库有有效数据")
-
-                    # 情况3：新数据的日期比数据库新，正常更新
-                    # 情况4：数据库中没有数据，正常更新
-
                 if realtime_data:
                     for key, value in data.items():
                         if key in ('fund_code', 'fund_name'):
                             continue
                         if key == 'net_values' and not need_history_data:
                             continue
-                        if not should_update_rates and key in ('fsrq', 'daily_change_rate', 'unit_net_value', 'one_month_rate', 'three_month_rate', 'one_year_rate', 'net_value_date'):
-                            continue
-                        # 0值/空值不覆盖数据库中的非0值
                         if key in ('one_month_rate', 'three_month_rate', 'one_year_rate', 'daily_change_rate', 'unit_net_value'):
                             old_value = getattr(realtime_data, key, None)
                             if (value == 0 or value is None) and old_value and old_value != 0:
                                 continue
                         if key == 'fsrq' and (not value or value == '') and getattr(realtime_data, 'fsrq', None):
-                            continue
-                        # fsrq旧日期不覆盖新日期
-                        if key == 'fsrq' and value and getattr(realtime_data, 'fsrq', None) and value < getattr(realtime_data, 'fsrq', ''):
                             continue
                         setattr(realtime_data, key, value)
                 else:
@@ -1645,19 +1555,11 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                     data['net_values'] = json.dumps([])
 
                 if not skip_db_write:
-                    should_update_rates = True
-                    if realtime_data and realtime_data.fsrq and data.get('fsrq', ''):
-                        today = now_cst_naive().strftime('%Y-%m-%d')
-                        if data['fsrq'] < realtime_data.fsrq and realtime_data.fsrq == today:
-                            should_update_rates = False
-
                     if realtime_data:
                         for key, value in data.items():
                             if key in ('fund_code', 'fund_name'):
                                 continue
                             if key == 'net_values' and not need_history_data:
-                                continue
-                            if not should_update_rates and key in ('fsrq', 'daily_change_rate', 'unit_net_value', 'one_month_rate', 'three_month_rate', 'one_year_rate', 'net_value_date'):
                                 continue
                             setattr(realtime_data, key, value)
                     else:
@@ -1905,18 +1807,32 @@ def get_fund_detail(fund_code):
                 fund_data['daily_change_rate'] = history_data.get('daily_change_rate', 0)
                 fund_data['fsrq'] = history_data.get('fsrq', '')
 
-                # 更新数据库缓存
+                # 更新数据库缓存（0值/空值不覆盖非0值，旧日期不覆盖新日期）
                 if fund:
                     if not fund.realtime_data:
                         fund.realtime_data = FundRealtimeData(fund_id=fund.id)
-                    fund.realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
-                    fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
-                    fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
-                    fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
-                    fund.realtime_data.fsrq = history_data.get('fsrq', '')
-                    fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+
+                    new_fsrq = history_data.get('fsrq', '')
+                    old_fsrq = fund.realtime_data.fsrq or ''
+
+                    for field, key in [('one_month_rate', 'one_month_rate'), ('three_month_rate', 'three_month_rate'),
+                                       ('one_year_rate', 'one_year_rate'), ('daily_change_rate', 'daily_change_rate'),
+                                       ('unit_net_value', 'unit_net_value')]:
+                        new_val = history_data.get(key, 0)
+                        old_val = getattr(fund.realtime_data, field, None)
+                        if (new_val == 0 or new_val is None) and old_val and old_val != 0:
+                            continue
+                        setattr(fund.realtime_data, field, new_val)
+                    if new_fsrq:
+                        fund.realtime_data.fsrq = new_fsrq
                     if fund_data:
-                        fund.realtime_data.estimate_change_rate = fund_data.get('estimate_change_rate')
+                        est_rate = fund_data.get('estimate_change_rate')
+                        # estimate_change_rate 是 double 类型，不能存入 '-' 字符串
+                        if est_rate is not None and est_rate != '-':
+                            try:
+                                fund.realtime_data.estimate_change_rate = float(est_rate)
+                            except (ValueError, TypeError):
+                                pass
                         fund.realtime_data.estimate_time = fund_data.get('estimate_time', '')
                     fund.realtime_data.updated_at = datetime.now()
                     db.commit()
@@ -2153,12 +2069,22 @@ def get_fund_complete_info(fund_code):
                 if not fund.realtime_data:
                     fund.realtime_data = FundRealtimeData(fund_id=fund.id)
                 fund.realtime_data.net_values = json.dumps(history_data.get('net_values', []))
-                fund.realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
-                fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
-                fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
-                fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
-                fund.realtime_data.fsrq = history_data.get('fsrq', '')
-                fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
+
+                # 涨跌幅数据：0值/空值不覆盖数据库中的非0/非空值，旧日期不覆盖新日期
+                new_fsrq = history_data.get('fsrq', '')
+                old_fsrq = fund.realtime_data.fsrq or ''
+
+                for field, key in [('one_month_rate', 'one_month_rate'), ('three_month_rate', 'three_month_rate'),
+                                   ('one_year_rate', 'one_year_rate'), ('daily_change_rate', 'daily_change_rate'),
+                                   ('unit_net_value', 'unit_net_value')]:
+                    new_val = history_data.get(key, 0)
+                    old_val = getattr(fund.realtime_data, field, None)
+                    if (new_val == 0 or new_val is None) and old_val and old_val != 0:
+                        continue
+                    setattr(fund.realtime_data, field, new_val)
+
+                if new_fsrq:
+                    fund.realtime_data.fsrq = new_fsrq
                 # 更新估值数据
                 if estimate_data:
                     fund.realtime_data.estimate_change_rate = float(estimate_data.get('estimate_change_rate')) if estimate_data.get('estimate_change_rate') else None
@@ -2400,14 +2326,10 @@ def manage_watchlist():
                         FundRealtimeData.fund_id == item.fund.id
                     ).first()
                     if realtime_data:
-                        # 一致性修复：fsrq应与net_value_date同步，取较新的日期
-                        effective_fsrq = realtime_data.fsrq
-                        if realtime_data.net_value_date and (not effective_fsrq or realtime_data.net_value_date > effective_fsrq):
-                            effective_fsrq = realtime_data.net_value_date
                         funds_data_dict[item.fund.fund_code] = {
                             'fund_code': item.fund.fund_code,
                             'fund_name': item.fund.fund_name,
-                            'net_value': effective_fsrq or realtime_data.net_value_date,
+                            'net_value': realtime_data.fsrq or realtime_data.net_value_date,
                             'unit_net_value': realtime_data.unit_net_value,
                             'estimate_net_value': realtime_data.estimate_net_value,
                             'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data.estimate_change_rate is not None else '-',
@@ -2416,7 +2338,7 @@ def manage_watchlist():
                             'three_month_rate': realtime_data.three_month_rate,
                             'one_year_rate': realtime_data.one_year_rate,
                             'daily_change_rate': realtime_data.daily_change_rate,
-                            'fsrq': effective_fsrq,
+                            'fsrq': realtime_data.fsrq,
                             'net_values': []
                         }
 
@@ -2495,14 +2417,10 @@ def manage_watchlist():
                         FundRealtimeData.fund_id == holding.fund.id
                     ).first()
                     if realtime_data:
-                        # 一致性修复：fsrq应与net_value_date同步，取较新的日期
-                        effective_fsrq = realtime_data.fsrq
-                        if realtime_data.net_value_date and (not effective_fsrq or realtime_data.net_value_date > effective_fsrq):
-                            effective_fsrq = realtime_data.net_value_date
                         holding_funds_data_dict[holding.fund.fund_code] = {
                             'fund_code': holding.fund.fund_code,
                             'fund_name': holding.fund.fund_name,
-                            'net_value': effective_fsrq or realtime_data.net_value_date,
+                            'net_value': realtime_data.fsrq or realtime_data.net_value_date,
                             'unit_net_value': realtime_data.unit_net_value,
                             'estimate_net_value': realtime_data.estimate_net_value,
                             'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data.estimate_change_rate is not None else '-',
@@ -2511,7 +2429,7 @@ def manage_watchlist():
                             'three_month_rate': realtime_data.three_month_rate,
                             'one_year_rate': realtime_data.one_year_rate,
                             'daily_change_rate': realtime_data.daily_change_rate,
-                            'fsrq': effective_fsrq,
+                            'fsrq': realtime_data.fsrq,
                             'net_values': []
                         }
 
@@ -2685,14 +2603,10 @@ def manage_holding():
                         FundRealtimeData.fund_id == holding.fund.id
                     ).first()
                     if realtime_data:
-                        # 一致性修复：fsrq应与net_value_date同步，取较新的日期
-                        effective_fsrq = realtime_data.fsrq
-                        if realtime_data.net_value_date and (not effective_fsrq or realtime_data.net_value_date > effective_fsrq):
-                            effective_fsrq = realtime_data.net_value_date
                         fund_data_dict[holding.fund.fund_code] = {
                             'fund_code': holding.fund.fund_code,
                             'fund_name': holding.fund.fund_name,
-                            'net_value': effective_fsrq or realtime_data.net_value_date,
+                            'net_value': realtime_data.fsrq or realtime_data.net_value_date,
                             'unit_net_value': realtime_data.unit_net_value,
                             'estimate_net_value': realtime_data.estimate_net_value,
                             'estimate_change_rate': str(realtime_data.estimate_change_rate) if realtime_data.estimate_change_rate is not None else '-',
@@ -2701,7 +2615,7 @@ def manage_holding():
                             'three_month_rate': realtime_data.three_month_rate,
                             'one_year_rate': realtime_data.one_year_rate,
                             'daily_change_rate': realtime_data.daily_change_rate,
-                            'fsrq': effective_fsrq,
+                            'fsrq': realtime_data.fsrq,
                             'net_values': []
                         }
 
@@ -2836,11 +2750,7 @@ def manage_holding():
 
                         # 如果数据库中有实时数据，尝试使用它来计算
                         if realtime_data:
-                            # 一致性修复：fsrq应与net_value_date同步
-                            effective_fsrq = realtime_data.fsrq or ''
-                            if realtime_data.net_value_date and (not effective_fsrq or realtime_data.net_value_date > effective_fsrq):
-                                effective_fsrq = realtime_data.net_value_date
-                            fsrq = effective_fsrq
+                            fsrq = realtime_data.fsrq or ''
                             one_month_rate = realtime_data.one_month_rate or 0
                             daily_change_rate = realtime_data.daily_change_rate or '-'
 
