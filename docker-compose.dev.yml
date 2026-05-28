@@ -44,10 +44,19 @@ services:
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_FROM=${SMTP_FROM:-}
+      # 代理配置（需要Clash开启"允许局域网连接"后取消注释）
+      # - HTTP_PROXY=http://host.docker.internal:7897
+      # - HTTPS_PROXY=http://host.docker.internal:7897
+      # - NO_PROXY=postgres-dev,localhost,127.0.0.1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "5001:5000"  # 开发环境后端端口，避免与生产环境冲突
     networks:
       - fund-network-dev
+    dns:
+      - 114.114.114.114
+      - 8.8.8.8
     depends_on:
       postgres-dev:
         condition: service_healthy

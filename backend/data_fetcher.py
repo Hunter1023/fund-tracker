@@ -279,7 +279,7 @@ class DataFetcher:
 
     @staticmethod
     def _get_fund_rates_no_retry(fund_code, timestamp=None):
-        """获取单只基金涨跌幅数据，先尝试fundmobapi，失败后回退到pingzhongdata"""
+        """获取单只基金涨跌幅数据，优先级: 估值接口 > pingzhongdata"""
         one_month_rate = 0
         three_month_rate = 0
         one_year_rate = 0
@@ -287,86 +287,40 @@ class DataFetcher:
         fsrq = ''
         unit_net_value = 0
 
-        # 尝试1: fundmobapi 接口
+        # 尝试1: 估值接口（天天基金网，最稳定可靠）
         try:
-            url = f"https://fundmobapi.eastmoney.com/FundMApi/FundBaseTypeInformation.ashx?FCODE={fund_code}&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0&Uid="
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Referer': f'https://fundf10.eastmoney.com/jjjz_{fund_code}.html'
-            }
-            response = requests.get(url, headers=headers, timeout=3)
-            data = response.json()
+            gz_url = f"http://fundgz.1234567.com.cn/js/{fund_code}.js"
+            gz_headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://fund.eastmoney.com/'}
+            gz_response = requests.get(gz_url, headers=gz_headers, timeout=5)
+            if gz_response.status_code == 200:
+                import re as _re0
+                gz_match = _re0.search(r'jsonpgz\((.+)\);?', gz_response.text)
+                if gz_match:
+                    gz_data = json.loads(gz_match.group(1))
+                    fsrq = gz_data.get('jzrq', '')
+                    gz_dwjz = gz_data.get('dwjz', '')
+                    gz_gszzl = gz_data.get('gszzl', '')
 
-            if data.get('Datas'):
-                fsrq = data['Datas'].get('FSRQ', '')
-                field_mappings = {
-                    'one_month': ['SYL_Y', 'SYL_1M', 'syl_y', 'syly'],
-                    'three_month': ['SYL_3Y', 'SYL_3M', 'syl_3y', 'syl3y'],
-                    'one_year': ['SYL_1N', 'syl_1n', 'syl1n'],
-                    'daily': ['RZDF', 'JZZZL', 'rzdf', 'jzzzl'],
-                    'unit_net_value': ['DWJZ', 'dwjz']
-                }
-
-                for field in field_mappings['unit_net_value']:
-                    if field in data['Datas']:
+                    if gz_dwjz:
                         try:
-                            unit_net_value = float(data['Datas'][field])
-                            break
+                            unit_net_value = float(gz_dwjz)
                         except (ValueError, TypeError):
-                            continue
+                            pass
 
-                for field in field_mappings['one_month']:
-                    if field in data['Datas']:
+                    if gz_gszzl:
                         try:
-                            one_month_rate = float(data['Datas'][field])
-                            break
+                            daily_change_rate = float(gz_gszzl)
                         except (ValueError, TypeError):
-                            continue
+                            pass
 
-                for field in field_mappings['three_month']:
-                    if field in data['Datas']:
-                        try:
-                            three_month_rate = float(data['Datas'][field])
-                            break
-                        except (ValueError, TypeError):
-                            continue
-
-                for field in field_mappings['one_year']:
-                    if field in data['Datas']:
-                        try:
-                            one_year_rate = float(data['Datas'][field])
-                            break
-                        except (ValueError, TypeError):
-                            continue
-
-                for field in field_mappings['daily']:
-                    if field in data['Datas']:
-                        try:
-                            daily_change_rate = float(data['Datas'][field])
-                            break
-                        except (ValueError, TypeError):
-                            continue
-
-            # 如果fundmobapi成功获取到有效数据，直接返回
-            if one_month_rate != 0 or three_month_rate != 0 or one_year_rate != 0 or daily_change_rate != 0 or unit_net_value != 0:
-                result = {
-                    'fund_code': fund_code,
-                    'one_month_rate': one_month_rate,
-                    'three_month_rate': three_month_rate,
-                    'one_year_rate': one_year_rate,
-                    'daily_change_rate': daily_change_rate,
-                    'fsrq': fsrq,
-                    'unit_net_value': unit_net_value
-                }
-                set_cached_fund_data(fund_code, result)
-                return result
+                    print(f"估值接口获取基金 {fund_code}: fsrq={fsrq}, nav={unit_net_value}, daily={daily_change_rate}")
         except Exception as e:
-            print(f"fundmobapi获取基金 {fund_code} 涨跌幅数据失败: {e}")
+            print(f"估值接口获取基金 {fund_code} 数据失败: {e}")
 
-        # 尝试2: 回退到 pingzhongdata 接口
+        # 尝试2: pingzhongdata 接口（补充月/年涨跌幅）
         try:
             import re as _re
-            url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v=20160518155842"
+            url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v={int(time.time())}"
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Referer': f'http://fundf10.eastmoney.com/jjjz_{fund_code}.html'
@@ -374,7 +328,6 @@ class DataFetcher:
             response = requests.get(url, headers=headers, timeout=8)
             content = response.text
 
-            # 提取涨跌幅: syl_1n=近1年, syl_3y=近3月, syl_1y=近1月
             m = _re.search(r'var\s+syl_1y\s*=\s*"([-+]?\d+\.?\d*)"', content)
             if m:
                 try:
@@ -396,56 +349,54 @@ class DataFetcher:
                 except (ValueError, TypeError):
                     pass
 
-            # 提取最新净值和日期从 Data_netWorthTrend
-            m = _re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', content, _re.DOTALL)
-            if m:
-                try:
-                    net_worth_data = json.loads(m.group(1))
-                    if net_worth_data:
-                        last = net_worth_data[-1]
-                        from datetime import datetime as _dt
-                        fsrq = _dt.fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
-                        unit_net_value = last.get('y', 0)
-                        daily_change_rate = float(last.get('equityReturn', 0) or 0)
-                except Exception as e:
-                    print(f"解析基金 {fund_code} 净值趋势数据失败: {e}")
+            # 估值接口失败时，从 Data_netWorthTrend 兜底获取 fsrq/nav/daily
+            if not fsrq:
+                m = _re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', content, _re.DOTALL)
+                if m:
+                    try:
+                        net_worth_data = json.loads(m.group(1))
+                        if net_worth_data:
+                            last = net_worth_data[-1]
+                            from datetime import datetime as _dt
+                            fsrq = _dt.fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
+                            unit_net_value = last.get('y', 0)
+                            pz_daily = float(last.get('equityReturn', 0) or 0)
+                            if daily_change_rate == 0 and pz_daily != 0:
+                                daily_change_rate = pz_daily
+                    except Exception as e:
+                        print(f"解析基金 {fund_code} 净值趋势数据失败: {e}")
 
-            result = {
-                'fund_code': fund_code,
-                'one_month_rate': one_month_rate,
-                'three_month_rate': three_month_rate,
-                'one_year_rate': one_year_rate,
-                'daily_change_rate': daily_change_rate,
-                'fsrq': fsrq,
-                'unit_net_value': unit_net_value
-            }
-
-            if one_month_rate != 0 or three_month_rate != 0 or one_year_rate != 0 or daily_change_rate != 0 or unit_net_value != 0:
-                set_cached_fund_data(fund_code, result)
-
-            return result
+            print(f"pingzhongdata获取基金 {fund_code}: 1m={one_month_rate}, 3m={three_month_rate}, 1y={one_year_rate}")
         except Exception as e:
             print(f"pingzhongdata获取基金 {fund_code} 涨跌幅数据失败: {e}")
-            # 两个接口都失败，返回缓存数据
+
+        # 两个接口都失败，返回缓存数据
+        if one_month_rate == 0 and three_month_rate == 0 and one_year_rate == 0 and daily_change_rate == 0 and unit_net_value == 0:
             cached_data = get_cached_fund_data(fund_code)
             if cached_data:
                 print(f"使用缓存数据返回基金 {fund_code} 的涨跌幅数据")
                 return cached_data
-            return {
-                'fund_code': fund_code,
-                'one_month_rate': 0,
-                'three_month_rate': 0,
-                'one_year_rate': 0,
-                'daily_change_rate': 0,
-                'fsrq': '',
-                'unit_net_value': 0
-            }
+        return {
+            'fund_code': fund_code,
+            'one_month_rate': one_month_rate,
+            'three_month_rate': three_month_rate,
+            'one_year_rate': one_year_rate,
+            'daily_change_rate': daily_change_rate,
+            'fsrq': fsrq,
+            'unit_net_value': unit_net_value
+        }
 
     @staticmethod
     def get_fund_rates(fund_code, timestamp=None):
         # 使用 timestamp 作为缓存键的一部分，实现按时间过期
         cache_key = f"{fund_code}_{timestamp or int(time.time() // 3600)}"
-        return DataFetcher._get_fund_rates_cached(cache_key, fund_code, timestamp)
+        result = DataFetcher._get_fund_rates_cached(cache_key, fund_code, timestamp)
+        # 如果缓存的结果是全0/空（API失败），不使用缓存，直接重新获取
+        if result and result.get('one_month_rate') == 0 and result.get('three_month_rate') == 0 and result.get('one_year_rate') == 0 and result.get('daily_change_rate') == 0 and not result.get('fsrq'):
+            # 清除缓存中这个无效结果
+            DataFetcher._get_fund_rates_cached.cache_clear()
+            result = DataFetcher._get_fund_rates_no_retry(fund_code, timestamp)
+        return result
 
     @staticmethod
     @lru_cache(maxsize=512)
@@ -558,15 +509,15 @@ class DataFetcher:
             # 如果使用东方财富API没有获取到数据，尝试使用天天基金pingzhongdata接口
             if one_month_rate == 0 and three_month_rate == 0 and one_year_rate == 0 and daily_change_rate == 0:
                 print(f"东方财富API未获取到基金 {fund_code} 的数据，尝试使用pingzhongdata接口")
-                url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v=20160518155842"
+                url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v={int(time.time())}"
                 try:
                     response = requests.get(url, headers=headers, timeout=8)
                     response.encoding = 'utf-8'
                     content = response.text
 
                     import re
-                    # 提取涨跌幅: syl_1n=近1月, syl_3y=近3月, syl_1y=近1年
-                    m = re.search(r'var\s+syl_1n\s*=\s*"([-+]?\d+\.?\d*)"', content)
+                    # 提取涨跌幅: syl_1n=近1年, syl_3y=近3月, syl_1y=近1月
+                    m = re.search(r'var\s+syl_1y\s*=\s*"([-+]?\d+\.?\d*)"', content)
                     if m:
                         try:
                             one_month_rate = float(m.group(1))
@@ -582,7 +533,7 @@ class DataFetcher:
                         except (ValueError, TypeError):
                             pass
 
-                    m = re.search(r'var\s+syl_1y\s*=\s*"([-+]?\d+\.?\d*)"', content)
+                    m = re.search(r'var\s+syl_1n\s*=\s*"([-+]?\d+\.?\d*)"', content)
                     if m:
                         try:
                             one_year_rate = float(m.group(1))
@@ -607,6 +558,34 @@ class DataFetcher:
 
                 except Exception as e:
                     print(f"使用pingzhongdata接口获取基金涨跌幅数据失败: {e}")
+
+            # 如果fundmobapi和pingzhongdata都未获取到fsrq，尝试LSJZ接口
+            if not fsrq:
+                try:
+                    lsjz_url = f"https://api.fund.eastmoney.com/f10/lsjz?fundCode={fund_code}&pageIndex=1&pageSize=1"
+                    lsjz_headers = {
+                        "Referer": f"https://fundf10.eastmoney.com/jjjz_{fund_code}.html",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    }
+                    lsjz_response = requests.get(lsjz_url, headers=lsjz_headers, timeout=8)
+                    lsjz_data = lsjz_response.json()
+                    if lsjz_data.get('Data') and lsjz_data['Data'].get('LSJZList'):
+                        latest = lsjz_data['Data']['LSJZList'][0]
+                        if latest.get('DWJZ'):
+                            fsrq = latest.get('FSRQ', '')
+                            if unit_net_value == 0:
+                                try:
+                                    unit_net_value = float(latest.get('DWJZ', 0))
+                                except (ValueError, TypeError):
+                                    pass
+                            if daily_change_rate == 0 and latest.get('JZZZL'):
+                                try:
+                                    daily_change_rate = float(latest.get('JZZZL', 0))
+                                except (ValueError, TypeError):
+                                    pass
+                            print(f"LSJZ接口获取基金 {fund_code} 最新数据: fsrq={fsrq}, nav={unit_net_value}, daily_change={daily_change_rate}")
+                except Exception as e:
+                    print(f"LSJZ接口获取基金 {fund_code} 涨跌幅数据失败: {e}")
 
             print(f"基金 {fund_code} 的最终涨跌幅数据: one_month_rate={one_month_rate}, three_month_rate={three_month_rate}, one_year_rate={one_year_rate}, daily_change_rate={daily_change_rate}, fsrq={fsrq}, unit_net_value={unit_net_value}")
             return {
@@ -832,13 +811,13 @@ class DataFetcher:
         try:
             print(f"基金 {fund_code} 回退到pingzhongdata接口")
             import re
-            url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v=20160518155842"
+            url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v={int(time.time())}"
             response = requests.get(url, headers=headers, timeout=8)
             response.encoding = 'utf-8'
             content = response.text
 
-            # 提取涨跌幅: syl_1n=近1月, syl_3y=近3月, syl_1y=近1年
-            m = re.search(r'var\s+syl_1n\s*=\s*"([-+]?\d+\.?\d*)"', content)
+            # 提取涨跌幅: syl_1n=近1年, syl_3y=近3月, syl_1y=近1月
+            m = re.search(r'var\s+syl_1y\s*=\s*"([-+]?\d+\.?\d*)"', content)
             if m:
                 try:
                     one_month_rate = float(m.group(1))
@@ -852,7 +831,7 @@ class DataFetcher:
                 except (ValueError, TypeError):
                     pass
 
-            m = re.search(r'var\s+syl_1y\s*=\s*"([-+]?\d+\.?\d*)"', content)
+            m = re.search(r'var\s+syl_1n\s*=\s*"([-+]?\d+\.?\d*)"', content)
             if m:
                 try:
                     one_year_rate = float(m.group(1))
@@ -923,6 +902,18 @@ class DataFetcher:
             fsrq = rates_data.get('fsrq', '')
             unit_net_value = rates_data.get('unit_net_value', 0)
 
+            # 如果 get_fund_rates 返回全0数据（API失败），回退到 _get_fund_rates_no_retry
+            if one_month_rate == 0 and three_month_rate == 0 and one_year_rate == 0 and daily_change_rate == 0 and not fsrq:
+                print(f"基金 {fund_code} get_fund_rates 返回全0数据，回退到 _get_fund_rates_no_retry")
+                fallback_data = DataFetcher._get_fund_rates_no_retry(fund_code, timestamp)
+                if fallback_data:
+                    one_month_rate = fallback_data.get('one_month_rate', 0)
+                    three_month_rate = fallback_data.get('three_month_rate', 0)
+                    one_year_rate = fallback_data.get('one_year_rate', 0)
+                    daily_change_rate = fallback_data.get('daily_change_rate', 0)
+                    fsrq = fallback_data.get('fsrq', '')
+                    unit_net_value = fallback_data.get('unit_net_value', 0)
+
             net_values = []
             try:
                 # real-time-fund 项目使用的东方财富K线接口
@@ -936,37 +927,40 @@ class DataFetcher:
                     "Connection": "keep-alive"
                 }
                 print(f"基金 {fund_code} 正在请求历史净值: {net_values_url}")
-                net_values_response = requests.get(net_values_url, headers=headers, timeout=10)
-                print(f"基金 {fund_code} 请求状态码: {net_values_response.status_code}")
+                try:
+                    net_values_response = requests.get(net_values_url, headers=headers, timeout=10)
+                    print(f"基金 {fund_code} 请求状态码: {net_values_response.status_code}")
 
-                if net_values_response.status_code == 404:
-                    print(f"基金 {fund_code} K线接口返回404，跳过并尝试LSJZ接口")
-                else:
-                    net_values_response.encoding = 'utf-8'
-                    try:
-                        net_values_data = net_values_response.json()
-                        print(f"基金 {fund_code} 返回数据结构: keys={list(net_values_data.keys())}")
-                        if net_values_data.get('data'):
-                            print(f"基金 {fund_code} data字段存在，包含keys={list(net_values_data['data'].keys())}")
-                            if net_values_data['data'].get('klines'):
-                                klines = net_values_data['data']['klines']
-                                print(f"基金 {fund_code} klines长度: {len(klines)}")
-                                for kline in klines:
-                                    parts = kline.split(',')
-                                    if len(parts) >= 6:
-                                        net_values.append({
-                                            'date': parts[0],
-                                            'unit_net_value': parts[2],
-                                            'cumulative_net_value': parts[5],
-                                            'change_rate': '0'
-                                        })
-                                print(f"基金 {fund_code} 历史净值加载成功，获取 {len(net_values)} 条数据")
+                    if net_values_response.status_code == 404:
+                        print(f"基金 {fund_code} K线接口返回404，跳过并尝试LSJZ接口")
+                    else:
+                        net_values_response.encoding = 'utf-8'
+                        try:
+                            net_values_data = net_values_response.json()
+                            print(f"基金 {fund_code} 返回数据结构: keys={list(net_values_data.keys())}")
+                            if net_values_data.get('data'):
+                                print(f"基金 {fund_code} data字段存在，包含keys={list(net_values_data['data'].keys())}")
+                                if net_values_data['data'].get('klines'):
+                                    klines = net_values_data['data']['klines']
+                                    print(f"基金 {fund_code} klines长度: {len(klines)}")
+                                    for kline in klines:
+                                        parts = kline.split(',')
+                                        if len(parts) >= 6:
+                                            net_values.append({
+                                                'date': parts[0],
+                                                'unit_net_value': parts[2],
+                                                'cumulative_net_value': parts[5],
+                                                'change_rate': '0'
+                                            })
+                                    print(f"基金 {fund_code} 历史净值加载成功，获取 {len(net_values)} 条数据")
+                                else:
+                                    print(f"基金 {fund_code} klines字段为空或不存在")
                             else:
-                                print(f"基金 {fund_code} klines字段为空或不存在")
-                        else:
-                            print(f"基金 {fund_code} data字段为空或不存在，完整响应: {json.dumps(net_values_data)[:500]}")
-                    except json.JSONDecodeError:
-                        print(f"基金 {fund_code} 历史净值接口返回非JSON数据: {net_values_response.text[:200]}")
+                                print(f"基金 {fund_code} data字段为空或不存在，完整响应: {json.dumps(net_values_data)[:500]}")
+                        except json.JSONDecodeError:
+                            print(f"基金 {fund_code} 历史净值接口返回非JSON数据: {net_values_response.text[:200]}")
+                except Exception as e:
+                    print(f"基金 {fund_code} K线接口请求失败: {e}，将尝试回退接口")
 
                 # 如果K线接口失败，回退到pingzhongdata接口（Data_netWorthTrend）
                 if not net_values:
@@ -974,7 +968,7 @@ class DataFetcher:
                     try:
                         import re as _re
                         from datetime import datetime as _dt
-                        pz_url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v=20160518155842"
+                        pz_url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v={int(time.time())}"
                         pz_headers = {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                             'Referer': f'http://fundf10.eastmoney.com/jjjz_{fund_code}.html'
@@ -1059,6 +1053,57 @@ class DataFetcher:
                 elif fsrq == latest_lsjz_date and latest_lsjz_nav > 0 and unit_net_value != latest_lsjz_nav:
                     print(f"基金 {fund_code} 净值数据不一致(API: {unit_net_value}, LSJZList: {latest_lsjz_nav}, 日期: {fsrq})，使用LSJZList数据")
                     unit_net_value = latest_lsjz_nav
+
+            # 用估值接口交叉验证fsrq，解决CDN缓存导致日期偏旧的问题
+            try:
+                gz_url = f"http://fundgz.1234567.com.cn/js/{fund_code}.js"
+                gz_headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://fund.eastmoney.com/'}
+                gz_response = requests.get(gz_url, headers=gz_headers, timeout=5)
+                if gz_response.status_code == 200:
+                    import re as _re2
+                    gz_match = _re2.search(r'jsonpgz\((.+)\);?', gz_response.text)
+                    if gz_match:
+                        gz_data = json.loads(gz_match.group(1))
+                        gz_jzrq = gz_data.get('jzrq', '')  # 净值日期
+                        gz_dwjz = gz_data.get('dwjz', '')   # 单位净值
+                        gz_gsz = gz_data.get('gsz', '')      # 估算净值
+                        gz_gszzl = gz_data.get('gszzl', '')  # 估算涨跌幅
+                        gz_gztime = gz_data.get('gztime', '') # 估值时间
+
+                        # 用估值接口交叉验证fsrq，解决pingzhongdata日期偏移的问题
+                        # 估值接口: jzrq=上一个确认净值日期, dwjz=该日单位净值, gztime=估值时间
+                        # pingzhongdata的Data_netWorthTrend时间戳有时偏早1天
+                        # 验证逻辑: 如果估值接口的dwjz与pingzhongdata最新净值不一致，
+                        # 说明pingzhongdata已包含更新一天的确认净值（日期标错了），需要修正
+                        gz_date = gz_gztime.split(' ')[0] if gz_gztime else ''
+                        if gz_date and fsrq and gz_date > fsrq:
+                            # gz_date比fsrq新，但需要确认pingzhongdata确实已包含新净值
+                            # 比较估值接口的dwjz（已确认净值）与pingzhongdata最新净值
+                            try:
+                                gz_dwjz_val = float(gz_dwjz) if gz_dwjz else 0
+                            except (ValueError, TypeError):
+                                gz_dwjz_val = 0
+
+                            if gz_dwjz_val > 0 and unit_net_value > 0 and abs(gz_dwjz_val - unit_net_value) > 0.0001:
+                                # 净值不一致，说明pingzhongdata的最新数据是gz_date那天的确认净值
+                                print(f"基金 {fund_code} 估值接口已确认净值({gz_dwjz_val})与pingzhongdata最新净值({unit_net_value})不一致，pingzhongdata日期偏移，修正fsrq为{gz_date}")
+                                fsrq = gz_date
+                            else:
+                                # 净值一致，说明pingzhongdata最新数据就是jzrq那天的，日期没有偏移
+                                print(f"基金 {fund_code} 估值接口已确认净值({gz_dwjz_val})与pingzhongdata最新净值({unit_net_value})一致，fsrq保持{fsrq}")
+                        elif gz_jzrq and fsrq and gz_jzrq > fsrq:
+                            print(f"基金 {fund_code} 估值接口净值日期({gz_jzrq})比fsrq({fsrq})更新，使用估值接口日期")
+                            fsrq = gz_jzrq
+                            if gz_dwjz:
+                                try:
+                                    unit_net_value = float(gz_dwjz)
+                                except (ValueError, TypeError):
+                                    pass
+                        elif (gz_date or gz_jzrq) and not fsrq:
+                            fsrq = gz_date or gz_jzrq
+                            print(f"基金 {fund_code} fsrq为空，使用估值接口日期: {fsrq}")
+            except Exception as e:
+                print(f"基金 {fund_code} 估值接口校验失败: {e}")
 
             return {
                 'fund_code': fund_code,
@@ -1172,18 +1217,44 @@ class DataFetcher:
     @staticmethod
     def _fetch_eastmoney_batch(fund_codes):
         """
-        使用天天基金 pingzhongdata 接口并发获取基金涨跌幅数据
-        该接口可达性高，响应快（约0.1秒/只）
+        批量获取基金数据：估值接口优先取fsrq/nav/daily，pingzhongdata补充月/年涨跌幅
         """
         results = {}
         if not fund_codes:
             return results
 
-        def _fetch_single(fund_code):
+        gz_data_map = {}
+
+        def _fetch_valuation(fund_code):
             try:
-                url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v=20160518155842"
+                gz_url = f"http://fundgz.1234567.com.cn/js/{fund_code}.js"
+                gz_headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://fund.eastmoney.com/'}
+                gz_response = requests.get(gz_url, headers=gz_headers, timeout=5)
+                if gz_response.status_code == 200:
+                    import re as _re0
+                    gz_match = _re0.search(r'jsonpgz\((.+)\);?', gz_response.text)
+                    if gz_match:
+                        gz_data = json.loads(gz_match.group(1))
+                        return fund_code, gz_data
+            except Exception:
+                pass
+            return fund_code, None
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_code = {executor.submit(_fetch_valuation, code): code for code in fund_codes}
+            for future in as_completed(future_to_code, timeout=20):
+                try:
+                    code, gz_data = future.result(timeout=8)
+                    if gz_data:
+                        gz_data_map[code] = gz_data
+                except Exception:
+                    pass
+
+        def _fetch_pingzhongdata(fund_code):
+            try:
+                url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v={int(time.time())}"
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Referer': f'http://fundf10.eastmoney.com/jjjz_{fund_code}.html'
                 }
                 response = requests.get(url, headers=headers, timeout=8)
@@ -1193,12 +1264,8 @@ class DataFetcher:
                 one_month_rate = 0
                 three_month_rate = 0
                 one_year_rate = 0
-                daily_change_rate = 0
-                fsrq = ''
-                unit_net_value = 0
 
-                # 提取涨跌幅: syl_1n=近1月, syl_3y=近3月, syl_1y=近1年
-                m = _re.search(r'var\s+syl_1n\s*=\s*"([-+]?\d+\.?\d*)"', content)
+                m = _re.search(r'var\s+syl_1y\s*=\s*"([-+]?\d+\.?\d*)"', content)
                 if m:
                     try:
                         one_month_rate = float(m.group(1))
@@ -1212,28 +1279,66 @@ class DataFetcher:
                     except (ValueError, TypeError):
                         pass
 
-                m = _re.search(r'var\s+syl_1y\s*=\s*"([-+]?\d+\.?\d*)"', content)
+                m = _re.search(r'var\s+syl_1n\s*=\s*"([-+]?\d+\.?\d*)"', content)
                 if m:
                     try:
                         one_year_rate = float(m.group(1))
                     except (ValueError, TypeError):
                         pass
 
-                # 提取最新净值和日期从 Data_netWorthTrend
-                m = _re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', content, _re.DOTALL)
-                if m:
-                    try:
-                        net_worth_data = json.loads(m.group(1))
-                        if net_worth_data:
-                            last = net_worth_data[-1]
-                            from datetime import datetime as _dt
-                            fsrq = _dt.fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
-                            unit_net_value = last.get('y', 0)
-                            daily_change_rate = float(last.get('equityReturn', 0) or 0)
-                    except Exception as e:
-                        print(f"解析基金 {fund_code} 净值趋势数据失败: {e}")
-
                 return fund_code, {
+                    'one_month_rate': one_month_rate,
+                    'three_month_rate': three_month_rate,
+                    'one_year_rate': one_year_rate
+                }
+            except Exception as e:
+                print(f"pingzhongdata接口获取基金 {fund_code} 涨跌幅失败: {e}")
+                return fund_code, None
+
+        pz_data_map = {}
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_code = {executor.submit(_fetch_pingzhongdata, code): code for code in fund_codes}
+            for future in as_completed(future_to_code, timeout=15):
+                try:
+                    code, pz_data = future.result(timeout=8)
+                    if pz_data:
+                        pz_data_map[code] = pz_data
+                except Exception:
+                    pass
+
+        for fund_code in fund_codes:
+            gz = gz_data_map.get(fund_code)
+            pz = pz_data_map.get(fund_code)
+
+            fsrq = ''
+            unit_net_value = 0
+            daily_change_rate = 0
+            one_month_rate = 0
+            three_month_rate = 0
+            one_year_rate = 0
+
+            if gz:
+                fsrq = gz.get('jzrq', '')
+                dwjz = gz.get('dwjz', '')
+                gszzl = gz.get('gszzl', '')
+                if dwjz:
+                    try:
+                        unit_net_value = float(dwjz)
+                    except (ValueError, TypeError):
+                        pass
+                if gszzl:
+                    try:
+                        daily_change_rate = float(gszzl)
+                    except (ValueError, TypeError):
+                        pass
+
+            if pz:
+                one_month_rate = pz.get('one_month_rate', 0)
+                three_month_rate = pz.get('three_month_rate', 0)
+                one_year_rate = pz.get('one_year_rate', 0)
+
+            if fsrq or unit_net_value or one_month_rate:
+                results[fund_code] = {
                     'fund_code': fund_code,
                     'one_month_rate': one_month_rate,
                     'three_month_rate': three_month_rate,
@@ -1242,36 +1347,6 @@ class DataFetcher:
                     'fsrq': fsrq,
                     'unit_net_value': unit_net_value
                 }
-            except Exception as e:
-                print(f"pingzhongdata接口获取基金 {fund_code} 数据失败: {e}")
-                return fund_code, None
-
-        try:
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                future_to_fund = {
-                    executor.submit(_fetch_single, fund_code): fund_code
-                    for fund_code in fund_codes
-                }
-                try:
-                    for future in as_completed(future_to_fund, timeout=15):
-                        try:
-                            fund_code, data = future.result(timeout=8)
-                            if data:
-                                results[fund_code] = data
-                        except Exception as e:
-                            print(f"获取基金数据失败: {e}")
-                except TimeoutError:
-                    print(f"pingzhongdata批量请求超时，已获取 {len(results)} 个，剩余 {len(fund_codes) - len(results)} 个未完成")
-                    for future in future_to_fund:
-                        if future.done():
-                            try:
-                                fund_code, data = future.result()
-                                if data and fund_code not in results:
-                                    results[fund_code] = data
-                            except Exception:
-                                pass
-        except Exception as e:
-            print(f"pingzhongdata批量请求异常: {e}")
 
         return results
 
