@@ -225,6 +225,14 @@ export function useHoldings() {
       }
 
       if (newHoldings.length > 0) {
+        console.log(
+          "[持仓] 新数据fsrq:",
+          newHoldings.map((h) => `${h.fund_code}:${h.fsrq}`).join(", "),
+        );
+        console.log(
+          "[持仓] 旧数据fsrq:",
+          holdings.value.map((h) => `${h.fund_code}:${h.fsrq}`).join(", "),
+        );
         // 智能合并：0值不覆盖非0值，旧日期不覆盖新日期
         const mergedHoldings = newHoldings.map((newH) => {
           const existing = holdings.value.find(
@@ -262,7 +270,7 @@ export function useHoldings() {
           if (!merged.fsrq && existing.fsrq) {
             merged.fsrq = existing.fsrq;
           }
-          // estimate_change_rate: '0'/'-' 不覆盖有效值，旧日期不覆盖新日期
+          // estimate_change_rate: '0'表示净值已确认，不应被旧估算值覆盖
           if (
             (merged.estimate_change_rate === "0" ||
               merged.estimate_change_rate === "0.00" ||
@@ -272,7 +280,7 @@ export function useHoldings() {
             existing.estimate_change_rate !== "0.00" &&
             existing.estimate_change_rate !== "-"
           ) {
-            merged.estimate_change_rate = existing.estimate_change_rate;
+            // 不覆盖：净值已确认时保留"0"，不回退到旧估算值
           }
           return merged;
         });
