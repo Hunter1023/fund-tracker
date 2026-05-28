@@ -693,12 +693,16 @@ def _merge_fund_data(cached_dict, fresh_data):
             if key == 'fsrq':
                 if (not new_value or new_value == '') and old_value:
                     continue
+                if new_value and old_value and new_value < old_value:
+                    continue
             if key == 'unit_net_value':
                 if (new_value == 0 or new_value is None or new_value == '') and old_value and old_value != 0:
                     continue
-            # estimate_change_rate：'-'不覆盖有效值
+            # estimate_change_rate：'-'和'0'不覆盖有效估算值，但'0'（净值已确认）也不应被旧估算值覆盖
             if key == 'estimate_change_rate':
                 if (new_value == '-' or new_value is None) and old_value and old_value != '-':
+                    continue
+                if new_value == 0 and old_value and old_value != 0 and old_value != '-':
                     continue
             if key == 'estimate_net_value':
                 if (new_value == 0 or new_value is None or new_value == '') and old_value and old_value != 0:
@@ -1008,8 +1012,10 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             rates_estimate_change_rate = rates_data.get('estimate_change_rate', 0) if rates_data else 0
             fsrq = rates_data.get('fsrq', '') if rates_data else ''
 
-            # estimate_change_rate 优先使用估值接口数据，其次使用rates接口的估算涨跌幅
-            if estimate_change_rate is None and rates_estimate_change_rate:
+            # estimate_change_rate: 当rates_data确认净值(=0)时，不用估值接口的gszzl覆盖
+            if rates_estimate_change_rate == 0:
+                estimate_change_rate = 0
+            elif estimate_change_rate is None and rates_estimate_change_rate:
                 estimate_change_rate = float(rates_estimate_change_rate)
 
             if realtime_data:
@@ -1055,8 +1061,20 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                     old_value = getattr(realtime_data, key, None)
                     if (value == 0 or value is None) and old_value and old_value != 0:
                         continue
-                if key == 'fsrq' and (not value or value == '') and getattr(realtime_data, 'fsrq', None):
-                    continue
+                if key == 'estimate_change_rate':
+                    old_ecr = getattr(realtime_data, 'estimate_change_rate', None)
+                    if old_ecr == 0 and value and value != 0:
+                        continue
+                if key == 'fsrq':
+                    if (not value or value == '') and getattr(realtime_data, 'fsrq', None):
+                        continue
+                    existing_fsrq = getattr(realtime_data, 'fsrq', None)
+                    if value and existing_fsrq and value < existing_fsrq:
+                        continue
+                if key == 'net_value_date':
+                    existing_nvd = getattr(realtime_data, 'net_value_date', None)
+                    if value and existing_nvd and value < existing_nvd:
+                        continue
                 setattr(realtime_data, key, value)
             realtime_data.updated_at = datetime.now()  # 更新时间戳
         else:
@@ -1105,6 +1123,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             'net_values': []
         }
         results[fund_code] = result_data
+        logger.info(f"[rates_batch] {fund_code}: fsrq={data.get('fsrq','')}, daily_change_rate={data.get('daily_change_rate',0)}, estimate_change_rate={result_estimate_change_rate}, unit_net_value={data.get('unit_net_value',None)}")
 
     try:
         db.commit()
@@ -1132,29 +1151,50 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
 
                 estimate_time = fund_data.get('estimate_time', '')
 
-                # 更新净值日期（估值接口可能返回更新的净值日期）
-                net_value = fund_data.get('net_value', '')
-                if net_value:
-                    results[fund_code]['net_value'] = net_value
+                # 如果rates_data已确认净值（estimate_change_rate=0），不使用估值接口的估算数据覆盖
+                current_daily = results[fund_code].get('daily_change_rate', 0)
+                current_fsrq = results[fund_code].get('fsrq', '')
+                current_estimate = results[fund_code].get('estimate_change_rate', '-')
+                rates_confirmed = (current_estimate == 0 or current_estimate == '0' or
+                                   (isinstance(current_estimate, str) and current_estimate == '-'))
 
-                results[fund_code]['estimate_net_value'] = estimate_net_value
-                results[fund_code]['estimate_change_rate'] = str(estimate_change_rate) if estimate_change_rate is not None else '-'
-                results[fund_code]['estimate_time'] = estimate_time
+                if rates_confirmed:
+                    # 净值已确认，只更新estimate_time，不覆盖estimate_change_rate和net_value
+                    results[fund_code]['estimate_time'] = estimate_time
+                    realtime_data = realtime_data_map.get(fund_code)
+                    if realtime_data:
+                        if estimate_time:
+                            realtime_data.estimate_time = estimate_time
+                        realtime_data.updated_at = datetime.now()
+                        try:
+                            db.commit()
+                        except Exception as e:
+                            print(f"更新估值缓存到数据库失败: {e}")
+                            db.rollback()
+                else:
+                    # 净值未确认，使用估值接口数据
+                    net_value = fund_data.get('net_value', '')
+                    if net_value:
+                        results[fund_code]['net_value'] = net_value
 
-                realtime_data = realtime_data_map.get(fund_code)
-                if realtime_data:
-                    if estimate_net_value is not None:
-                        realtime_data.estimate_net_value = estimate_net_value
-                    if estimate_change_rate is not None:
-                        realtime_data.estimate_change_rate = estimate_change_rate
-                    if estimate_time:
-                        realtime_data.estimate_time = estimate_time
-                    realtime_data.updated_at = datetime.now()  # 更新时间戳，确保下次刷新检查正常
-                    try:
-                        db.commit()
-                    except Exception as e:
-                        print(f"更新估值缓存到数据库失败: {e}")
-                        db.rollback()
+                    results[fund_code]['estimate_net_value'] = estimate_net_value
+                    results[fund_code]['estimate_change_rate'] = str(estimate_change_rate) if estimate_change_rate is not None else '-'
+                    results[fund_code]['estimate_time'] = estimate_time
+
+                    realtime_data = realtime_data_map.get(fund_code)
+                    if realtime_data:
+                        if estimate_net_value is not None:
+                            realtime_data.estimate_net_value = estimate_net_value
+                        if estimate_change_rate is not None:
+                            realtime_data.estimate_change_rate = estimate_change_rate
+                        if estimate_time:
+                            realtime_data.estimate_time = estimate_time
+                        realtime_data.updated_at = datetime.now()
+                        try:
+                            db.commit()
+                        except Exception as e:
+                            print(f"更新估值缓存到数据库失败: {e}")
+                            db.rollback()
 
     return results
 
