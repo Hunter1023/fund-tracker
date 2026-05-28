@@ -1217,18 +1217,44 @@ class DataFetcher:
     @staticmethod
     def _fetch_eastmoney_batch(fund_codes):
         """
-        使用天天基金 pingzhongdata 接口并发获取基金涨跌幅数据
-        该接口可达性高，响应快（约0.1秒/只）
+        批量获取基金数据：估值接口优先取fsrq/nav/daily，pingzhongdata补充月/年涨跌幅
         """
         results = {}
         if not fund_codes:
             return results
 
-        def _fetch_single(fund_code):
+        gz_data_map = {}
+
+        def _fetch_valuation(fund_code):
+            try:
+                gz_url = f"http://fundgz.1234567.com.cn/js/{fund_code}.js"
+                gz_headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://fund.eastmoney.com/'}
+                gz_response = requests.get(gz_url, headers=gz_headers, timeout=5)
+                if gz_response.status_code == 200:
+                    import re as _re0
+                    gz_match = _re0.search(r'jsonpgz\((.+)\);?', gz_response.text)
+                    if gz_match:
+                        gz_data = json.loads(gz_match.group(1))
+                        return fund_code, gz_data
+            except Exception:
+                pass
+            return fund_code, None
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_code = {executor.submit(_fetch_valuation, code): code for code in fund_codes}
+            for future in as_completed(future_to_code, timeout=20):
+                try:
+                    code, gz_data = future.result(timeout=8)
+                    if gz_data:
+                        gz_data_map[code] = gz_data
+                except Exception:
+                    pass
+
+        def _fetch_pingzhongdata(fund_code):
             try:
                 url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v={int(time.time())}"
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Referer': f'http://fundf10.eastmoney.com/jjjz_{fund_code}.html'
                 }
                 response = requests.get(url, headers=headers, timeout=8)
@@ -1238,11 +1264,7 @@ class DataFetcher:
                 one_month_rate = 0
                 three_month_rate = 0
                 one_year_rate = 0
-                daily_change_rate = 0
-                fsrq = ''
-                unit_net_value = 0
 
-                # 提取涨跌幅: syl_1n=近1年, syl_3y=近3月, syl_1y=近1月
                 m = _re.search(r'var\s+syl_1y\s*=\s*"([-+]?\d+\.?\d*)"', content)
                 if m:
                     try:
@@ -1264,21 +1286,59 @@ class DataFetcher:
                     except (ValueError, TypeError):
                         pass
 
-                # 提取最新净值和日期从 Data_netWorthTrend
-                m = _re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', content, _re.DOTALL)
-                if m:
-                    try:
-                        net_worth_data = json.loads(m.group(1))
-                        if net_worth_data:
-                            last = net_worth_data[-1]
-                            from datetime import datetime as _dt
-                            fsrq = _dt.fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
-                            unit_net_value = last.get('y', 0)
-                            daily_change_rate = float(last.get('equityReturn', 0) or 0)
-                    except Exception as e:
-                        print(f"解析基金 {fund_code} 净值趋势数据失败: {e}")
-
                 return fund_code, {
+                    'one_month_rate': one_month_rate,
+                    'three_month_rate': three_month_rate,
+                    'one_year_rate': one_year_rate
+                }
+            except Exception as e:
+                print(f"pingzhongdata接口获取基金 {fund_code} 涨跌幅失败: {e}")
+                return fund_code, None
+
+        pz_data_map = {}
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_code = {executor.submit(_fetch_pingzhongdata, code): code for code in fund_codes}
+            for future in as_completed(future_to_code, timeout=15):
+                try:
+                    code, pz_data = future.result(timeout=8)
+                    if pz_data:
+                        pz_data_map[code] = pz_data
+                except Exception:
+                    pass
+
+        for fund_code in fund_codes:
+            gz = gz_data_map.get(fund_code)
+            pz = pz_data_map.get(fund_code)
+
+            fsrq = ''
+            unit_net_value = 0
+            daily_change_rate = 0
+            one_month_rate = 0
+            three_month_rate = 0
+            one_year_rate = 0
+
+            if gz:
+                fsrq = gz.get('jzrq', '')
+                dwjz = gz.get('dwjz', '')
+                gszzl = gz.get('gszzl', '')
+                if dwjz:
+                    try:
+                        unit_net_value = float(dwjz)
+                    except (ValueError, TypeError):
+                        pass
+                if gszzl:
+                    try:
+                        daily_change_rate = float(gszzl)
+                    except (ValueError, TypeError):
+                        pass
+
+            if pz:
+                one_month_rate = pz.get('one_month_rate', 0)
+                three_month_rate = pz.get('three_month_rate', 0)
+                one_year_rate = pz.get('one_year_rate', 0)
+
+            if fsrq or unit_net_value or one_month_rate:
+                results[fund_code] = {
                     'fund_code': fund_code,
                     'one_month_rate': one_month_rate,
                     'three_month_rate': three_month_rate,
@@ -1287,36 +1347,6 @@ class DataFetcher:
                     'fsrq': fsrq,
                     'unit_net_value': unit_net_value
                 }
-            except Exception as e:
-                print(f"pingzhongdata接口获取基金 {fund_code} 数据失败: {e}")
-                return fund_code, None
-
-        try:
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                future_to_fund = {
-                    executor.submit(_fetch_single, fund_code): fund_code
-                    for fund_code in fund_codes
-                }
-                try:
-                    for future in as_completed(future_to_fund, timeout=15):
-                        try:
-                            fund_code, data = future.result(timeout=8)
-                            if data:
-                                results[fund_code] = data
-                        except Exception as e:
-                            print(f"获取基金数据失败: {e}")
-                except TimeoutError:
-                    print(f"pingzhongdata批量请求超时，已获取 {len(results)} 个，剩余 {len(fund_codes) - len(results)} 个未完成")
-                    for future in future_to_fund:
-                        if future.done():
-                            try:
-                                fund_code, data = future.result()
-                                if data and fund_code not in results:
-                                    results[fund_code] = data
-                            except Exception:
-                                pass
-        except Exception as e:
-            print(f"pingzhongdata批量请求异常: {e}")
 
         return results
 
