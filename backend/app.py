@@ -687,7 +687,7 @@ def _merge_fund_data(cached_dict, fresh_data):
 
         for key, new_value in fresh.items():
             old_value = cached.get(key)
-            if key in ('one_month_rate', 'three_month_rate', 'one_year_rate', 'daily_change_rate'):
+            if key in ('one_month_rate', 'three_month_rate', 'one_year_rate', 'daily_change_rate', 'estimate_change_rate'):
                 if (new_value == 0 or new_value is None) and old_value and old_value != 0:
                     continue
             if key == 'fsrq':
@@ -927,6 +927,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                     'three_month_rate': history_data.get('three_month_rate', 0),
                     'one_year_rate': history_data.get('one_year_rate', 0),
                     'daily_change_rate': history_data.get('daily_change_rate', 0),
+                    'estimate_change_rate': history_data.get('estimate_change_rate', 0),
                     'fsrq': history_data.get('fsrq', ''),
                     'unit_net_value': history_data.get('unit_net_value', 0)
                 }
@@ -1004,7 +1005,12 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             three_month_rate = rates_data.get('three_month_rate', 0) if rates_data else 0
             one_year_rate = rates_data.get('one_year_rate', 0) if rates_data else 0
             daily_change_rate = rates_data.get('daily_change_rate', 0) if rates_data else 0
+            rates_estimate_change_rate = rates_data.get('estimate_change_rate', 0) if rates_data else 0
             fsrq = rates_data.get('fsrq', '') if rates_data else ''
+
+            # estimate_change_rate 优先使用估值接口数据，其次使用rates接口的估算涨跌幅
+            if estimate_change_rate is None and rates_estimate_change_rate:
+                estimate_change_rate = float(rates_estimate_change_rate)
 
             if realtime_data:
                 # 按字段保留数据库缓存值：API返回0/空时保留数据库中的非0/非空值
@@ -2857,22 +2863,15 @@ def manage_holding():
                     logger.warning(f"无法获取基金 {fund_code} 在 {transaction_date} 的历史净值，使用最新净值")
                     current_price = None
 
-            # 如果没有指定日期或无法获取指定日期的净值，使用最新净值
+            # 如果没有指定日期或无法获取指定日期的净值，使用数据库缓存净值
             if not current_price:
-                fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True, need_history_data=False)
-                if fund_data and fund_data.get('unit_net_value'):
-                    current_price = float(fund_data.get('unit_net_value'))
-                    logger.info(f"使用最新净值，基金代码: {fund_code}, 净值: {current_price}, 净值日期: {fund_data.get('fsrq', '')}")
+                realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
+                if realtime_data and realtime_data.unit_net_value:
+                    current_price = float(realtime_data.unit_net_value)
+                    logger.info(f"使用数据库缓存净值，基金代码: {fund_code}, 净值: {current_price}")
                 else:
-                    # 尝试从估值数据中获取
-                    valuation_data = DataFetcher.get_fund_valuation(fund_code)
-                    if valuation_data and valuation_data.get('estimate_net_value'):
-                        current_price = float(valuation_data['estimate_net_value'])
-                        logger.info(f"使用估值数据，基金代码: {fund_code}, 估值净值: {current_price}")
-                    else:
-                        # 如果仍然无法获取，使用1.0作为默认值
-                        current_price = 1.0
-                        logger.warning(f"无法获取净值数据，基金代码: {fund_code}, 使用默认值: {current_price}")
+                    current_price = 1.0
+                    logger.warning(f"无法获取净值数据，基金代码: {fund_code}, 使用默认值: {current_price}")
 
             # 为所有交易类型定义 unit_net_value
             unit_net_value = current_price
@@ -2888,25 +2887,16 @@ def manage_holding():
                 if current_value <= 0:
                     return jsonify({'error': '持仓金额必须大于0'}), 400
 
-                # 获取最新净值数据
-                fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True, need_history_data=False)
-
+                # 直接从数据库读取净值，避免同步请求外部API
+                realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
                 unit_net_value = None
-                if fund_data:
-                    unit_net_value = fund_data.get('unit_net_value')
-                    logger.info(f"获取基金数据成功，基金代码: {fund_code}, 净值: {unit_net_value}, 净值日期: {fund_data.get('fsrq', '')}")
+                if realtime_data and realtime_data.unit_net_value:
+                    unit_net_value = realtime_data.unit_net_value
+                    logger.info(f"使用数据库缓存净值，基金代码: {fund_code}, 净值: {unit_net_value}")
 
-                # 如果无法获取最新净值，使用默认值
                 if not unit_net_value:
-                    # 尝试从基金估值数据中获取
-                    valuation_data = DataFetcher.get_fund_valuation(fund_code)
-                    if valuation_data and valuation_data.get('estimate_net_value'):
-                        unit_net_value = float(valuation_data['estimate_net_value'])
-                        logger.info(f"使用估值数据，基金代码: {fund_code}, 估值净值: {unit_net_value}")
-                    else:
-                        # 如果仍然无法获取，使用1.0作为默认值
-                        unit_net_value = 1.0
-                        logger.warning(f"无法获取净值数据，基金代码: {fund_code}, 使用默认值: {unit_net_value}")
+                    unit_net_value = 1.0
+                    logger.warning(f"无法获取净值数据，基金代码: {fund_code}, 使用默认值: {unit_net_value}")
                 else:
                     unit_net_value = float(unit_net_value)
 
@@ -3082,17 +3072,17 @@ def manage_holding():
 
             # 对于加仓/减仓操作，返回更新后的持仓数据
             if transaction_type in ('buy', 'sell') and fund_holding:
-                # 获取基金实时数据
-                fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True, need_history_data=False)
+                # 直接从数据库读取基金数据，避免同步请求外部API
+                rt_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
                 # 获取标签
                 watchlist_item = db.query(Watchlist).filter(Watchlist.fund_id == fund.id).first()
                 tags = watchlist_item.tags if watchlist_item else ''
 
-                if fund_data:
-                    unit_net_value = fund_data.get('unit_net_value')
-                    fsrq = fund_data.get('fsrq', '')
-                    daily_change_rate = fund_data.get('daily_change_rate', '-')
-                    estimate_change_rate = fund_data.get('estimate_change_rate', '-')
+                if rt_data:
+                    unit_net_value = rt_data.unit_net_value
+                    fsrq = rt_data.fsrq or ''
+                    daily_change_rate = rt_data.daily_change_rate or '-'
+                    estimate_change_rate = str(rt_data.estimate_change_rate) if rt_data.estimate_change_rate is not None else '-'
 
                     if unit_net_value:
                         current_value = fund_holding.shares * float(unit_net_value)
@@ -3102,7 +3092,7 @@ def manage_holding():
                         is_today = (fsrq == today)
 
                         # 检查估算涨幅日期是否为今日
-                        estimate_time = fund_data.get('estimate_time', '')
+                        estimate_time = rt_data.estimate_time or ''
                         estimate_is_today = False
                         if estimate_time:
                             estimate_date = estimate_time.split(' ')[0] if ' ' in estimate_time else estimate_time
@@ -3144,9 +3134,9 @@ def manage_holding():
                         'profit_loss_rate': profit_loss_rate,
                         'estimate_change_rate': estimate_change_rate,
                         'estimate_profit': estimate_profit,
-                        'daily_change_rate': fund_data.get('daily_change_rate', '-'),
-                        'fsrq': fund_data.get('fsrq', ''),
-                        'one_month_rate': fund_data.get('one_month_rate', 0),
+                        'daily_change_rate': daily_change_rate,
+                        'fsrq': fsrq,
+                        'one_month_rate': rt_data.one_month_rate or 0,
                         'tags': tags,
                         'platform': fund_holding.platform or '默认'
                     }
@@ -3312,14 +3302,14 @@ def update_holding(fund_code):
         if not fund:
             return jsonify({'error': '基金不存在'}), 404
 
-        # 获取最新净值数据
-        fund_data = get_fund_realtime_data(db, fund_code, force_refresh=True, need_history_data=False, skip_db_write=True)
-        if not fund_data:
-            return jsonify({'error': '获取基金数据失败'}), 404
-
-        unit_net_value = fund_data.get('unit_net_value')
-        if not unit_net_value:
-            return jsonify({'error': '无法获取最新净值'}), 404
+        # 直接从数据库读取净值，避免同步请求外部API导致超时
+        # 修改持仓不需要实时净值，数据库缓存即可满足计算需求
+        realtime_data = db.query(FundRealtimeData).filter(FundRealtimeData.fund_id == fund.id).first()
+        unit_net_value = None
+        if realtime_data and realtime_data.unit_net_value:
+            unit_net_value = realtime_data.unit_net_value
+        else:
+            return jsonify({'error': '无法获取净值数据，请先刷新基金数据'}), 404
 
         # 计算持仓成本：持仓金额 - 持有收益
         cost = current_value - profit

@@ -284,6 +284,7 @@ class DataFetcher:
         three_month_rate = 0
         one_year_rate = 0
         daily_change_rate = 0
+        estimate_change_rate = 0
         fsrq = ''
         unit_net_value = 0
 
@@ -309,15 +310,15 @@ class DataFetcher:
 
                     if gz_gszzl:
                         try:
-                            daily_change_rate = float(gz_gszzl)
+                            estimate_change_rate = float(gz_gszzl)
                         except (ValueError, TypeError):
                             pass
 
-                    print(f"估值接口获取基金 {fund_code}: fsrq={fsrq}, nav={unit_net_value}, daily={daily_change_rate}")
+                    print(f"估值接口获取基金 {fund_code}: fsrq={fsrq}, nav={unit_net_value}, estimate={estimate_change_rate}")
         except Exception as e:
             print(f"估值接口获取基金 {fund_code} 数据失败: {e}")
 
-        # 尝试2: pingzhongdata 接口（补充月/年涨跌幅）
+        # 尝试2: pingzhongdata 接口（补充月/年涨跌幅 + fsrq日期的实际涨跌幅）
         try:
             import re as _re
             url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v={int(time.time())}"
@@ -349,22 +350,32 @@ class DataFetcher:
                 except (ValueError, TypeError):
                     pass
 
-            # 估值接口失败时，从 Data_netWorthTrend 兜底获取 fsrq/nav/daily
-            if not fsrq:
-                m = _re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', content, _re.DOTALL)
-                if m:
-                    try:
-                        net_worth_data = json.loads(m.group(1))
-                        if net_worth_data:
-                            last = net_worth_data[-1]
-                            from datetime import datetime as _dt
-                            fsrq = _dt.fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
+            # 从 Data_netWorthTrend 获取fsrq日期的实际涨跌幅(equityReturn)
+            m = _re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', content, _re.DOTALL)
+            if m:
+                try:
+                    net_worth_data = json.loads(m.group(1))
+                    if net_worth_data:
+                        # 按时间戳排序，找最新一条
+                        sorted_data = sorted(net_worth_data, key=lambda x: x['x'], reverse=True)
+                        last = sorted_data[0]
+                        from datetime import datetime as _dt
+                        pz_fsrq = _dt.fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
+                        pz_equity_return = float(last.get('equityReturn', 0) or 0)
+
+                        # daily_change_rate 取fsrq日期的实际涨跌幅
+                        if pz_equity_return != 0:
+                            daily_change_rate = pz_equity_return
+
+                        # 如果估值接口失败，用pingzhongdata兜底
+                        if not fsrq:
+                            fsrq = pz_fsrq
+                        if unit_net_value == 0:
                             unit_net_value = last.get('y', 0)
-                            pz_daily = float(last.get('equityReturn', 0) or 0)
-                            if daily_change_rate == 0 and pz_daily != 0:
-                                daily_change_rate = pz_daily
-                    except Exception as e:
-                        print(f"解析基金 {fund_code} 净值趋势数据失败: {e}")
+
+                        print(f"pingzhongdata净值趋势: {fund_code} fsrq={pz_fsrq}, equityReturn={pz_equity_return}")
+                except Exception as e:
+                    print(f"解析基金 {fund_code} 净值趋势数据失败: {e}")
 
             print(f"pingzhongdata获取基金 {fund_code}: 1m={one_month_rate}, 3m={three_month_rate}, 1y={one_year_rate}")
         except Exception as e:
@@ -382,6 +393,7 @@ class DataFetcher:
             'three_month_rate': three_month_rate,
             'one_year_rate': one_year_rate,
             'daily_change_rate': daily_change_rate,
+            'estimate_change_rate': estimate_change_rate,
             'fsrq': fsrq,
             'unit_net_value': unit_net_value
         }
@@ -899,6 +911,7 @@ class DataFetcher:
             three_month_rate = rates_data.get('three_month_rate', 0)
             one_year_rate = rates_data.get('one_year_rate', 0)
             daily_change_rate = rates_data.get('daily_change_rate', 0)
+            estimate_change_rate = rates_data.get('estimate_change_rate', 0)
             fsrq = rates_data.get('fsrq', '')
             unit_net_value = rates_data.get('unit_net_value', 0)
 
@@ -911,6 +924,7 @@ class DataFetcher:
                     three_month_rate = fallback_data.get('three_month_rate', 0)
                     one_year_rate = fallback_data.get('one_year_rate', 0)
                     daily_change_rate = fallback_data.get('daily_change_rate', 0)
+                    estimate_change_rate = fallback_data.get('estimate_change_rate', 0)
                     fsrq = fallback_data.get('fsrq', '')
                     unit_net_value = fallback_data.get('unit_net_value', 0)
 
@@ -1112,6 +1126,7 @@ class DataFetcher:
                 'three_month_rate': three_month_rate,
                 'one_year_rate': one_year_rate,
                 'daily_change_rate': daily_change_rate,
+                'estimate_change_rate': estimate_change_rate,
                 'fsrq': fsrq,
                 'unit_net_value': unit_net_value
             }
