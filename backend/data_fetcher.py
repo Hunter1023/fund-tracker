@@ -6,6 +6,8 @@ from bs4 import BeautifulSoup
 from config import DATA_SOURCES
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 import threading
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def retry_on_failure(max_retries=3, delay=1, backoff=2, exceptions=(requests.RequestException, requests.Timeout, ConnectionError, json.JSONDecodeError)):
     """
@@ -93,7 +95,7 @@ class DataFetcher:
         # 尝试主数据源 (1234567.com.cn)
         url = f"{DATA_SOURCES['fund_valuation']}{fund_code}.js"
         try:
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=10)
             response.encoding = 'utf-8'
             start = response.text.find('(')
             end = response.text.rfind(')')
@@ -122,7 +124,7 @@ class DataFetcher:
             headers = {
                 'Referer': f'https://fundf10.eastmoney.com/jjjz_{fund_code}.html'
             }
-            response = requests.get(url, headers=headers, timeout=5)
+            response = requests.get(url, headers=headers, timeout=10, verify=False)
             response.encoding = 'utf-8'
             data = response.json()
             if data and data.get('Datas'):
@@ -155,7 +157,7 @@ class DataFetcher:
         """
         url = f"{DATA_SOURCES['fund_valuation']}{fund_code}.js"
         try:
-            response = requests.get(url, timeout=5)  # 5秒超时
+            response = requests.get(url, timeout=10)
             response.encoding = 'utf-8'
             # 解析JSONP格式数据
             # 找到第一个左括号和最后一个右括号
@@ -1079,7 +1081,7 @@ class DataFetcher:
             try:
                 gz_url = f"http://fundgz.1234567.com.cn/js/{fund_code}.js"
                 gz_headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://fund.eastmoney.com/'}
-                gz_response = requests.get(gz_url, headers=gz_headers, timeout=5)
+                gz_response = requests.get(gz_url, headers=gz_headers, timeout=10)
                 if gz_response.status_code == 200:
                     import re as _re2
                     gz_match = _re2.search(r'jsonpgz\((.+)\);?', gz_response.text)
@@ -1193,15 +1195,19 @@ class DataFetcher:
         """
         results = {}
 
-        # 1. 首先尝试东方财富批量接口
-        batch_result = DataFetcher._fetch_eastmoney_batch(fund_codes)
-        results.update(batch_result)
+        try:
+            batch_result = DataFetcher._fetch_eastmoney_batch(fund_codes)
+            results.update(batch_result)
+        except Exception as e:
+            print(f"_fetch_eastmoney_batch 异常: {e}")
 
-        # 2. 对于未获取到数据的基金，使用腾讯基金接口补充
         missing_codes = [code for code in fund_codes if code not in results or results[code] is None]
         if missing_codes:
-            tencent_result = DataFetcher._fetch_tencent_batch(missing_codes)
-            results.update(tencent_result)
+            try:
+                tencent_result = DataFetcher._fetch_tencent_batch(missing_codes)
+                results.update(tencent_result)
+            except Exception as e:
+                print(f"_fetch_tencent_batch 异常: {e}")
 
         # 3. 最后使用单只基金接口补充剩余的
         remaining_codes = [code for code in fund_codes if code not in results or results[code] is None]
@@ -1251,7 +1257,7 @@ class DataFetcher:
             try:
                 gz_url = f"http://fundgz.1234567.com.cn/js/{fund_code}.js"
                 gz_headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://fund.eastmoney.com/'}
-                gz_response = requests.get(gz_url, headers=gz_headers, timeout=5)
+                gz_response = requests.get(gz_url, headers=gz_headers, timeout=10)
                 if gz_response.status_code == 200:
                     import re as _re0
                     gz_match = _re0.search(r'jsonpgz\((.+)\);?', gz_response.text)
@@ -1262,15 +1268,26 @@ class DataFetcher:
                 pass
             return fund_code, None
 
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=3) as executor:
             future_to_code = {executor.submit(_fetch_valuation, code): code for code in fund_codes}
-            for future in as_completed(future_to_code, timeout=20):
-                try:
-                    code, gz_data = future.result(timeout=8)
-                    if gz_data:
-                        gz_data_map[code] = gz_data
-                except Exception:
-                    pass
+            try:
+                for future in as_completed(future_to_code, timeout=90):
+                    try:
+                        code, gz_data = future.result(timeout=15)
+                        if gz_data:
+                            gz_data_map[code] = gz_data
+                    except Exception:
+                        pass
+            except TimeoutError:
+                print(f"fundgz批量获取超时，已完成 {len(gz_data_map)}/{len(fund_codes)}")
+                for future in future_to_code:
+                    if future.done():
+                        try:
+                            code, gz_data = future.result(timeout=1)
+                            if gz_data and code not in gz_data_map:
+                                gz_data_map[code] = gz_data
+                        except Exception:
+                            pass
 
         def _fetch_pingzhongdata(fund_code):
             try:
@@ -1340,13 +1357,24 @@ class DataFetcher:
         pz_data_map = {}
         with ThreadPoolExecutor(max_workers=5) as executor:
             future_to_code = {executor.submit(_fetch_pingzhongdata, code): code for code in fund_codes}
-            for future in as_completed(future_to_code, timeout=15):
-                try:
-                    code, pz_data = future.result(timeout=8)
-                    if pz_data:
-                        pz_data_map[code] = pz_data
-                except Exception:
-                    pass
+            try:
+                for future in as_completed(future_to_code, timeout=30):
+                    try:
+                        code, pz_data = future.result(timeout=10)
+                        if pz_data:
+                            pz_data_map[code] = pz_data
+                    except Exception:
+                        pass
+            except TimeoutError:
+                print(f"pingzhongdata批量获取超时，已完成 {len(pz_data_map)}/{len(fund_codes)}")
+                for future in future_to_code:
+                    if future.done():
+                        try:
+                            code, pz_data = future.result(timeout=1)
+                            if pz_data and code not in pz_data_map:
+                                pz_data_map[code] = pz_data
+                        except Exception:
+                            pass
 
         for fund_code in fund_codes:
             gz = gz_data_map.get(fund_code)
@@ -1360,10 +1388,15 @@ class DataFetcher:
             three_month_rate = 0
             one_year_rate = 0
 
+            estimate_net_value = None
+            estimate_time = ''
+
             if gz:
                 fsrq = gz.get('jzrq', '')
                 dwjz = gz.get('dwjz', '')
                 gszzl = gz.get('gszzl', '')
+                gsz = gz.get('gsz', '')
+                gztime = gz.get('gztime', '')
                 if dwjz:
                     try:
                         unit_net_value = float(dwjz)
@@ -1374,6 +1407,13 @@ class DataFetcher:
                         estimate_change_rate = float(gszzl)
                     except (ValueError, TypeError):
                         pass
+                if gsz:
+                    try:
+                        estimate_net_value = float(gsz)
+                    except (ValueError, TypeError):
+                        pass
+                if gztime:
+                    estimate_time = gztime
 
             if pz:
                 one_month_rate = pz.get('one_month_rate', 0)
@@ -1384,15 +1424,16 @@ class DataFetcher:
                 pz_nav = pz.get('unit_net_value', 0)
 
                 if fsrq and pz_fsrq > fsrq:
-                    # pingzhongdata比估值接口更新，净值已确认
-                    # daily_change_rate用最新条目的equityReturn（对应pz_fsrq日期）
                     if pz_daily != 0:
                         daily_change_rate = pz_daily
-                        # 只有当确认了实际涨跌幅后，才清除估算涨跌幅
-                        estimate_change_rate = 0
                     fsrq = pz_fsrq
                     if pz_nav:
                         unit_net_value = pz_nav
+                    estimate_date = estimate_time.split(' ')[0] if estimate_time and ' ' in estimate_time else estimate_time
+                    if estimate_date and estimate_date <= pz_fsrq:
+                        estimate_change_rate = 0
+                        estimate_net_value = None
+                        estimate_time = ''
                 else:
                     if pz_daily != 0:
                         daily_change_rate = pz_daily
@@ -1409,6 +1450,8 @@ class DataFetcher:
                     'one_year_rate': one_year_rate,
                     'daily_change_rate': daily_change_rate,
                     'estimate_change_rate': estimate_change_rate,
+                    'estimate_net_value': estimate_net_value,
+                    'estimate_time': estimate_time,
                     'fsrq': fsrq,
                     'unit_net_value': unit_net_value
                 }
@@ -1568,7 +1611,7 @@ class DataFetcher:
                 }
 
                 try:
-                    response = requests.get(url, headers=headers, timeout=10)
+                    response = requests.get(url, headers=headers, timeout=15, verify=False)
                     response.raise_for_status()  # 检查HTTP错误
                     data = response.json()
 

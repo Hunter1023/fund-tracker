@@ -48,6 +48,9 @@ services:
       - fund-network
     ports:
       - "5000:5000"  # 暴露后端API端口，便于本地访问
+    dns:
+      - 114.114.114.114
+      - 8.8.8.8
     depends_on:
       postgres:
         condition: service_healthy
