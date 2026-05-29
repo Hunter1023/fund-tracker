@@ -687,7 +687,12 @@ def _merge_fund_data(cached_dict, fresh_data):
 
         for key, new_value in fresh.items():
             old_value = cached.get(key)
-            if key in ('one_month_rate', 'three_month_rate', 'one_year_rate', 'daily_change_rate', 'estimate_change_rate'):
+            if key == 'estimate_change_rate':
+                if (new_value == '-' or new_value is None) and old_value and old_value != '-':
+                    continue
+                if new_value == 0 and old_value and old_value != '-' and old_value != 0:
+                    continue
+            elif key in ('one_month_rate', 'three_month_rate', 'one_year_rate', 'daily_change_rate'):
                 if (new_value == 0 or new_value is None) and old_value and old_value != 0:
                     continue
             if key == 'fsrq':
@@ -697,12 +702,6 @@ def _merge_fund_data(cached_dict, fresh_data):
                     continue
             if key == 'unit_net_value':
                 if (new_value == 0 or new_value is None or new_value == '') and old_value and old_value != 0:
-                    continue
-            # estimate_change_rate：'-'和'0'不覆盖有效估算值，但'0'（净值已确认）也不应被旧估算值覆盖
-            if key == 'estimate_change_rate':
-                if (new_value == '-' or new_value is None) and old_value and old_value != '-':
-                    continue
-                if new_value == 0 and old_value and old_value != 0 and old_value != '-':
                     continue
             if key == 'estimate_net_value':
                 if (new_value == 0 or new_value is None or new_value == '') and old_value and old_value != 0:
@@ -855,6 +854,13 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             }
             if need_estimate_refresh or realtime_data.estimate_change_rate is None:
                 funds_to_get_estimate.append(fund_code)
+            elif is_trading_hours and realtime_data.estimate_time:
+                try:
+                    etime_date = realtime_data.estimate_time.split(' ')[0]
+                    if etime_date != now.strftime('%Y-%m-%d'):
+                        funds_to_get_estimate.append(fund_code)
+                except:
+                    pass
         else:
             funds_to_refresh.append(fund_code)
 
@@ -863,33 +869,20 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
     rates_data_dict = {}
 
     funds_always_need_estimate = funds_to_refresh if need_estimate_refresh else []
-    funds_conditional_estimate = funds_to_get_estimate if (need_estimate_refresh or any(realtime_data_map.get(fc) and realtime_data_map[fc].estimate_change_rate is None for fc in funds_to_get_estimate)) else []
+    funds_conditional_estimate = funds_to_get_estimate if (need_estimate_refresh or len(funds_to_get_estimate) > 0) else []
     all_funds_for_estimate = funds_always_need_estimate + funds_conditional_estimate
 
+    all_funds_for_rates = list(set(funds_to_refresh + funds_conditional_estimate))
+
+    all_funds_to_process = list(set(funds_to_refresh + funds_conditional_estimate))
+
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = []
-
-        if all_funds_for_estimate:
-            futures.append(executor.submit(DataFetcher.get_fund_valuation_batch, all_funds_for_estimate, cache_key))
-
-        if funds_to_refresh:
-            futures.append(executor.submit(DataFetcher.get_fund_rates_batch, funds_to_refresh, cache_key))
-
-        for future in as_completed(futures):
-            result = future.result()
-            if isinstance(result, dict):
-                if result:
-                    first_key = next(iter(result))
-                    first_value = result[first_key]
-                    if isinstance(first_value, dict) and 'estimate_net_value' in first_value:
-                        valuation_data_dict = result
-                    else:
-                        rates_data_dict = result
+    if all_funds_for_rates:
+        rates_data_dict = DataFetcher.get_fund_rates_batch(all_funds_for_rates, cache_key)
 
     funds_need_fallback = []
-    print(f"funds_to_refresh={funds_to_refresh}, valuation_data_dict keys={list(valuation_data_dict.keys())}, rates_data_dict keys={list(rates_data_dict.keys())}")
-    for fund_code in funds_to_refresh:
+    print(f"funds_to_refresh={funds_to_refresh}, funds_conditional_estimate={funds_conditional_estimate}, all_funds_for_rates={all_funds_for_rates}, rates_data_dict keys={list(rates_data_dict.keys())}")
+    for fund_code in all_funds_to_process:
         rates_data = rates_data_dict.get(fund_code)
         if not rates_data or (rates_data.get('one_month_rate') == 0 and rates_data.get('three_month_rate') == 0 and rates_data.get('one_year_rate') == 0 and rates_data.get('daily_change_rate') == 0):
             funds_need_fallback.append(fund_code)
@@ -937,7 +930,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 }
 
     # 处理数据并更新数据库
-    for fund_code in funds_to_refresh:
+    for fund_code in all_funds_to_process:
         fund = fund_map.get(fund_code)
         if not fund:
             continue
@@ -995,6 +988,8 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             estimate_net_value = None
             if fund_data and fund_data.get('estimate_net_value') is not None and fund_data.get('estimate_net_value') != '':
                 estimate_net_value = float(fund_data.get('estimate_net_value'))
+            elif rates_data and rates_data.get('estimate_net_value') is not None and rates_data.get('estimate_net_value') != '':
+                estimate_net_value = float(rates_data.get('estimate_net_value'))
 
             estimate_change_rate = None
             if fund_data and fund_data.get('estimate_change_rate') is not None and fund_data.get('estimate_change_rate') != '':
@@ -1003,6 +998,8 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             estimate_time = ''
             if fund_data:
                 estimate_time = fund_data.get('estimate_time', '')
+            if not estimate_time and rates_data:
+                estimate_time = rates_data.get('estimate_time', '')
 
             # 获取涨跌幅数据，如果API返回0值且数据库有非0缓存，保留缓存值
             one_month_rate = rates_data.get('one_month_rate', 0) if rates_data else 0
@@ -2285,7 +2282,7 @@ def _get_public_watchlist(db):
             executor.shutdown(wait=False)
         else:
             try:
-                fresh_data = future.result(timeout=8)
+                fresh_data = future.result(timeout=60)
                 if fresh_data:
                     _merge_fund_data(funds_data_dict, fresh_data)
             except concurrent.futures.TimeoutError:
@@ -2424,7 +2421,7 @@ def manage_watchlist():
                     executor.shutdown(wait=False)
                 else:
                     try:
-                        fresh_data = future.result(timeout=8)
+                        fresh_data = future.result(timeout=60)
                         if fresh_data:
                             _merge_fund_data(funds_data_dict, fresh_data)
                     except concurrent.futures.TimeoutError:
@@ -2733,7 +2730,7 @@ def manage_holding():
                     logger.info("所有基金已有缓存且数据未过期，后台异步刷新")
                 else:
                     try:
-                        fresh_data = future.result(timeout=8)
+                        fresh_data = future.result(timeout=60)
                         if fresh_data:
                             _merge_fund_data(fund_data_dict, fresh_data)
                             logger.info(f"刷新数据完成，更新了 {len(fresh_data)} 个基金")
