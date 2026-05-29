@@ -289,9 +289,11 @@ def preload_all_funds_history():
     """
     定时任务：预加载所有自选基金和持仓基金的历史净值数据到数据库
     每天执行一次，确保历史净值数据已缓存
+    返回预加载失败的基金代码列表
     """
     print(f"[{datetime.now()}] 开始预加载基金历史净值数据...")
     db = next(get_db())
+    failed_codes = []
     try:
         # 获取所有需要预加载的基金（自选基金 + 持仓基金）
         watchlist_funds = db.query(Watchlist).all()
@@ -325,7 +327,6 @@ def preload_all_funds_history():
                             if updated_at:
                                 now = datetime.now()
                                 if (now - updated_at.replace(tzinfo=None)) < timedelta(days=1):
-                                    print(f"基金 {fund_code} 的历史净值数据已是最新，跳过")
                                     continue
                     except:
                         print(f"基金 {fund_code} 的历史净值数据格式错误，需要重新加载")
@@ -335,10 +336,16 @@ def preload_all_funds_history():
 
                 new_fsrq = history_data.get('fsrq', '')
                 new_unit_net_value = history_data.get('unit_net_value', 0)
+                new_net_values = history_data.get('net_values', [])
+
+                if not new_net_values:
+                    print(f"基金 {fund_code} 获取到的历史净值为空，标记为失败")
+                    failed_codes.append(fund_code)
+                    continue
 
                 if not fund.realtime_data:
                     fund.realtime_data = FundRealtimeData(fund_id=fund.id)
-                fund.realtime_data.net_values = json.dumps(history_data.get('net_values', []))
+                fund.realtime_data.net_values = json.dumps(new_net_values)
                 fund.realtime_data.one_month_rate = history_data.get('one_month_rate', 0)
                 fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
                 fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
@@ -350,18 +357,21 @@ def preload_all_funds_history():
                 fund.realtime_data.updated_at = datetime.now()
                 db.commit()
 
-                print(f"成功预加载基金 {fund_code} 的历史净值数据")
             except Exception as e:
                 print(f"预加载基金 {fund_code} 历史净值数据失败: {e}")
                 db.rollback()
+                failed_codes.append(fund_code)
 
-        print(f"[{datetime.now()}] 基金历史净值数据预加载完成")
+        success_count = len(fund_codes) - len(failed_codes)
+        print(f"[{datetime.now()}] 基金历史净值数据预加载完成: 成功 {success_count}/{len(fund_codes)}，失败 {len(failed_codes)} 个")
     except Exception as e:
         print(f"预加载任务执行失败: {e}")
         import traceback
         traceback.print_exc()
     finally:
         db.close()
+
+    return failed_codes
 
 # 添加定时任务：每天凌晨2点预加载历史净值数据
 scheduler.add_job(preload_all_funds_history, 'cron', hour=2, minute=0, id='preload_funds_history')
@@ -609,24 +619,35 @@ print("定时任务已启动：每天凌晨1点更新基金历史净值数据")
 def start_preload_history():
     """
     应用启动时异步预加载所有基金的历史净值数据
+    失败后持续重试，直到所有基金预加载成功
     """
-    print(f"[{datetime.now()}] 应用启动，开始异步预加载基金历史净值数据...")
-    import traceback
-    try:
-        print(f"[{datetime.now()}] 调用 preload_all_funds_history...")
-        preload_all_funds_history()
-        print(f"[{datetime.now()}] 历史净值数据预加载完成")
-    except Exception as e:
-        print(f"[{datetime.now()}] 历史净值数据预加载失败: {e}")
-        traceback.print_exc()
+    max_total_retries = 5
+    for attempt in range(1, max_total_retries + 1):
+        print(f"[{datetime.now()}] 预加载第 {attempt}/{max_total_retries} 次尝试...")
+        try:
+            failed_codes = preload_all_funds_history()
+            if not failed_codes:
+                print(f"[{datetime.now()}] 历史净值数据预加载全部完成")
+                return
+            print(f"[{datetime.now()}] 预加载完成，{len(failed_codes)} 个基金失败: {failed_codes}")
+        except Exception as e:
+            print(f"[{datetime.now()}] 预加载任务执行失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+        if attempt < max_total_retries:
+            delay = 30 * attempt
+            print(f"[{datetime.now()}] 等待 {delay} 秒后重试...")
+            time.sleep(delay)
+
+    print(f"[{datetime.now()}] 预加载已达最大重试次数 {max_total_retries}，部分基金可能未加载成功")
 
 # 在后台线程中执行预加载，避免阻塞应用启动
 # 添加延迟以确保数据库表已完全创建
 def delayed_preload():
     print(f"[{datetime.now()}] 进入 delayed_preload 函数...")
-    import time
     print(f"[{datetime.now()}] 等待2秒，确保数据库表已完全创建...")
-    time.sleep(2)  # 等待2秒，确保数据库表已完全创建
+    time.sleep(2)
     print(f"[{datetime.now()}] 调用 start_preload_history...")
     start_preload_history()
 
@@ -1942,17 +1963,16 @@ def get_fund_history(fund_code):
                         data_is_fresh = True
 
                 if data_is_fresh:
-                    net_values = cached_net_values
-                return jsonify({
-                    'fund_code': fund_code,
-                    'net_values': net_values,
-                    'one_month_rate': fund.realtime_data.one_month_rate or 0,
-                    'three_month_rate': fund.realtime_data.three_month_rate or 0,
-                    'one_year_rate': fund.realtime_data.one_year_rate or 0,
-                    'daily_change_rate': fund.realtime_data.daily_change_rate or 0,
-                    'fsrq': fund.realtime_data.fsrq or '',
-                    'unit_net_value': fund.realtime_data.unit_net_value or 0
-                })
+                    return jsonify({
+                        'fund_code': fund_code,
+                        'net_values': cached_net_values,
+                        'one_month_rate': fund.realtime_data.one_month_rate or 0,
+                        'three_month_rate': fund.realtime_data.three_month_rate or 0,
+                        'one_year_rate': fund.realtime_data.one_year_rate or 0,
+                        'daily_change_rate': fund.realtime_data.daily_change_rate or 0,
+                        'fsrq': fund.realtime_data.fsrq or '',
+                        'unit_net_value': fund.realtime_data.unit_net_value or 0
+                    })
 
         history_data = DataFetcher.get_fund_history(fund_code, int(time.time()))
 
