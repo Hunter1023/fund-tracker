@@ -1012,8 +1012,9 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             rates_estimate_change_rate = rates_data.get('estimate_change_rate', 0) if rates_data else 0
             fsrq = rates_data.get('fsrq', '') if rates_data else ''
 
-            # estimate_change_rate: 当rates_data确认净值(=0)时，不用估值接口的gszzl覆盖
-            if rates_estimate_change_rate == 0:
+            # estimate_change_rate: 只有当rates_data中有确认的实际涨跌幅(daily_change_rate)时，才清除估值
+            # 如果只是estimate_change_rate为0但没有实际涨跌幅，保留估值接口的数据
+            if rates_estimate_change_rate == 0 and daily_change_rate != 0:
                 estimate_change_rate = 0
             elif estimate_change_rate is None and rates_estimate_change_rate:
                 estimate_change_rate = float(rates_estimate_change_rate)
@@ -1063,7 +1064,9 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                         continue
                 if key == 'estimate_change_rate':
                     old_ecr = getattr(realtime_data, 'estimate_change_rate', None)
-                    if old_ecr == 0 and value and value != 0:
+                    # 0值（净值已确认）不应被旧估算值覆盖，但新交易日的估值应允许写入
+                    # 只有当旧值非0且新值为0/None时才跳过
+                    if old_ecr and old_ecr != 0 and (value == 0 or value is None):
                         continue
                 if key == 'fsrq':
                     if (not value or value == '') and getattr(realtime_data, 'fsrq', None):
@@ -1113,7 +1116,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
             'net_value': data.get('fsrq', ''),
             'unit_net_value': data.get('unit_net_value', None),
             'estimate_net_value': result_estimate_net_value,
-            'estimate_change_rate': str(result_estimate_change_rate) if result_estimate_change_rate is not None and result_estimate_change_rate != 0 else '-',
+            'estimate_change_rate': str(result_estimate_change_rate) if result_estimate_change_rate is not None else '-',
             'estimate_time': result_estimate_time,
             'one_month_rate': data.get('one_month_rate', 0),
             'three_month_rate': data.get('three_month_rate', 0),
@@ -1151,12 +1154,13 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
 
                 estimate_time = fund_data.get('estimate_time', '')
 
-                # 如果rates_data已确认净值（estimate_change_rate=0），不使用估值接口的估算数据覆盖
                 current_daily = results[fund_code].get('daily_change_rate', 0)
                 current_fsrq = results[fund_code].get('fsrq', '')
                 current_estimate = results[fund_code].get('estimate_change_rate', '-')
-                rates_confirmed = (current_estimate == 0 or current_estimate == '0' or
-                                   (isinstance(current_estimate, str) and current_estimate == '-'))
+                today_str_check = now_cst_naive().strftime('%Y-%m-%d')
+                is_after_close = now_cst_naive().hour >= 15
+                rates_confirmed = (is_after_close and current_daily != 0 and
+                                   current_fsrq == today_str_check)
 
                 if rates_confirmed:
                     # 净值已确认，只更新estimate_time，不覆盖estimate_change_rate和net_value
