@@ -2266,11 +2266,22 @@ def _get_public_watchlist(db):
 
     all_cached = len(funds_data_dict) >= len(set([c.strip() for c in fund_codes if c.strip()]))
 
-    # 异步刷新数据
+    has_stale_estimate_public = False
+    now_pub = now_cst_naive()
+    today_str_pub = now_pub.strftime('%Y-%m-%d')
+    is_trading_hours_pub = now_pub.weekday() < 5 and now_pub.hour >= 9 and now_pub.hour < 15
+    if is_trading_hours_pub:
+        for fc, fd in funds_data_dict.items():
+            fd_etime = fd.get('estimate_time', '') or ''
+            fd_ecr = fd.get('estimate_change_rate', '-')
+            if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str_pub):
+                has_stale_estimate_public = True
+                break
+
     try:
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         future = executor.submit(get_fund_realtime_rates_batch, db, [c.strip() for c in fund_codes if c.strip()], False)
-        if all_cached:
+        if all_cached and not has_stale_estimate_public:
             executor.shutdown(wait=False)
         else:
             try:
@@ -2394,11 +2405,22 @@ def manage_watchlist():
 
             all_cached = len(funds_data_dict) >= len(set(watchlist_fund_codes))
 
-            # 异步刷新数据
+            has_stale_estimate = False
+            now_wl = now_cst_naive()
+            today_str_wl = now_wl.strftime('%Y-%m-%d')
+            is_trading_hours_wl = now_wl.weekday() < 5 and now_wl.hour >= 9 and now_wl.hour < 15
+            if is_trading_hours_wl:
+                for fc, fd in funds_data_dict.items():
+                    fd_etime = fd.get('estimate_time', '') or ''
+                    fd_ecr = fd.get('estimate_change_rate', '-')
+                    if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str_wl):
+                        has_stale_estimate = True
+                        break
+
             try:
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
                 future = executor.submit(get_fund_realtime_rates_batch, db, watchlist_fund_codes, False)
-                if all_cached:
+                if all_cached and not has_stale_estimate:
                     executor.shutdown(wait=False)
                 else:
                     try:
@@ -2485,10 +2507,19 @@ def manage_watchlist():
 
                 all_holding_cached = len(holding_funds_data_dict) >= len(set(holding_fund_codes))
 
+                has_stale_holding_estimate = False
+                if is_trading_hours_wl:
+                    for fc, fd in holding_funds_data_dict.items():
+                        fd_etime = fd.get('estimate_time', '') or ''
+                        fd_ecr = fd.get('estimate_change_rate', '-')
+                        if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str_wl):
+                            has_stale_holding_estimate = True
+                            break
+
                 try:
                     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
                     future = executor.submit(get_fund_realtime_rates_batch, db, holding_fund_codes, False)
-                    if all_holding_cached:
+                    if all_holding_cached and not has_stale_holding_estimate:
                         executor.shutdown(wait=False)
                     else:
                         try:
@@ -2673,24 +2704,31 @@ def manage_holding():
 
             all_cached = len(fund_data_dict) >= len(set(fund_codes))
 
-            # 检查是否有fsrq过期的缓存（需要同步等待刷新）
             has_stale_data = False
+            has_stale_estimate = False
             now_check = now_cst_naive()
             today_str = now_check.strftime('%Y-%m-%d')
             if now_check.weekday() == 0:
                 yesterday_str = (now_check - timedelta(days=3)).strftime('%Y-%m-%d')
             else:
                 yesterday_str = (now_check - timedelta(days=1)).strftime('%Y-%m-%d')
+            is_trading_hours = now_check.weekday() < 5 and now_check.hour >= 9 and now_check.hour < 15
             for fc, fd in fund_data_dict.items():
                 fd_fsrq = fd.get('fsrq', '')
                 if fd_fsrq and fd_fsrq != today_str and fd_fsrq != yesterday_str:
                     has_stale_data = True
                     break
+                if is_trading_hours:
+                    fd_etime = fd.get('estimate_time', '') or ''
+                    fd_ecr = fd.get('estimate_change_rate', '-')
+                    if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str):
+                        has_stale_estimate = True
+                        break
 
             try:
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
                 future = executor.submit(get_fund_realtime_rates_batch, db, fund_codes, False)
-                if all_cached and not has_stale_data:
+                if all_cached and not has_stale_data and not has_stale_estimate:
                     executor.shutdown(wait=False)
                     logger.info("所有基金已有缓存且数据未过期，后台异步刷新")
                 else:
