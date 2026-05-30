@@ -812,8 +812,32 @@ class DataFetcher:
                         except (ValueError, TypeError) as e:
                             print(f"字段 {field} 转换失败: {e}")
 
-            # 如果fundmobapi成功获取到有效数据，直接返回
             if one_month_rate != 0 or three_month_rate != 0 or one_year_rate != 0 or daily_change_rate != 0 or unit_net_value != 0:
+                from datetime import datetime as _chk_dt
+                today_str = _chk_dt.now().strftime('%Y-%m-%d')
+                if fsrq and fsrq != today_str:
+                    try:
+                        import re as _chk_re
+                        _chk_url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v={int(time.time())}"
+                        _chk_resp = requests.get(_chk_url, headers=headers, timeout=5)
+                        _chk_resp.encoding = 'utf-8'
+                        _chk_m = _chk_re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', _chk_resp.text, _chk_re.DOTALL)
+                        if _chk_m:
+                            _chk_data = json.loads(_chk_m.group(1))
+                            if _chk_data:
+                                _chk_last = _chk_data[-1]
+                                _chk_latest_date = _chk_dt.fromtimestamp(_chk_last['x'] / 1000).strftime('%Y-%m-%d')
+                                if _chk_latest_date > fsrq:
+                                    _chk_nav = _chk_last.get('y', 0)
+                                    _chk_change = float(_chk_last.get('equityReturn', 0) or 0)
+                                    print(f"基金 {fund_code} fundmobapi FSRQ={fsrq}，pingzhongdata有更新日期{_chk_latest_date}，更新fsrq/净值/日涨幅")
+                                    fsrq = _chk_latest_date
+                                    if _chk_nav > 0:
+                                        unit_net_value = _chk_nav
+                                    if _chk_change != 0:
+                                        daily_change_rate = _chk_change
+                    except Exception as _chk_e:
+                        print(f"基金 {fund_code} pingzhongdata日期校验失败: {_chk_e}")
                 print(f"基金 {fund_code} fundmobapi获取成功: 1m={one_month_rate}, 3m={three_month_rate}, 1y={one_year_rate}, daily={daily_change_rate}, fsrq={fsrq}")
                 return {
                     'fund_code': fund_code,
@@ -1065,10 +1089,31 @@ class DataFetcher:
                 except (ValueError, TypeError):
                     latest_lsjz_nav = 0
 
-                # 如果fsrq为空，从历史净值数据中获取最新日期
                 if not fsrq and latest_lsjz_date:
                     fsrq = latest_lsjz_date
                     print(f"基金 {fund_code} get_fund_rates未返回日期，使用LSJZList最新日期: {fsrq}")
+                elif fsrq and latest_lsjz_date and latest_lsjz_date > fsrq:
+                    print(f"基金 {fund_code} 历史净值最新日期({latest_lsjz_date})比fsrq({fsrq})更新，使用历史净值数据更新fsrq和对应数据")
+                    fsrq = latest_lsjz_date
+                    if latest_lsjz_nav > 0:
+                        unit_net_value = latest_lsjz_nav
+                    latest_lsjz_change = latest_lsjz.get('change_rate', '0')
+                    if latest_lsjz_change and str(latest_lsjz_change) != '0':
+                        try:
+                            change_val = float(latest_lsjz_change)
+                            if change_val != 0:
+                                daily_change_rate = change_val
+                                print(f"基金 {fund_code} 使用历史净值日涨跌幅: {daily_change_rate}")
+                        except (ValueError, TypeError):
+                            pass
+                    if daily_change_rate == 0 and len(net_values) >= 2:
+                        try:
+                            prev_lsjz_nav = float(net_values[1].get('unit_net_value', 0))
+                            if prev_lsjz_nav > 0 and latest_lsjz_nav > 0:
+                                daily_change_rate = round((latest_lsjz_nav - prev_lsjz_nav) / prev_lsjz_nav * 100, 2)
+                                print(f"基金 {fund_code} 根据前后净值计算日涨跌幅: {daily_change_rate}")
+                        except (ValueError, TypeError):
+                            pass
 
                 if unit_net_value == 0 and latest_lsjz_nav > 0:
                     unit_net_value = latest_lsjz_nav
