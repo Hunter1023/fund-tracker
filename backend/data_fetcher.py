@@ -1161,6 +1161,44 @@ class DataFetcher:
                                 })
                                 print(f"基金 {fund_code} 补充估值接口确认净值: date={gz_jzrq}, nav={gz_dwjz}")
 
+                        # 如果net_values最新日期仍落后于fsrq，用pingzhongdata补充所有缺失天数
+                        net_values_latest_date = net_values[0].get('date', '') if net_values else ''
+                        if fsrq and net_values_latest_date and fsrq > net_values_latest_date:
+                            try:
+                                import re as _pz_re
+                                from datetime import datetime as _pz_dt
+                                pz_sup_url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v={int(time.time())}"
+                                pz_sup_headers = {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                    'Referer': f'http://fundf10.eastmoney.com/jjjz_{fund_code}.html'
+                                }
+                                pz_sup_resp = requests.get(pz_sup_url, headers=pz_sup_headers, timeout=10)
+                                pz_sup_m = _pz_re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', pz_sup_resp.text, _pz_re.DOTALL)
+                                if pz_sup_m:
+                                    pz_sup_data = json.loads(pz_sup_m.group(1))
+                                    existing_dates = {nv.get('date') for nv in net_values}
+                                    supplement_items = []
+                                    for item in pz_sup_data:
+                                        item_date = _pz_dt.fromtimestamp(item['x'] / 1000).strftime('%Y-%m-%d')
+                                        if item_date > net_values_latest_date and item_date not in existing_dates:
+                                            supplement_items.append({
+                                                'date': item_date,
+                                                'unit_net_value': str(item.get('y', 0)),
+                                                'cumulative_net_value': '',
+                                                'change_rate': str(item.get('equityReturn', 0) or 0)
+                                            })
+                                            existing_dates.add(item_date)
+                                    if supplement_items:
+                                        supplement_items.sort(key=lambda x: x['date'], reverse=True)
+                                        net_values = supplement_items + net_values
+                                        print(f"基金 {fund_code} pingzhongdata补充 {len(supplement_items)} 天缺失净值: {[it['date'] for it in supplement_items]}")
+                                    else:
+                                        print(f"基金 {fund_code} pingzhongdata无额外缺失天数需要补充")
+                                else:
+                                    print(f"基金 {fund_code} pingzhongdata补充数据时未找到Data_netWorthTrend")
+                            except Exception as _pz_e:
+                                print(f"基金 {fund_code} pingzhongdata补充缺失净值失败: {_pz_e}")
+
                         # 交叉验证fsrq
                         if gz_date and fsrq and gz_date > fsrq:
                             if gz_dwjz_val > 0 and unit_net_value > 0 and abs(gz_dwjz_val - unit_net_value) > 0.0001:
