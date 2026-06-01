@@ -1153,17 +1153,32 @@ class DataFetcher:
                         if gz_jzrq and net_values_latest_date and gz_jzrq > net_values_latest_date and gz_dwjz_val > 0:
                             existing_dates = {nv.get('date') for nv in net_values}
                             if gz_jzrq not in existing_dates:
-                                net_values.insert(0, {
-                                    'date': gz_jzrq,
-                                    'unit_net_value': gz_dwjz,
-                                    'cumulative_net_value': '',
-                                    'change_rate': str(daily_change_rate) if daily_change_rate else '0'
-                                })
-                                print(f"基金 {fund_code} 补充估值接口确认净值: date={gz_jzrq}, nav={gz_dwjz}")
+                                from datetime import datetime as _gz_dt
+                                try:
+                                    gz_jzrq_dt = _gz_dt.strptime(gz_jzrq, '%Y-%m-%d')
+                                    is_gz_weekend = gz_jzrq_dt.weekday() >= 5
+                                except ValueError:
+                                    is_gz_weekend = False
+                                if not is_gz_weekend:
+                                    net_values.insert(0, {
+                                        'date': gz_jzrq,
+                                        'unit_net_value': gz_dwjz,
+                                        'cumulative_net_value': '',
+                                        'change_rate': str(daily_change_rate) if daily_change_rate else '0'
+                                    })
+                                    print(f"基金 {fund_code} 补充估值接口确认净值: date={gz_jzrq}, nav={gz_dwjz}")
+                                else:
+                                    print(f"基金 {fund_code} 估值接口确认净值日期{gz_jzrq}是周末，跳过补充")
 
-                        # 如果net_values最新日期仍落后于fsrq，用pingzhongdata补充所有缺失天数
+                        # 用估值接口日期确定目标最新日期（fsrq此时可能还未被交叉验证更新）
+                        target_latest_date = max(
+                            filter(None, [fsrq, gz_jzrq, gz_date]),
+                            default=''
+                        )
                         net_values_latest_date = net_values[0].get('date', '') if net_values else ''
-                        if fsrq and net_values_latest_date and fsrq > net_values_latest_date:
+
+                        # 如果net_values最新日期仍落后于目标日期，用pingzhongdata补充所有缺失天数
+                        if target_latest_date and net_values_latest_date and target_latest_date > net_values_latest_date:
                             try:
                                 import re as _pz_re
                                 from datetime import datetime as _pz_dt
@@ -1180,6 +1195,9 @@ class DataFetcher:
                                     supplement_items = []
                                     for item in pz_sup_data:
                                         item_date = _pz_dt.fromtimestamp(item['x'] / 1000).strftime('%Y-%m-%d')
+                                        item_dt = _pz_dt.fromtimestamp(item['x'] / 1000)
+                                        if item_dt.weekday() >= 5:
+                                            continue
                                         if item_date > net_values_latest_date and item_date not in existing_dates:
                                             supplement_items.append({
                                                 'date': item_date,
