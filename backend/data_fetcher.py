@@ -1122,7 +1122,7 @@ class DataFetcher:
                     print(f"基金 {fund_code} 净值数据不一致(API: {unit_net_value}, LSJZList: {latest_lsjz_nav}, 日期: {fsrq})，使用LSJZList数据")
                     unit_net_value = latest_lsjz_nav
 
-            # 用估值接口交叉验证fsrq，解决CDN缓存导致日期偏旧的问题
+            # 用估值接口交叉验证fsrq，并补充K线接口缺失的最新净值数据
             try:
                 gz_url = f"http://fundgz.1234567.com.cn/js/{fund_code}.js"
                 gz_headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://fund.eastmoney.com/'}
@@ -1132,33 +1132,80 @@ class DataFetcher:
                     gz_match = _re2.search(r'jsonpgz\((.+)\);?', gz_response.text)
                     if gz_match:
                         gz_data = json.loads(gz_match.group(1))
-                        gz_jzrq = gz_data.get('jzrq', '')  # 净值日期
-                        gz_dwjz = gz_data.get('dwjz', '')   # 单位净值
-                        gz_gsz = gz_data.get('gsz', '')      # 估算净值
-                        gz_gszzl = gz_data.get('gszzl', '')  # 估算涨跌幅
-                        gz_gztime = gz_data.get('gztime', '') # 估值时间
+                        gz_jzrq = gz_data.get('jzrq', '')
+                        gz_dwjz = gz_data.get('dwjz', '')
+                        gz_gsz = gz_data.get('gsz', '')
+                        gz_gszzl = gz_data.get('gszzl', '')
+                        gz_gztime = gz_data.get('gztime', '')
 
-                        # 用估值接口交叉验证fsrq，解决pingzhongdata日期偏移的问题
-                        # 估值接口: jzrq=上一个确认净值日期, dwjz=该日单位净值, gztime=估值时间
-                        # pingzhongdata的Data_netWorthTrend时间戳有时偏早1天
-                        # 验证逻辑: 如果估值接口的dwjz与pingzhongdata最新净值不一致，
-                        # 说明pingzhongdata已包含更新一天的确认净值（日期标错了），需要修正
                         gz_date = gz_gztime.split(' ')[0] if gz_gztime else ''
-                        if gz_date and fsrq and gz_date > fsrq:
-                            # gz_date比fsrq新，但需要确认pingzhongdata确实已包含新净值
-                            # 比较估值接口的dwjz（已确认净值）与pingzhongdata最新净值
-                            try:
-                                gz_dwjz_val = float(gz_dwjz) if gz_dwjz else 0
-                            except (ValueError, TypeError):
-                                gz_dwjz_val = 0
+                        try:
+                            gz_dwjz_val = float(gz_dwjz) if gz_dwjz else 0
+                        except (ValueError, TypeError):
+                            gz_dwjz_val = 0
 
+                        # 获取net_values中已有的最新日期
+                        net_values_latest_date = ''
+                        if net_values:
+                            net_values_latest_date = net_values[0].get('date', '')
+
+                        # 如果估值接口的确认净值日期比net_values最新日期更新，补充缺失数据
+                        if gz_jzrq and net_values_latest_date and gz_jzrq > net_values_latest_date and gz_dwjz_val > 0:
+                            existing_dates = {nv.get('date') for nv in net_values}
+                            if gz_jzrq not in existing_dates:
+                                net_values.insert(0, {
+                                    'date': gz_jzrq,
+                                    'unit_net_value': gz_dwjz,
+                                    'cumulative_net_value': '',
+                                    'change_rate': str(daily_change_rate) if daily_change_rate else '0'
+                                })
+                                print(f"基金 {fund_code} 补充估值接口确认净值: date={gz_jzrq}, nav={gz_dwjz}")
+
+                        # 如果net_values最新日期仍落后于fsrq，用pingzhongdata补充所有缺失天数
+                        net_values_latest_date = net_values[0].get('date', '') if net_values else ''
+                        if fsrq and net_values_latest_date and fsrq > net_values_latest_date:
+                            try:
+                                import re as _pz_re
+                                from datetime import datetime as _pz_dt
+                                pz_sup_url = f"http://fund.eastmoney.com/pingzhongdata/{fund_code}.js?v={int(time.time())}"
+                                pz_sup_headers = {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                    'Referer': f'http://fundf10.eastmoney.com/jjjz_{fund_code}.html'
+                                }
+                                pz_sup_resp = requests.get(pz_sup_url, headers=pz_sup_headers, timeout=10)
+                                pz_sup_m = _pz_re.search(r'var\s+Data_netWorthTrend\s*=\s*(\[.*?\]);', pz_sup_resp.text, _pz_re.DOTALL)
+                                if pz_sup_m:
+                                    pz_sup_data = json.loads(pz_sup_m.group(1))
+                                    existing_dates = {nv.get('date') for nv in net_values}
+                                    supplement_items = []
+                                    for item in pz_sup_data:
+                                        item_date = _pz_dt.fromtimestamp(item['x'] / 1000).strftime('%Y-%m-%d')
+                                        if item_date > net_values_latest_date and item_date not in existing_dates:
+                                            supplement_items.append({
+                                                'date': item_date,
+                                                'unit_net_value': str(item.get('y', 0)),
+                                                'cumulative_net_value': '',
+                                                'change_rate': str(item.get('equityReturn', 0) or 0)
+                                            })
+                                            existing_dates.add(item_date)
+                                    if supplement_items:
+                                        supplement_items.sort(key=lambda x: x['date'], reverse=True)
+                                        net_values = supplement_items + net_values
+                                        print(f"基金 {fund_code} pingzhongdata补充 {len(supplement_items)} 天缺失净值: {[it['date'] for it in supplement_items]}")
+                                    else:
+                                        print(f"基金 {fund_code} pingzhongdata无额外缺失天数需要补充")
+                                else:
+                                    print(f"基金 {fund_code} pingzhongdata补充数据时未找到Data_netWorthTrend")
+                            except Exception as _pz_e:
+                                print(f"基金 {fund_code} pingzhongdata补充缺失净值失败: {_pz_e}")
+
+                        # 交叉验证fsrq
+                        if gz_date and fsrq and gz_date > fsrq:
                             if gz_dwjz_val > 0 and unit_net_value > 0 and abs(gz_dwjz_val - unit_net_value) > 0.0001:
-                                # 净值不一致，说明pingzhongdata的最新数据是gz_date那天的确认净值
-                                print(f"基金 {fund_code} 估值接口已确认净值({gz_dwjz_val})与pingzhongdata最新净值({unit_net_value})不一致，pingzhongdata日期偏移，修正fsrq为{gz_date}")
+                                print(f"基金 {fund_code} 估值接口已确认净值({gz_dwjz_val})与最新净值({unit_net_value})不一致，修正fsrq为{gz_date}")
                                 fsrq = gz_date
                             else:
-                                # 净值一致，说明pingzhongdata最新数据就是jzrq那天的，日期没有偏移
-                                print(f"基金 {fund_code} 估值接口已确认净值({gz_dwjz_val})与pingzhongdata最新净值({unit_net_value})一致，fsrq保持{fsrq}")
+                                print(f"基金 {fund_code} 估值接口已确认净值({gz_dwjz_val})与最新净值({unit_net_value})一致，fsrq保持{fsrq}")
                         elif gz_jzrq and fsrq and gz_jzrq > fsrq:
                             print(f"基金 {fund_code} 估值接口净值日期({gz_jzrq})比fsrq({fsrq})更新，使用估值接口日期")
                             fsrq = gz_jzrq
