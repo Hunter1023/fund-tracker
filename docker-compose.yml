@@ -68,11 +68,22 @@ services:
 
   # Cloudflare Tunnel服务
   cloudflared:
-    image: cloudflare/cloudflared:2024.12.1
+    image: cloudflare/cloudflared:2026.5.2
     restart: always
     networks:
       - fund-network
-    command: tunnel run --url http://frontend:80 --token ${TUNNEL_TOKEN}
+    command: tunnel run --url http://frontend:80 --token ${TUNNEL_TOKEN} --protocol http2
+    environment:
+      # 禁用自动更新检查
+      - TUNNEL_NO_AUTOUPDATE=true
+    dns:
+      - 114.114.114.114
+      - 8.8.8.8
+    healthcheck:
+      test: ["CMD", "cloudflared", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 # 自定义网络，保证前后端互通
 networks:
