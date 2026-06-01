@@ -1950,24 +1950,23 @@ def get_fund_history(fund_code):
 
                 data_is_fresh = False
                 if updated_at and (now - updated_at.replace(tzinfo=None)) < timedelta(hours=6):
-                    if fsrq:
+                    # 检查net_values最新日期是否与fsrq一致
+                    cached_latest_date = cached_net_values[0].get('date', '') if cached_net_values else ''
+                    if fsrq and cached_latest_date == fsrq:
                         today_str = now.strftime('%Y-%m-%d')
-                        # 根据当前星期几计算期望的净值日期
-                        if now.weekday() == 0:  # 周一
-                            # 周一应该有周五的数据，如果是周一凌晨可能还没有周一数据
+                        if now.weekday() == 0:
                             expected_dates = [today_str, (now - timedelta(days=3)).strftime('%Y-%m-%d')]
-                        elif now.hour < 18 and is_weekday:  # 工作日18点前
-                            # 可能还没有当天数据，期望是昨天的数据
+                        elif now.hour < 18 and is_weekday:
                             expected_dates = [(now - timedelta(days=1)).strftime('%Y-%m-%d'), today_str]
                         else:
-                            # 工作日18点后或周末，期望是今天或昨天的数据
                             expected_dates = [today_str, (now - timedelta(days=1)).strftime('%Y-%m-%d')]
 
                         if fsrq in expected_dates:
                             data_is_fresh = True
-                    else:
-                        # 没有fsrq，需要重新获取
+                    elif not fsrq:
                         data_is_fresh = False
+                    else:
+                        print(f"[DEBUG] 基金 {fund_code} net_values最新日期({cached_latest_date})与fsrq({fsrq})不一致，需要重新获取")
 
                 if data_is_fresh:
                     return jsonify({
