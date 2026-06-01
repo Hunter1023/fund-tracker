@@ -80,6 +80,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def _sanitize_fsrq(fsrq_value, fund_code=''):
+    if not fsrq_value:
+        return fsrq_value
+    try:
+        fsrq_dt = datetime.strptime(str(fsrq_value), '%Y-%m-%d')
+        if fsrq_dt.weekday() >= 5:
+            print(f"[WARN] 基金 {fund_code} fsrq={fsrq_value}是周末，回退为空")
+            return ''
+        return fsrq_value
+    except ValueError:
+        return fsrq_value
+
 # 数据库操作重试装饰器
 def retry_db_operation(max_retries=3, base_delay=0.1):
     """
@@ -351,7 +363,7 @@ def preload_all_funds_history():
                 fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
                 fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
 
-                fund.realtime_data.fsrq = new_fsrq
+                fund.realtime_data.fsrq = _sanitize_fsrq(new_fsrq, fund_code)
                 fund.realtime_data.unit_net_value = new_unit_net_value
 
                 fund.realtime_data.updated_at = datetime.now()
@@ -504,7 +516,7 @@ def update_holding_profit():
                         fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
                         fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
                         fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
-                        fund.realtime_data.fsrq = history_data.get('fsrq', '')
+                        fund.realtime_data.fsrq = _sanitize_fsrq(history_data.get('fsrq', ''), fund_code)
                         fund.realtime_data.unit_net_value = float(unit_net_value)
                         fund.realtime_data.updated_at = datetime.now()
                 db.flush()
@@ -585,7 +597,7 @@ def update_all_funds_history():
                     realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
                     realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
                     realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
-                    realtime_data.fsrq = history_data.get('fsrq', '')
+                    realtime_data.fsrq = _sanitize_fsrq(history_data.get('fsrq', ''), fund_code)
                     realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
                     realtime_data.updated_at = datetime.now()  # 关键：更新 updated_at 字段
                     db.flush()
@@ -1089,6 +1101,15 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 if key == 'fsrq':
                     if (not value or value == '') and getattr(realtime_data, 'fsrq', None):
                         continue
+                    # 如果fsrq是周末，数据一定有问题，跳过不写入
+                    if value:
+                        try:
+                            fsrq_dt = datetime.strptime(str(value), '%Y-%m-%d')
+                            if fsrq_dt.weekday() >= 5:
+                                print(f"[WARN] 基金 {fund_code} fsrq={value}是周末，跳过写入数据库")
+                                continue
+                        except ValueError:
+                            pass
                     existing_fsrq = getattr(realtime_data, 'fsrq', None)
                     if value and existing_fsrq and value < existing_fsrq:
                         continue
@@ -1110,7 +1131,7 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 three_month_rate=data['three_month_rate'],
                 one_year_rate=data['one_year_rate'],
                 daily_change_rate=data['daily_change_rate'],
-                fsrq=data['fsrq'],
+                fsrq=_sanitize_fsrq(data['fsrq'], fund_code),
                 net_values=data['net_values']
             )
             db.add(realtime_data)
@@ -1331,7 +1352,7 @@ def get_fund_realtime_rates(db: Session, fund_code: str, force_refresh=False):
                             three_month_rate=data['three_month_rate'],
                             one_year_rate=data['one_year_rate'],
                             daily_change_rate=data['daily_change_rate'],
-                            fsrq=data['fsrq'],
+                            fsrq=_sanitize_fsrq(data['fsrq'], fund_code),
                             net_values=data['net_values']
                         )
                         db.add(new_realtime_data)
@@ -1570,7 +1591,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                         three_month_rate=data['three_month_rate'],
                         one_year_rate=data['one_year_rate'],
                         daily_change_rate=data['daily_change_rate'],
-                        fsrq=data['fsrq'],
+                        fsrq=_sanitize_fsrq(data['fsrq'], fund_code),
                         net_values=data['net_values']
                     )
                     db.add(realtime_data)
@@ -1642,7 +1663,7 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
                             three_month_rate=data['three_month_rate'],
                             one_year_rate=data['one_year_rate'],
                             daily_change_rate=data['daily_change_rate'],
-                            fsrq=data['fsrq'],
+                            fsrq=_sanitize_fsrq(data['fsrq'], fund_code),
                             net_values=data['net_values']
                         )
                         db.add(realtime_data)
@@ -1892,7 +1913,7 @@ def get_fund_detail(fund_code):
                             continue
                         setattr(fund.realtime_data, field, new_val)
                     if new_fsrq:
-                        fund.realtime_data.fsrq = new_fsrq
+                        fund.realtime_data.fsrq = _sanitize_fsrq(new_fsrq, fund_code)
                     if fund_data:
                         est_rate = fund_data.get('estimate_change_rate')
                         # estimate_change_rate 是 double 类型，不能存入 '-' 字符串
@@ -2034,7 +2055,7 @@ def get_fund_history(fund_code):
                 fund.realtime_data.three_month_rate = history_data.get('three_month_rate', 0)
                 fund.realtime_data.one_year_rate = history_data.get('one_year_rate', 0)
                 fund.realtime_data.daily_change_rate = history_data.get('daily_change_rate', 0)
-                fund.realtime_data.fsrq = history_data.get('fsrq', '')
+                fund.realtime_data.fsrq = _sanitize_fsrq(history_data.get('fsrq', ''), fund_code)
                 fund.realtime_data.unit_net_value = history_data.get('unit_net_value', 0)
 
             fund.realtime_data.updated_at = datetime.now()
@@ -2169,7 +2190,7 @@ def get_fund_complete_info(fund_code):
                     setattr(fund.realtime_data, field, new_val)
 
                 if new_fsrq:
-                    fund.realtime_data.fsrq = new_fsrq
+                    fund.realtime_data.fsrq = _sanitize_fsrq(new_fsrq, fund_code)
                 # 更新估值数据
                 if estimate_data:
                     fund.realtime_data.estimate_change_rate = float(estimate_data.get('estimate_change_rate')) if estimate_data.get('estimate_change_rate') else None
