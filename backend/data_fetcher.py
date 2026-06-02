@@ -7,7 +7,13 @@ from config import DATA_SOURCES
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 import threading
 import urllib3
+from datetime import timezone, timedelta as _timedelta
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+_CST = timezone(_timedelta(hours=8))
+
+def _cst_fromtimestamp(ts):
+    return datetime.fromtimestamp(ts, tz=_CST).replace(tzinfo=None)
 
 def retry_on_failure(max_retries=3, delay=1, backoff=2, exceptions=(requests.RequestException, requests.Timeout, ConnectionError, json.JSONDecodeError)):
     """
@@ -361,7 +367,7 @@ class DataFetcher:
                         from datetime import datetime as _dt
                         sorted_data = sorted(net_worth_data, key=lambda x: x['x'], reverse=True)
                         last = sorted_data[0]
-                        pz_fsrq = _dt.fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
+                        pz_fsrq = _cst_fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
                         pz_equity_return = float(last.get('equityReturn', 0) or 0)
 
                         if fsrq and pz_fsrq > fsrq:
@@ -570,7 +576,7 @@ class DataFetcher:
                             if net_worth_data:
                                 last = net_worth_data[-1]
                                 from datetime import datetime as _dt
-                                fsrq = _dt.fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
+                                fsrq = _cst_fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
                                 unit_net_value = last.get('y', 0)
                                 daily_change_rate = float(last.get('equityReturn', 0) or 0)
                                 print(f"pingzhongdata提取基金 {fund_code} 净值: {unit_net_value}, 日增长率: {daily_change_rate}, 日期: {fsrq}")
@@ -826,7 +832,7 @@ class DataFetcher:
                             _chk_data = json.loads(_chk_m.group(1))
                             if _chk_data:
                                 _chk_last = _chk_data[-1]
-                                _chk_latest_date = _chk_dt.fromtimestamp(_chk_last['x'] / 1000).strftime('%Y-%m-%d')
+                                _chk_latest_date = _cst_fromtimestamp(_chk_last['x'] / 1000).strftime('%Y-%m-%d')
                                 if _chk_latest_date > fsrq:
                                     _chk_nav = _chk_last.get('y', 0)
                                     _chk_change = float(_chk_last.get('equityReturn', 0) or 0)
@@ -891,7 +897,7 @@ class DataFetcher:
                     if net_worth_data:
                         last = net_worth_data[-1]
                         from datetime import datetime as _dt
-                        fsrq = _dt.fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
+                        fsrq = _cst_fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
                         unit_net_value = last.get('y', 0)
                         daily_change_rate = float(last.get('equityReturn', 0) or 0)
                         print(f"pingzhongdata提取基金 {fund_code}: fsrq={fsrq}, 净值={unit_net_value}, 日涨幅={daily_change_rate}")
@@ -1029,7 +1035,7 @@ class DataFetcher:
                             # 按时间戳倒序排列，最新的在前面
                             net_worth_data.sort(key=lambda x: x['x'], reverse=True)
                             for item in net_worth_data:
-                                date_str = _dt.fromtimestamp(item['x'] / 1000).strftime('%Y-%m-%d')
+                                date_str = _cst_fromtimestamp(item['x'] / 1000).strftime('%Y-%m-%d')
                                 net_values.append({
                                     'date': date_str,
                                     'unit_net_value': str(item.get('y', 0)),
@@ -1194,8 +1200,8 @@ class DataFetcher:
                                     existing_dates = {nv.get('date') for nv in net_values}
                                     supplement_items = []
                                     for item in pz_sup_data:
-                                        item_date = _pz_dt.fromtimestamp(item['x'] / 1000).strftime('%Y-%m-%d')
-                                        item_dt = _pz_dt.fromtimestamp(item['x'] / 1000)
+                                        item_date = _cst_fromtimestamp(item['x'] / 1000).strftime('%Y-%m-%d')
+                                        item_dt = _cst_fromtimestamp(item['x'] / 1000)
                                         if item_dt.weekday() >= 5:
                                             continue
                                         if item_date > net_values_latest_date and item_date not in existing_dates:
@@ -1445,7 +1451,7 @@ class DataFetcher:
                             from datetime import datetime as _dt
                             sorted_data = sorted(net_worth_data, key=lambda x: x['x'], reverse=True)
                             last = sorted_data[0]
-                            pz_fsrq = _dt.fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
+                            pz_fsrq = _cst_fromtimestamp(last['x'] / 1000).strftime('%Y-%m-%d')
                             pz_equity_return = float(last.get('equityReturn', 0) or 0)
                             if pz_equity_return != 0:
                                 daily_change_rate = pz_equity_return
