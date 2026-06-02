@@ -1836,10 +1836,13 @@ def get_fund_detail(fund_code):
                 now = now_cst_naive()
                 today_str = now.strftime('%Y-%m-%d')
 
-                # 如果fsrq是当日，说明数据是最新的，使用缓存
                 if fsrq == today_str:
-                    use_cache = True
-                    print(f"基金 {fund_code} 使用数据库缓存数据，fsrq={fsrq}")
+                    nvd = fund.realtime_data.net_value_date or ''
+                    if nvd and nvd != fsrq:
+                        print(f"基金 {fund_code} net_value_date({nvd})与fsrq({fsrq})不一致，不使用缓存")
+                    else:
+                        use_cache = True
+                        print(f"基金 {fund_code} 使用数据库缓存数据，fsrq={fsrq}")
 
         if use_cache:
             # 使用数据库缓存的数据
@@ -1896,6 +1899,13 @@ def get_fund_detail(fund_code):
                 fund_data['daily_change_rate'] = history_data.get('daily_change_rate', 0)
                 fund_data['fsrq'] = history_data.get('fsrq', '')
 
+                hist_fsrq = history_data.get('fsrq', '')
+                hist_nav = history_data.get('unit_net_value', 0)
+                val_net_value = fund_data.get('net_value', '')
+                if hist_fsrq and hist_nav and hist_fsrq > val_net_value:
+                    fund_data['unit_net_value'] = hist_nav
+                    fund_data['net_value'] = hist_fsrq
+
                 # 更新数据库缓存（0值/空值不覆盖非0值，旧日期不覆盖新日期）
                 if fund:
                     if not fund.realtime_data:
@@ -1914,6 +1924,7 @@ def get_fund_detail(fund_code):
                         setattr(fund.realtime_data, field, new_val)
                     if new_fsrq:
                         fund.realtime_data.fsrq = _sanitize_fsrq(new_fsrq, fund_code)
+                        fund.realtime_data.net_value_date = new_fsrq
                     if fund_data:
                         est_rate = fund_data.get('estimate_change_rate')
                         # estimate_change_rate 是 double 类型，不能存入 '-' 字符串
