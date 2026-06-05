@@ -1084,11 +1084,12 @@ function showOperationArea(tab) {
 
 function fillSellShares(ratio) {
   if (props.holdingData && props.holdingData.shares > 0) {
-    const shares = props.holdingData.shares * ratio;
-    sellShares.value = shares.toFixed(2);
-
     if (ratio === 1) {
-      sellShares.value = props.holdingData.shares.toFixed(2);
+      // 全部减仓：发送完整精度份额，避免toFixed(2)四舍五入导致后端判断份额不足
+      sellShares.value = String(props.holdingData.shares);
+    } else {
+      const shares = props.holdingData.shares * ratio;
+      sellShares.value = shares.toFixed(2);
     }
   }
 }

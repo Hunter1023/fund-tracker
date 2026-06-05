@@ -6,7 +6,7 @@ from data_fetcher import DataFetcher
 from models import Fund, FundHolding, Transaction, Watchlist, FundRealtimeData, HoldingProfitHistory, Platform, User, create_tables, get_db
 from auth import register_auth_routes, register_user_profile_routes, get_current_user_id
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 import decimal
 import time
 import json
@@ -231,6 +231,21 @@ try:
     init_default_user()
 except Exception as e:
     print(f"初始化默认用户失败: {e}")
+
+# 迁移持仓平台名称：将''、None、'其他'统一为'默认'
+try:
+    _db = next(get_db())
+    _updated = _db.query(FundHolding).filter(
+        or_(FundHolding.platform == None, FundHolding.platform == '', FundHolding.platform == '其他')
+    ).update({FundHolding.platform: '默认'}, synchronize_session='fetch')
+    if _updated > 0:
+        _db.commit()
+        print(f"已迁移 {_updated} 条持仓的平台名称为'默认'")
+    else:
+        print("持仓平台名称无需迁移")
+    _db.close()
+except Exception as e:
+    print(f"迁移持仓平台名称失败: {e}")
 
 # 创建定时任务调度器
 scheduler = BackgroundScheduler()
@@ -2970,6 +2985,7 @@ def manage_holding():
             fund_code = data.get('fund_code')
             transaction_type = data.get('type', 'buy')
             tags = data.get('tags', '')
+            logger.info(f"POST /api/holding 请求体: fund_code={fund_code}, type={transaction_type}, platform={data.get('platform')}, shares={data.get('shares')}, current_value={data.get('current_value')}, cost={data.get('cost')}")
 
             if not fund_code:
                 return jsonify({'error': '基金代码不能为空'}), 400
@@ -2992,14 +3008,27 @@ def manage_holding():
                 platform = '默认'
             logger.info(f"收到的平台参数: {platform}")
 
+            # 平台查询条件：'默认'需要匹配None/空字符串/'其他'等无意义值
+            platform_filter = FundHolding.platform == platform
+            if platform == '默认':
+                platform_filter = or_(
+                    FundHolding.platform == '默认',
+                    FundHolding.platform == None,
+                    FundHolding.platform == '',
+                    FundHolding.platform == '其他'
+                )
+
             fund_holding = db.query(FundHolding).filter(
                 FundHolding.fund_id == fund.id,
                 FundHolding.user_id == user_id,
-                FundHolding.platform == platform
+                platform_filter
             ).first()
 
-            actual_platform = platform
-            logger.info(f"查询持仓: fund_id={fund.id}, platform={platform}, 结果: {fund_holding is not None}")
+            # 记录实际匹配到的平台名，用于后续操作
+            actual_platform = fund_holding.platform if fund_holding else platform
+            if not actual_platform:
+                actual_platform = '默认'
+            logger.info(f"查询持仓: fund_id={fund.id}, platform={platform}, 实际平台={actual_platform}, 结果: {fund_holding is not None}")
 
             # 获取当前价格（根据日期获取净值）
             current_price = None
@@ -3193,7 +3222,7 @@ def manage_holding():
                 if shares <= 0:
                     return jsonify({'error': '份额不能为空且必须大于0'}), 400
 
-                if not fund_holding or fund_holding.shares < shares - 0.01:
+                if not fund_holding or fund_holding.shares < shares - 0.1:
                     logger.error(f"持仓份额不足: 持仓份额={fund_holding.shares if fund_holding else 'None'}, 减仓份额={shares}")
                     return jsonify({'error': '持仓份额不足'}), 400
 
@@ -3207,7 +3236,7 @@ def manage_holding():
                 fund_holding.cost = fund_holding.cost * (1 - sell_ratio)
                 fund_holding.shares -= shares
                 logger.info(f"减仓后 - 剩余份额: {fund_holding.shares}, 剩余成本: {fund_holding.cost}")
-                if fund_holding.shares <= 0.01 or fund_holding.cost <= 0.01:
+                if fund_holding.shares <= 0.1 or fund_holding.cost <= 0.1:
                     # 清空持仓 - 先删除相关的收益历史记录
                     logger.info(f"清仓 - 基金代码: {fund_code}, 平台: {platform}")
                     from models import HoldingProfitHistory
@@ -3445,7 +3474,17 @@ def delete_holding(fund_code):
         if not fund:
             return jsonify({'error': '基金不存在'}), 404
 
-        fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id, FundHolding.platform == platform).first()
+        # 平台查询条件：'默认'需要匹配None/空字符串/'其他'等无意义值
+        platform_filter = FundHolding.platform == platform
+        if platform == '默认':
+            platform_filter = or_(
+                FundHolding.platform == '默认',
+                FundHolding.platform == None,
+                FundHolding.platform == '',
+                FundHolding.platform == '其他'
+            )
+
+        fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id, platform_filter).first()
         if not fund_holding:
             # 如果指定平台找不到，尝试查找该基金的任意持仓
             fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id).first()
@@ -3494,10 +3533,20 @@ def update_holding(fund_code):
         # 计算持仓成本：持仓金额 - 持有收益
         cost = current_value - profit
 
+        # 平台查询条件：'默认'需要匹配None/空字符串/'其他'等无意义值
+        platform_filter = FundHolding.platform == platform
+        if platform == '默认':
+            platform_filter = or_(
+                FundHolding.platform == '默认',
+                FundHolding.platform == None,
+                FundHolding.platform == '',
+                FundHolding.platform == '其他'
+            )
+
         fund_holding = db.query(FundHolding).filter(
             FundHolding.fund_id == fund.id,
             FundHolding.user_id == user_id,
-            FundHolding.platform == platform
+            platform_filter
         ).first()
         if not fund_holding:
             logger.warning(f"持仓不存在，基金ID: {fund.id}, 平台: {platform}")
