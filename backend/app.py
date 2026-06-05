@@ -3222,7 +3222,7 @@ def manage_holding():
                 if shares <= 0:
                     return jsonify({'error': '份额不能为空且必须大于0'}), 400
 
-                if not fund_holding or fund_holding.shares < shares - 0.01:
+                if not fund_holding or fund_holding.shares < shares - 0.1:
                     logger.error(f"持仓份额不足: 持仓份额={fund_holding.shares if fund_holding else 'None'}, 减仓份额={shares}")
                     return jsonify({'error': '持仓份额不足'}), 400
 
@@ -3236,7 +3236,7 @@ def manage_holding():
                 fund_holding.cost = fund_holding.cost * (1 - sell_ratio)
                 fund_holding.shares -= shares
                 logger.info(f"减仓后 - 剩余份额: {fund_holding.shares}, 剩余成本: {fund_holding.cost}")
-                if fund_holding.shares <= 0.01 or fund_holding.cost <= 0.01:
+                if fund_holding.shares <= 0.1 or fund_holding.cost <= 0.1:
                     # 清空持仓 - 先删除相关的收益历史记录
                     logger.info(f"清仓 - 基金代码: {fund_code}, 平台: {platform}")
                     from models import HoldingProfitHistory

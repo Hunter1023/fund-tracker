@@ -375,7 +375,7 @@ export function useHoldings() {
             profit_loss: existingHolding.profit_loss * (1 - sellRatio),
           };
 
-          if (updatedHolding.shares <= 0.01) {
+          if (updatedHolding.shares <= 0.1) {
             const index = holdings.value.findIndex(
               (h) =>
                 h.fund_code === data.fund_code &&
