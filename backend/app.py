@@ -2985,6 +2985,7 @@ def manage_holding():
             fund_code = data.get('fund_code')
             transaction_type = data.get('type', 'buy')
             tags = data.get('tags', '')
+            logger.info(f"POST /api/holding 请求体: fund_code={fund_code}, type={transaction_type}, platform={data.get('platform')}, shares={data.get('shares')}, current_value={data.get('current_value')}, cost={data.get('cost')}")
 
             if not fund_code:
                 return jsonify({'error': '基金代码不能为空'}), 400
