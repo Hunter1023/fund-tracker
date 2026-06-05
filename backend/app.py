@@ -2992,14 +2992,27 @@ def manage_holding():
                 platform = '默认'
             logger.info(f"收到的平台参数: {platform}")
 
+            # 平台查询条件：'默认'需要匹配None/空字符串/'其他'等无意义值
+            platform_filter = FundHolding.platform == platform
+            if platform == '默认':
+                platform_filter = db.or_(
+                    FundHolding.platform == '默认',
+                    FundHolding.platform == None,
+                    FundHolding.platform == '',
+                    FundHolding.platform == '其他'
+                )
+
             fund_holding = db.query(FundHolding).filter(
                 FundHolding.fund_id == fund.id,
                 FundHolding.user_id == user_id,
-                FundHolding.platform == platform
+                platform_filter
             ).first()
 
-            actual_platform = platform
-            logger.info(f"查询持仓: fund_id={fund.id}, platform={platform}, 结果: {fund_holding is not None}")
+            # 记录实际匹配到的平台名，用于后续操作
+            actual_platform = fund_holding.platform if fund_holding else platform
+            if not actual_platform:
+                actual_platform = '默认'
+            logger.info(f"查询持仓: fund_id={fund.id}, platform={platform}, 实际平台={actual_platform}, 结果: {fund_holding is not None}")
 
             # 获取当前价格（根据日期获取净值）
             current_price = None
@@ -3445,7 +3458,17 @@ def delete_holding(fund_code):
         if not fund:
             return jsonify({'error': '基金不存在'}), 404
 
-        fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id, FundHolding.platform == platform).first()
+        # 平台查询条件：'默认'需要匹配None/空字符串/'其他'等无意义值
+        platform_filter = FundHolding.platform == platform
+        if platform == '默认':
+            platform_filter = db.or_(
+                FundHolding.platform == '默认',
+                FundHolding.platform == None,
+                FundHolding.platform == '',
+                FundHolding.platform == '其他'
+            )
+
+        fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id, platform_filter).first()
         if not fund_holding:
             # 如果指定平台找不到，尝试查找该基金的任意持仓
             fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id).first()
@@ -3494,10 +3517,20 @@ def update_holding(fund_code):
         # 计算持仓成本：持仓金额 - 持有收益
         cost = current_value - profit
 
+        # 平台查询条件：'默认'需要匹配None/空字符串/'其他'等无意义值
+        platform_filter = FundHolding.platform == platform
+        if platform == '默认':
+            platform_filter = db.or_(
+                FundHolding.platform == '默认',
+                FundHolding.platform == None,
+                FundHolding.platform == '',
+                FundHolding.platform == '其他'
+            )
+
         fund_holding = db.query(FundHolding).filter(
             FundHolding.fund_id == fund.id,
             FundHolding.user_id == user_id,
-            FundHolding.platform == platform
+            platform_filter
         ).first()
         if not fund_holding:
             logger.warning(f"持仓不存在，基金ID: {fund.id}, 平台: {platform}")
