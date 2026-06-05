@@ -395,8 +395,8 @@ function handleDetailConfirm(updatedHolding) {
   if (updatedHolding) {
     updateHoldingLocally(updatedHolding);
   } else {
-    // 删除持仓后需要重新加载持仓列表
-    loadHoldings();
+    // 删除持仓后需要强制刷新持仓列表，跳过缓存
+    loadHoldings(true);
   }
 }
 
