@@ -3427,11 +3427,17 @@ def delete_holding(fund_code):
     db = next(get_db())
     try:
         user_id = get_current_user_id()
+        data = request.json or {}
+        platform = data.get('platform', '默认')
+
         fund = db.query(Fund).filter(Fund.fund_code == fund_code).first()
         if not fund:
             return jsonify({'error': '基金不存在'}), 404
 
-        fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id).first()
+        fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id, FundHolding.platform == platform).first()
+        if not fund_holding:
+            # 如果指定平台找不到，尝试查找该基金的任意持仓
+            fund_holding = db.query(FundHolding).filter(FundHolding.fund_id == fund.id, FundHolding.user_id == user_id).first()
         if not fund_holding:
             return jsonify({'error': '持仓不存在'}), 404
 

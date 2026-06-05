@@ -384,6 +384,8 @@ export function useHoldings() {
             if (index !== -1) {
               holdings.value.splice(index, 1);
             }
+            // 清仓后同步更新缓存，避免刷新页面后仍显示已清仓的持仓
+            setCachedHoldings(holdings.value);
           } else {
             updateHoldingLocally(updatedHolding);
           }
@@ -408,6 +410,10 @@ export function useHoldings() {
             platform: platform,
           };
           updateHoldingLocally(newHolding);
+        } else if (data.type === "sell") {
+          // 减仓时找不到持仓（可能已被清仓），无需发送请求到后端
+          console.warn(`减仓失败: 未找到基金 ${data.fund_code} 的持仓，可能已被清仓`);
+          return { success: false, error: '持仓不存在' };
         }
       }
     }
@@ -534,13 +540,15 @@ export function useHoldings() {
       // 使用 push 方法添加新元素，保持数组引用的稳定性
       holdings.value.push({ ...updatedHolding });
     }
+    // 同步更新缓存，确保删除/修改操作后缓存与内存数据一致
+    setCachedHoldings(holdings.value);
   }
 
   async function updateHolding(fundCode, data) {
     try {
       const response = await holdingApi.update(fundCode, data);
       if (response.data.success) {
-        await loadHoldings();
+        await loadHoldings(true);
       }
       return response.data;
     } catch (error) {
@@ -553,7 +561,7 @@ export function useHoldings() {
     try {
       const response = await holdingApi.delete(fundCode);
       if (response.data.success) {
-        await loadHoldings();
+        await loadHoldings(true);
       }
       return response.data;
     } catch (error) {
