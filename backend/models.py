@@ -141,7 +141,7 @@ class FundHolding(Base):
     current_value = Column(Float)
     profit_loss = Column(Float)
     profit_loss_rate = Column(Float)
-    platform = Column(String(50), default='其他')
+    platform = Column(String(50), default='默认')
     updated_at = Column(DateTime(timezone=False), server_default=func.now(), onupdate=func.now())
 
     fund = relationship("Fund", back_populates="holdings")

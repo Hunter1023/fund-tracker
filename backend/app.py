@@ -6,7 +6,7 @@ from data_fetcher import DataFetcher
 from models import Fund, FundHolding, Transaction, Watchlist, FundRealtimeData, HoldingProfitHistory, Platform, User, create_tables, get_db
 from auth import register_auth_routes, register_user_profile_routes, get_current_user_id
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 import decimal
 import time
 import json
@@ -231,6 +231,63 @@ try:
     init_default_user()
 except Exception as e:
     print(f"初始化默认用户失败: {e}")
+
+# 迁移持仓平台名称：将''、None、'其他'统一为'默认'
+try:
+    _db = next(get_db())
+    _updated = _db.query(FundHolding).filter(
+        or_(FundHolding.platform == None, FundHolding.platform == '', FundHolding.platform == '其他')
+    ).update({FundHolding.platform: '默认'}, synchronize_session='fetch')
+    if _updated > 0:
+        _db.commit()
+        print(f"已迁移 {_updated} 条持仓的平台名称为'默认'")
+    else:
+        print("持仓平台名称无需迁移")
+
+    # 合并同一基金同一平台的重复持仓
+    from sqlalchemy import text
+    duplicates = _db.execute(text(
+        "SELECT fund_id, platform FROM fund_holding GROUP BY fund_id, platform HAVING COUNT(*) > 1"
+    )).fetchall()
+    if duplicates:
+        merged_count = 0
+        for fund_id, platform in duplicates:
+            holdings = _db.query(FundHolding).filter(
+                FundHolding.fund_id == fund_id,
+                FundHolding.platform == platform
+            ).order_by(FundHolding.id).all()
+
+            if len(holdings) <= 1:
+                continue
+
+            # 保留第一条，合并其余到第一条
+            primary = holdings[0]
+            for h in holdings[1:]:
+                # 合并份额、成本、市值、收益
+                primary.cost = (primary.cost or 0) + (h.cost or 0)
+                primary.shares = (primary.shares or 0) + (h.shares or 0)
+                primary.current_value = (primary.current_value or 0) + (h.current_value or 0)
+                primary.profit_loss = (primary.profit_loss or 0) + (h.profit_loss or 0)
+                # 重新计算平均成本
+                if primary.shares > 0:
+                    primary.avg_cost = primary.cost / primary.shares
+                # 删除重复记录的收益历史
+                _db.query(HoldingProfitHistory).filter(HoldingProfitHistory.holding_id == h.id).delete()
+                _db.delete(h)
+                merged_count += 1
+
+            # 重新计算收益率
+            if primary.cost > 0:
+                primary.profit_loss_rate = (primary.profit_loss / primary.cost) * 100
+
+        _db.commit()
+        print(f"已合并 {merged_count} 条重复持仓记录")
+    else:
+        print("无重复持仓记录需要合并")
+
+    _db.close()
+except Exception as e:
+    print(f"迁移持仓数据失败: {e}")
 
 # 创建定时任务调度器
 scheduler = BackgroundScheduler()
@@ -2995,7 +3052,7 @@ def manage_holding():
             # 平台查询条件：'默认'需要匹配None/空字符串/'其他'等无意义值
             platform_filter = FundHolding.platform == platform
             if platform == '默认':
-                platform_filter = db.or_(
+                platform_filter = or_(
                     FundHolding.platform == '默认',
                     FundHolding.platform == None,
                     FundHolding.platform == '',
@@ -3104,29 +3161,50 @@ def manage_holding():
                     fund_holding.profit_loss_rate = profit_rate
                     fund_holding.platform = platform
                 else:
-                    # 新增持仓时，根据当前净值计算初始份额
-                    shares = current_value / unit_net_value if unit_net_value > 0 else 0
-                    avg_cost = cost / shares if shares > 0 else 0
-                    profit_rate = 0
-                    if cost > 0:
-                        profit_rate = (profit / cost) * 100
+                    # 新增持仓时，再次确认不存在同基金同平台的持仓（防止并发创建重复）
+                    existing = db.query(FundHolding).filter(
+                        FundHolding.fund_id == fund.id,
+                        FundHolding.user_id == user_id,
+                        FundHolding.platform == platform
+                    ).first()
+                    if existing:
+                        logger.warning(f"发现重复持仓，合并更新 - 基金代码: {fund_code}, 平台: {platform}")
+                        shares = current_value / unit_net_value if unit_net_value > 0 else 0
+                        avg_cost = cost / shares if shares > 0 else 0
+                        profit_rate = 0
+                        if cost > 0:
+                            profit_rate = (profit / cost) * 100
+                        existing.cost = cost
+                        existing.shares = shares
+                        existing.avg_cost = avg_cost
+                        existing.current_value = current_value
+                        existing.profit_loss = profit
+                        existing.profit_loss_rate = profit_rate
+                        fund_holding = existing
+                    else:
+                        # 根据当前净值计算初始份额
+                        shares = current_value / unit_net_value if unit_net_value > 0 else 0
+                        avg_cost = cost / shares if shares > 0 else 0
+                        profit_rate = 0
+                        if cost > 0:
+                            profit_rate = (profit / cost) * 100
 
-                    logger.info(f"添加持仓 - 基金代码: {fund_code}, 平台: {platform}")
-                    logger.info(f"输入数据: 持仓金额={current_value}, 持有收益={profit}")
-                    logger.info(f"计算数据: 净值={unit_net_value}, 份额={shares}, 成本={cost}, 平均成本={avg_cost}")
+                        logger.info(f"添加持仓 - 基金代码: {fund_code}, 平台: {platform}")
+                        logger.info(f"输入数据: 持仓金额={current_value}, 持有收益={profit}")
+                        logger.info(f"计算数据: 净值={unit_net_value}, 份额={shares}, 成本={cost}, 平均成本={avg_cost}")
 
-                    fund_holding = FundHolding(
-                        fund_id=fund.id,
-                        user_id=user_id,
-                        cost=cost,
-                        shares=shares,
-                        avg_cost=avg_cost,
-                        current_value=current_value,
-                        profit_loss=profit,
-                        profit_loss_rate=profit_rate,
-                        platform=platform
-                    )
-                    db.add(fund_holding)
+                        fund_holding = FundHolding(
+                            fund_id=fund.id,
+                            user_id=user_id,
+                            cost=cost,
+                            shares=shares,
+                            avg_cost=avg_cost,
+                            current_value=current_value,
+                            profit_loss=profit,
+                            profit_loss_rate=profit_rate,
+                            platform=platform
+                        )
+                        db.add(fund_holding)
             elif transaction_type == 'buy':
                 # 买入操作
                 cost = data.get('cost', 0)
@@ -3461,7 +3539,7 @@ def delete_holding(fund_code):
         # 平台查询条件：'默认'需要匹配None/空字符串/'其他'等无意义值
         platform_filter = FundHolding.platform == platform
         if platform == '默认':
-            platform_filter = db.or_(
+            platform_filter = or_(
                 FundHolding.platform == '默认',
                 FundHolding.platform == None,
                 FundHolding.platform == '',
@@ -3520,7 +3598,7 @@ def update_holding(fund_code):
         # 平台查询条件：'默认'需要匹配None/空字符串/'其他'等无意义值
         platform_filter = FundHolding.platform == platform
         if platform == '默认':
-            platform_filter = db.or_(
+            platform_filter = or_(
                 FundHolding.platform == '默认',
                 FundHolding.platform == None,
                 FundHolding.platform == '',
