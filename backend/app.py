@@ -3169,6 +3169,17 @@ def manage_holding():
 
                 logger.info(f"减仓操作 - 基金代码: {fund_code}, 平台: {platform}")
                 logger.info(f"输入数据: 份额={shares}, 卖出日期={sell_date}")
+
+                # 如果指定平台找不到持仓，尝试查找该基金的任意持仓
+                if not fund_holding:
+                    fund_holding = db.query(FundHolding).filter(
+                        FundHolding.fund_id == fund.id,
+                        FundHolding.user_id == user_id
+                    ).first()
+                    if fund_holding:
+                        logger.info(f"指定平台未找到持仓，使用平台: {fund_holding.platform}")
+                        actual_platform = fund_holding.platform
+
                 logger.info(f"当前持仓: 份额={fund_holding.shares if fund_holding else 'None'}, 成本={fund_holding.cost if fund_holding else 'None'}")
 
                 # 确保shares是浮点数类型

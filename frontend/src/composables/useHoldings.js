@@ -412,8 +412,10 @@ export function useHoldings() {
           updateHoldingLocally(newHolding);
         } else if (data.type === "sell") {
           // 减仓时找不到持仓（可能已被清仓），无需发送请求到后端
-          console.warn(`减仓失败: 未找到基金 ${data.fund_code} 的持仓，可能已被清仓`);
-          return { success: false, error: '持仓不存在' };
+          console.warn(
+            `减仓失败: 未找到基金 ${data.fund_code} 的持仓，可能已被清仓`,
+          );
+          return { success: false, error: "持仓不存在" };
         }
       }
     }
@@ -513,7 +515,20 @@ export function useHoldings() {
       }
     } catch (error) {
       console.error("添加持仓失败:", error);
-      await loadHoldings();
+      // 如果是400错误（如持仓份额不足），说明前端缓存与后端不一致，移除本地持仓
+      if (error?.response?.status === 400 && requestData.type === "sell") {
+        const index = holdings.value.findIndex(
+          (h) =>
+            h.fund_code === requestData.fund_code &&
+            (h.platform || "默认") === (requestData.platform || "默认"),
+        );
+        if (index !== -1) {
+          holdings.value.splice(index, 1);
+          setCachedHoldings(holdings.value);
+        }
+      }
+      // 请求失败时强制刷新持仓列表，清除可能过期的缓存数据
+      await loadHoldings(true);
     }
   }
 
