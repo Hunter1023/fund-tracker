@@ -127,12 +127,7 @@ export function useWatchlist() {
           if (!merged.fsrq && existing.fsrq) {
             merged.fsrq = existing.fsrq;
           }
-          if (
-            (merged.estimate_change_rate === '0' || merged.estimate_change_rate === '0.00' || merged.estimate_change_rate === '-')
-            && existing.estimate_change_rate && existing.estimate_change_rate !== '0' && existing.estimate_change_rate !== '0.00' && existing.estimate_change_rate !== '-'
-          ) {
-            merged.estimate_change_rate = existing.estimate_change_rate;
-          }
+          // 估算涨幅是实时数据，始终使用后端返回的最新值，不做保留
           return merged;
         });
         funds.value = mergedFunds;

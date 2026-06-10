@@ -2487,12 +2487,21 @@ def manage_watchlist():
 
             all_cached = len(funds_data_dict) >= len(set(watchlist_fund_codes))
 
+            has_stale_data = False
             has_stale_estimate = False
             now_wl = now_cst_naive()
             today_str_wl = now_wl.strftime('%Y-%m-%d')
+            if now_wl.weekday() == 0:
+                yesterday_str_wl = (now_wl - timedelta(days=3)).strftime('%Y-%m-%d')
+            else:
+                yesterday_str_wl = (now_wl - timedelta(days=1)).strftime('%Y-%m-%d')
             is_trading_hours_wl = now_wl.weekday() < 5 and now_wl.hour >= 9 and now_wl.hour < 15
-            if is_trading_hours_wl:
-                for fc, fd in funds_data_dict.items():
+            for fc, fd in funds_data_dict.items():
+                fd_fsrq = fd.get('fsrq', '')
+                if fd_fsrq and fd_fsrq != today_str_wl and fd_fsrq != yesterday_str_wl:
+                    has_stale_data = True
+                    break
+                if is_trading_hours_wl:
                     fd_etime = fd.get('estimate_time', '') or ''
                     fd_ecr = fd.get('estimate_change_rate', '-')
                     if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str_wl):
@@ -2502,7 +2511,7 @@ def manage_watchlist():
             try:
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
                 future = executor.submit(get_fund_realtime_rates_batch, db, watchlist_fund_codes, False)
-                if all_cached and not has_stale_estimate:
+                if all_cached and not has_stale_data and not has_stale_estimate:
                     executor.shutdown(wait=False)
                 else:
                     try:
