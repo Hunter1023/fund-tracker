@@ -371,15 +371,20 @@ class DataFetcher:
                         pz_equity_return = float(last.get('equityReturn', 0) or 0)
 
                         if fsrq and pz_fsrq > fsrq:
-                            # pingzhongdata比估值接口更新，净值已确认
+                            # pingzhongdata比估值接口更新
                             # daily_change_rate用最新条目的equityReturn（对应pz_fsrq日期）
                             if pz_equity_return != 0:
                                 daily_change_rate = pz_equity_return
-                                # 只有当确认了实际涨跌幅后，才清除估算涨跌幅
-                                estimate_change_rate = 0
-                            fsrq = pz_fsrq
                             unit_net_value = last.get('y', 0)
-                            print(f"pingzhongdata净值趋势(已确认): {fund_code} fsrq={pz_fsrq}, equityReturn={pz_equity_return}")
+                            # pz_fsrq == 今天时，净值尚未确认，不应覆盖 fsrq 也不应清除估值
+                            today_str = _cst_fromtimestamp(time.time()).strftime('%Y-%m-%d')
+                            if pz_fsrq != today_str:
+                                fsrq = pz_fsrq
+                                if pz_equity_return != 0:
+                                    estimate_change_rate = 0
+                                print(f"pingzhongdata净值趋势(已确认): {fund_code} fsrq={pz_fsrq}, equityReturn={pz_equity_return}")
+                            else:
+                                print(f"pingzhongdata净值趋势(今日预估): {fund_code} pz_fsrq={pz_fsrq}, 保留fundgz fsrq={fsrq}")
                         else:
                             # pingzhongdata与估值接口一致或更旧
                             if pz_equity_return != 0:
@@ -1542,14 +1547,18 @@ class DataFetcher:
                 if fsrq and pz_fsrq > fsrq:
                     if pz_daily != 0:
                         daily_change_rate = pz_daily
-                    fsrq = pz_fsrq
                     if pz_nav:
                         unit_net_value = pz_nav
-                    estimate_date = estimate_time.split(' ')[0] if estimate_time and ' ' in estimate_time else estimate_time
-                    if estimate_date and estimate_date <= pz_fsrq:
-                        estimate_change_rate = 0
-                        estimate_net_value = None
-                        estimate_time = ''
+                    # pz_fsrq == 今天时，净值尚未确认，不应覆盖 fsrq 也不应清除估值
+                    # （pingzhongdata 可能包含今日预估数据点，不代表净值已确认）
+                    today_str = _cst_fromtimestamp(time.time()).strftime('%Y-%m-%d')
+                    if pz_fsrq != today_str:
+                        fsrq = pz_fsrq
+                        estimate_date = estimate_time.split(' ')[0] if estimate_time and ' ' in estimate_time else estimate_time
+                        if estimate_date and estimate_date <= pz_fsrq:
+                            estimate_change_rate = 0
+                            estimate_net_value = None
+                            estimate_time = ''
                 else:
                     if pz_daily != 0:
                         daily_change_rate = pz_daily
