@@ -747,7 +747,10 @@ def _merge_fund_data(cached_dict, fresh_data):
                 if (not new_value or new_value == '') and old_value:
                     continue
                 if new_value and old_value and new_value < old_value:
-                    continue
+                    # 允许 fsrq 从"今天"降级：修正 pingzhongdata 误将今日预估数据点当作已确认净值的问题
+                    today_check = now_cst_naive().strftime('%Y-%m-%d')
+                    if old_value != today_check:
+                        continue
             if key == 'unit_net_value':
                 if (new_value == 0 or new_value is None or new_value == '') and old_value and old_value != 0:
                     continue
@@ -1127,7 +1130,10 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                             pass
                     existing_fsrq = getattr(realtime_data, 'fsrq', None)
                     if value and existing_fsrq and value < existing_fsrq:
-                        continue
+                        # 允许 fsrq 从"今天"降级：修正 pingzhongdata 误将今日预估数据点当作已确认净值的问题
+                        today_check = now_cst_naive().strftime('%Y-%m-%d')
+                        if existing_fsrq != today_check:
+                            continue
                 if key == 'net_value_date':
                     existing_nvd = getattr(realtime_data, 'net_value_date', None)
                     if value and existing_nvd and value < existing_nvd:
@@ -1938,8 +1944,10 @@ def get_fund_detail(fund_code):
                             continue
                         setattr(fund.realtime_data, field, new_val)
                     if new_fsrq:
-                        fund.realtime_data.fsrq = _sanitize_fsrq(new_fsrq, fund_code)
-                        fund.realtime_data.net_value_date = new_fsrq
+                        # 允许 fsrq 从"今天"降级：修正数据源误将今日预估数据点当作已确认净值的问题
+                        if not old_fsrq or new_fsrq >= old_fsrq or old_fsrq == now_cst_naive().strftime('%Y-%m-%d'):
+                            fund.realtime_data.fsrq = _sanitize_fsrq(new_fsrq, fund_code)
+                            fund.realtime_data.net_value_date = new_fsrq
                     if fund_data:
                         est_rate = fund_data.get('estimate_change_rate')
                         # estimate_change_rate 是 double 类型，不能存入 '-' 字符串
@@ -2216,7 +2224,9 @@ def get_fund_complete_info(fund_code):
                     setattr(fund.realtime_data, field, new_val)
 
                 if new_fsrq:
-                    fund.realtime_data.fsrq = _sanitize_fsrq(new_fsrq, fund_code)
+                    # 允许 fsrq 从"今天"降级：修正数据源误将今日预估数据点当作已确认净值的问题
+                    if not old_fsrq or new_fsrq >= old_fsrq or old_fsrq == now_cst_naive().strftime('%Y-%m-%d'):
+                        fund.realtime_data.fsrq = _sanitize_fsrq(new_fsrq, fund_code)
                 # 更新估值数据
                 if estimate_data:
                     fund.realtime_data.estimate_change_rate = float(estimate_data.get('estimate_change_rate')) if estimate_data.get('estimate_change_rate') else None
@@ -2882,19 +2892,20 @@ def manage_holding():
                                 estimate_date = estimate_time.split(' ')[0] if ' ' in estimate_time else estimate_time
                                 estimate_is_today = (estimate_date == today)
 
-                            # 优先使用估算涨幅计算今日收益
-                            if estimate_is_today and estimate_change_rate not in ('-', None, '0', 0):
+                            # 优先使用最新涨幅计算今日收益（fsrq==今天 或 估算时间是今天且daily_change_rate有效）
+                            # daily_change_rate 来自 pingzhongdata 的 equityReturn，比估算更准确
+                            if (is_today or estimate_is_today) and daily_change_rate not in ('-', None, '0', 0):
                                 try:
-                                    change_rate = float(estimate_change_rate)
+                                    change_rate = float(daily_change_rate)
                                     if change_rate != 0:
-                                        estimate_profit = current_value * (change_rate / 100)
+                                        estimate_profit = current_value * (change_rate / (100 + change_rate))
                                     else:
                                         estimate_profit = None
                                 except (ValueError, TypeError):
                                     estimate_profit = None
-                            elif is_today and daily_change_rate not in ('-', None, '0', 0):
+                            elif estimate_is_today and estimate_change_rate not in ('-', None, '0', 0):
                                 try:
-                                    change_rate = float(daily_change_rate)
+                                    change_rate = float(estimate_change_rate)
                                     if change_rate != 0:
                                         estimate_profit = current_value * (change_rate / 100)
                                     else:
@@ -3311,10 +3322,10 @@ def manage_holding():
                             estimate_is_today = (estimate_date == today)
 
                         # 逻辑：
-                        # 1. 最新涨幅已更新（is_today为true），优先使用最新涨幅计算
+                        # 1. 最新涨幅已更新（fsrq==今天 或 估算时间是今天且daily_change_rate有效），优先使用最新涨幅
                         # 2. 最新涨幅未更新但估算涨幅是今日的，使用估算涨幅计算
                         # 3. 估算涨幅不是今日的，今日收益显示为"-"
-                        if is_today and daily_change_rate not in ('-', None, '0', 0):
+                        if (is_today or estimate_is_today) and daily_change_rate not in ('-', None, '0', 0):
                             # 最新涨幅已更新，unit_net_value已是今日净值，current_value已包含今日涨幅
                             change_rate = float(daily_change_rate)
                             estimate_profit = current_value * (change_rate / (100 + change_rate))
