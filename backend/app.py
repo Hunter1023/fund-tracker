@@ -2892,9 +2892,11 @@ def manage_holding():
                                 estimate_date = estimate_time.split(' ')[0] if ' ' in estimate_time else estimate_time
                                 estimate_is_today = (estimate_date == today)
 
-                            # 优先使用最新涨幅计算今日收益（fsrq==今天 或 估算时间是今天且daily_change_rate有效）
-                            # daily_change_rate 来自 pingzhongdata 的 equityReturn，比估算更准确
-                            if (is_today or estimate_is_today) and daily_change_rate not in ('-', None, '0', 0):
+                            # 今日收益计算逻辑：
+                            # 1. 净值已确认（fsrq==今天）→ 用 daily_change_rate（已确认的今日涨幅）
+                            # 2. 估算时间是今天 → 用 estimate_change_rate（实时估算涨幅）
+                            # 3. 都不满足 → 今日收益显示为"-"
+                            if is_today and daily_change_rate not in ('-', None, '0', 0):
                                 try:
                                     change_rate = float(daily_change_rate)
                                     if change_rate != 0:
@@ -3321,12 +3323,12 @@ def manage_holding():
                             estimate_date = estimate_time.split(' ')[0] if ' ' in estimate_time else estimate_time
                             estimate_is_today = (estimate_date == today)
 
-                        # 逻辑：
-                        # 1. 最新涨幅已更新（fsrq==今天 或 估算时间是今天且daily_change_rate有效），优先使用最新涨幅
-                        # 2. 最新涨幅未更新但估算涨幅是今日的，使用估算涨幅计算
-                        # 3. 估算涨幅不是今日的，今日收益显示为"-"
-                        if (is_today or estimate_is_today) and daily_change_rate not in ('-', None, '0', 0):
-                            # 最新涨幅已更新，unit_net_value已是今日净值，current_value已包含今日涨幅
+                        # 今日收益计算逻辑：
+                        # 1. 净值已确认（fsrq==今天）→ 用 daily_change_rate（已确认的今日涨幅）
+                        # 2. 估算时间是今天 → 用 estimate_change_rate（实时估算涨幅）
+                        # 3. 都不满足 → 今日收益显示为"-"
+                        if is_today and daily_change_rate not in ('-', None, '0', 0):
+                            # 净值已确认，unit_net_value已是今日净值，current_value已包含今日涨幅
                             change_rate = float(daily_change_rate)
                             estimate_profit = current_value * (change_rate / (100 + change_rate))
                         elif estimate_is_today and estimate_change_rate not in ('-', None, '0', 0):
