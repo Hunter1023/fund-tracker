@@ -2353,6 +2353,7 @@ def _get_public_watchlist(db):
                     'one_year_rate': realtime_data.one_year_rate,
                     'daily_change_rate': realtime_data.daily_change_rate,
                     'fsrq': realtime_data.fsrq,
+                    'updated_at': realtime_data.updated_at,
                     'net_values': []
                 }
 
@@ -2366,9 +2367,20 @@ def _get_public_watchlist(db):
         for fc, fd in funds_data_dict.items():
             fd_etime = fd.get('estimate_time', '') or ''
             fd_ecr = fd.get('estimate_change_rate', '-')
+            fd_updated = fd.get('updated_at')
             if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str_pub):
                 has_stale_estimate_public = True
                 break
+            # 交易时段内检查updated_at是否超过3分钟，避免使用开盘前缓存的旧估算
+            if fd_updated:
+                try:
+                    fd_updated_naive = fd_updated.replace(tzinfo=None) if fd_updated.tzinfo else fd_updated
+                    if (now_pub - fd_updated_naive) > timedelta(minutes=3):
+                        has_stale_estimate_public = True
+                        break
+                except Exception:
+                    has_stale_estimate_public = True
+                    break
 
     try:
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -2492,6 +2504,7 @@ def manage_watchlist():
                             'one_year_rate': realtime_data.one_year_rate,
                             'daily_change_rate': realtime_data.daily_change_rate,
                             'fsrq': realtime_data.fsrq,
+                            'updated_at': realtime_data.updated_at,
                             'net_values': []
                         }
 
@@ -2514,9 +2527,20 @@ def manage_watchlist():
                 if is_trading_hours_wl:
                     fd_etime = fd.get('estimate_time', '') or ''
                     fd_ecr = fd.get('estimate_change_rate', '-')
+                    fd_updated = fd.get('updated_at')
                     if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str_wl):
                         has_stale_estimate = True
                         break
+                    # 交易时段内检查updated_at是否超过3分钟，避免使用开盘前缓存的旧估算
+                    if fd_updated:
+                        try:
+                            fd_updated_naive = fd_updated.replace(tzinfo=None) if fd_updated.tzinfo else fd_updated
+                            if (now_wl - fd_updated_naive) > timedelta(minutes=3):
+                                has_stale_estimate = True
+                                break
+                        except Exception:
+                            has_stale_estimate = True
+                            break
 
             try:
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -2798,6 +2822,7 @@ def manage_holding():
                             'one_year_rate': realtime_data.one_year_rate,
                             'daily_change_rate': realtime_data.daily_change_rate,
                             'fsrq': realtime_data.fsrq,
+                            'updated_at': realtime_data.updated_at,
                             'net_values': []
                         }
 
@@ -2822,9 +2847,20 @@ def manage_holding():
                 if is_trading_hours:
                     fd_etime = fd.get('estimate_time', '') or ''
                     fd_ecr = fd.get('estimate_change_rate', '-')
+                    fd_updated = fd.get('updated_at')
                     if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str):
                         has_stale_estimate = True
                         break
+                    # 交易时段内检查updated_at是否超过3分钟，避免使用开盘前缓存的旧估算
+                    if fd_updated:
+                        try:
+                            fd_updated_naive = fd_updated.replace(tzinfo=None) if fd_updated.tzinfo else fd_updated
+                            if (now_check - fd_updated_naive) > timedelta(minutes=3):
+                                has_stale_estimate = True
+                                break
+                        except Exception:
+                            has_stale_estimate = True
+                            break
 
             try:
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
