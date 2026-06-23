@@ -7,7 +7,7 @@ from config import DATA_SOURCES
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 import threading
 import urllib3
-from datetime import timezone, timedelta as _timedelta
+from datetime import datetime, timezone, timedelta as _timedelta
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 _CST = timezone(_timedelta(hours=8))
