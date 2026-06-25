@@ -1117,9 +1117,9 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                             continue
                     if key == 'estimate_change_rate':
                         old_ecr = getattr(realtime_data, 'estimate_change_rate', None)
-                        # 0值（净值已确认）不应被旧估算值覆盖，但新交易日的估值应允许写入
-                        # 只有当旧值非0且新值为0/None时才跳过
-                        if old_ecr and old_ecr != 0 and (value == 0 or value is None):
+                        # 新交易日的估值（非0非None）应允许写入
+                        # 只有当新值为None（API无数据）时才跳过，0值（净值已确认）应允许覆盖旧估值
+                        if value is None:
                             continue
                     if key == 'fsrq':
                         if (not value or value == '') and getattr(realtime_data, 'fsrq', None):

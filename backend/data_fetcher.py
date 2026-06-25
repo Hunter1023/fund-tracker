@@ -381,14 +381,17 @@ class DataFetcher:
                         if fsrq and pz_fsrq > fsrq:
                             # pingzhongdata比估值接口更新
                             today_str = _cst_fromtimestamp(time.time()).strftime('%Y-%m-%d')
-                            if pz_fsrq == today_str:
-                                # 今天的数据点未确认，daily_change_rate用已确认涨幅
+                            now_cst = _cst_fromtimestamp(time.time())
+                            market_closed = now_cst.hour >= 16  # 16:00后认为今日净值已确认
+
+                            if pz_fsrq == today_str and not market_closed:
+                                # 交易时段内今天的数据点未确认，daily_change_rate用已确认涨幅
                                 if confirmed_equity_return != 0:
                                     daily_change_rate = confirmed_equity_return
                                 unit_net_value = last.get('y', 0)
                                 print(f"pingzhongdata净值趋势(今日预估): {fund_code} pz_fsrq={pz_fsrq}, 保留fundgz fsrq={fsrq}, confirmed_daily={confirmed_equity_return}")
                             else:
-                                # pz_fsrq是已确认的新日期
+                                # 收盘后或pz_fsrq不是今天：pz_fsrq的数据已是确认净值
                                 if pz_equity_return != 0:
                                     daily_change_rate = pz_equity_return
                                 unit_net_value = last.get('y', 0)
@@ -1566,10 +1569,12 @@ class DataFetcher:
                 pz_nav = pz.get('unit_net_value', 0)
 
                 today_str = _cst_fromtimestamp(time.time()).strftime('%Y-%m-%d')
+                now_cst = _cst_fromtimestamp(time.time())
+                market_closed = now_cst.hour >= 16  # 16:00后认为今日净值已确认
 
                 if fsrq and pz_fsrq > fsrq:
-                    if pz_fsrq == today_str:
-                        # pz_fsrq == 今天：今天的数据点未确认
+                    if pz_fsrq == today_str and not market_closed:
+                        # 交易时段内 pz_fsrq == 今天：今天的数据点未确认
                         # daily_change_rate用倒数第二条的已确认涨幅（对应fsrq日期）
                         if pz_confirmed_daily != 0:
                             daily_change_rate = pz_confirmed_daily
@@ -1577,7 +1582,7 @@ class DataFetcher:
                             unit_net_value = pz_nav
                         # 不覆盖fsrq，不清除估值
                     else:
-                        # pz_fsrq是比fsrq更新的已确认日期
+                        # 收盘后或pz_fsrq不是今天：pz_fsrq的数据已是确认净值
                         if pz_daily != 0:
                             daily_change_rate = pz_daily
                         if pz_nav:
