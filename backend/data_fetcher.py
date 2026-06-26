@@ -396,8 +396,7 @@ class DataFetcher:
                                     daily_change_rate = pz_equity_return
                                 unit_net_value = last.get('y', 0)
                                 fsrq = pz_fsrq
-                                if pz_equity_return != 0:
-                                    estimate_change_rate = 0
+                                # 保留估值数据供用户与实际涨幅对比，不清除
                                 print(f"pingzhongdata净值趋势(已确认): {fund_code} fsrq={pz_fsrq}, equityReturn={pz_equity_return}")
                         else:
                             # pingzhongdata与估值接口一致或更旧
@@ -1588,11 +1587,7 @@ class DataFetcher:
                         if pz_nav:
                             unit_net_value = pz_nav
                         fsrq = pz_fsrq
-                        estimate_date = estimate_time.split(' ')[0] if estimate_time and ' ' in estimate_time else estimate_time
-                        if estimate_date and estimate_date <= pz_fsrq:
-                            estimate_change_rate = 0
-                            estimate_net_value = None
-                            estimate_time = ''
+                        # 保留估值数据供用户与实际涨幅对比，不清除
                 else:
                     if pz_daily != 0:
                         daily_change_rate = pz_daily

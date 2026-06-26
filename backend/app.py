@@ -880,6 +880,13 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                         # 没有估算时间，强制刷新
                         need_refresh_estimate = True
 
+            # 检测估值被错误清零的情况（ecr=0但有daily_change_rate和estimate_time）
+            # 这种情况是旧代码收盘后清除估值导致的，需要刷新恢复
+            if realtime_data.estimate_change_rate is not None and realtime_data.estimate_change_rate == 0:
+                if realtime_data.daily_change_rate and realtime_data.daily_change_rate != 0:
+                    if realtime_data.estimate_time:
+                        need_refresh_estimate = True
+
             if rates_all_zero or need_refresh_rates or need_refresh_estimate:
                 need_refresh = True
 
@@ -1065,11 +1072,8 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
                 rates_estimate_change_rate = rates_data.get('estimate_change_rate', 0) if rates_data else 0
                 fsrq = rates_data.get('fsrq', '') if rates_data else ''
 
-                # estimate_change_rate: 只有当rates_data中有确认的实际涨跌幅(daily_change_rate)时，才清除估值
-                # 如果只是estimate_change_rate为0但没有实际涨跌幅，保留估值接口的数据
-                if rates_estimate_change_rate == 0 and daily_change_rate != 0:
-                    estimate_change_rate = 0
-                elif estimate_change_rate is None and rates_estimate_change_rate:
+                # estimate_change_rate: 保留估值数据供用户与实际涨幅对比，不清除
+                if estimate_change_rate is None and rates_estimate_change_rate:
                     estimate_change_rate = float(rates_estimate_change_rate)
 
                 if realtime_data:
@@ -1533,6 +1537,12 @@ def get_fund_realtime_data(db: Session, fund_code: str, force_refresh=False, nee
         else:
             # 非交易日或非交易时间，不需要刷新估算涨幅
             need_refresh_estimate = False
+
+        # 检测估值被错误清零的情况（ecr=0但有daily_change_rate和estimate_time）
+        if realtime_data.estimate_change_rate is not None and realtime_data.estimate_change_rate == 0:
+            if realtime_data.daily_change_rate and realtime_data.daily_change_rate != 0:
+                if realtime_data.estimate_time:
+                    need_refresh_estimate = True
 
         # 晚间时段（19:00-23:00）是基金净值和日涨幅发布时间，需要强制刷新日涨幅数据
         if is_trading_day and is_evening_hours:
@@ -2370,15 +2380,16 @@ def _get_public_watchlist(db):
     now_pub = now_cst_naive()
     today_str_pub = now_pub.strftime('%Y-%m-%d')
     is_trading_hours_pub = now_pub.weekday() < 5 and now_pub.hour >= 9 and now_pub.hour < 15
-    if is_trading_hours_pub:
-        for fc, fd in funds_data_dict.items():
-            fd_etime = fd.get('estimate_time', '') or ''
-            fd_ecr = fd.get('estimate_change_rate', '-')
-            fd_updated = fd.get('updated_at')
+    for fc, fd in funds_data_dict.items():
+        fd_etime = fd.get('estimate_time', '') or ''
+        fd_ecr = fd.get('estimate_change_rate', '-')
+        fd_daily = fd.get('daily_change_rate', 0)
+        if is_trading_hours_pub:
             if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str_pub):
                 has_stale_estimate_public = True
                 break
             # 交易时段内检查updated_at是否超过3分钟，避免使用开盘前缓存的旧估算
+            fd_updated = fd.get('updated_at')
             if fd_updated:
                 try:
                     fd_updated_naive = fd_updated.replace(tzinfo=None) if fd_updated.tzinfo else fd_updated
@@ -2388,6 +2399,16 @@ def _get_public_watchlist(db):
                 except Exception:
                     has_stale_estimate_public = True
                     break
+        else:
+            # 非交易时段：检测估值被错误清零的情况（ecr=0但有今日estimate_time和daily_change_rate）
+            ecr_val = 0
+            try:
+                ecr_val = float(fd_ecr) if fd_ecr and fd_ecr != '-' else 0
+            except (ValueError, TypeError):
+                pass
+            if ecr_val == 0 and fd_daily and fd_daily != 0 and fd_etime.startswith(today_str_pub):
+                has_stale_estimate_public = True
+                break
 
     try:
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -2531,14 +2552,15 @@ def manage_watchlist():
                 if fd_fsrq and fd_fsrq != today_str_wl and fd_fsrq != yesterday_str_wl:
                     has_stale_data = True
                     break
+                fd_ecr = fd.get('estimate_change_rate', '-')
+                fd_etime = fd.get('estimate_time', '') or ''
+                fd_daily = fd.get('daily_change_rate', 0)
                 if is_trading_hours_wl:
-                    fd_etime = fd.get('estimate_time', '') or ''
-                    fd_ecr = fd.get('estimate_change_rate', '-')
-                    fd_updated = fd.get('updated_at')
                     if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str_wl):
                         has_stale_estimate = True
                         break
                     # 交易时段内检查updated_at是否超过3分钟，避免使用开盘前缓存的旧估算
+                    fd_updated = fd.get('updated_at')
                     if fd_updated:
                         try:
                             fd_updated_naive = fd_updated.replace(tzinfo=None) if fd_updated.tzinfo else fd_updated
@@ -2548,6 +2570,16 @@ def manage_watchlist():
                         except Exception:
                             has_stale_estimate = True
                             break
+                else:
+                    # 非交易时段：检测估值被错误清零的情况（ecr=0但有今日estimate_time和daily_change_rate）
+                    ecr_val = 0
+                    try:
+                        ecr_val = float(fd_ecr) if fd_ecr and fd_ecr != '-' else 0
+                    except (ValueError, TypeError):
+                        pass
+                    if ecr_val == 0 and fd_daily and fd_daily != 0 and fd_etime.startswith(today_str_wl):
+                        has_stale_estimate = True
+                        break
 
             try:
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -2851,14 +2883,15 @@ def manage_holding():
                 if fd_fsrq and fd_fsrq != today_str and fd_fsrq != yesterday_str:
                     has_stale_data = True
                     break
+                fd_ecr = fd.get('estimate_change_rate', '-')
+                fd_etime = fd.get('estimate_time', '') or ''
+                fd_daily = fd.get('daily_change_rate', 0)
                 if is_trading_hours:
-                    fd_etime = fd.get('estimate_time', '') or ''
-                    fd_ecr = fd.get('estimate_change_rate', '-')
-                    fd_updated = fd.get('updated_at')
                     if fd_ecr == '-' or fd_ecr is None or not fd_etime.startswith(today_str):
                         has_stale_estimate = True
                         break
                     # 交易时段内检查updated_at是否超过3分钟，避免使用开盘前缓存的旧估算
+                    fd_updated = fd.get('updated_at')
                     if fd_updated:
                         try:
                             fd_updated_naive = fd_updated.replace(tzinfo=None) if fd_updated.tzinfo else fd_updated
@@ -2868,6 +2901,16 @@ def manage_holding():
                         except Exception:
                             has_stale_estimate = True
                             break
+                else:
+                    # 非交易时段：检测估值被错误清零的情况（ecr=0但有今日estimate_time和daily_change_rate）
+                    ecr_val = 0
+                    try:
+                        ecr_val = float(fd_ecr) if fd_ecr and fd_ecr != '-' else 0
+                    except (ValueError, TypeError):
+                        pass
+                    if ecr_val == 0 and fd_daily and fd_daily != 0 and fd_etime.startswith(today_str):
+                        has_stale_estimate = True
+                        break
 
             try:
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
