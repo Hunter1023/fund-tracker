@@ -320,8 +320,8 @@ export function useHoldings() {
         profit_loss_rate:
           ((data.profit || 0) / (data.current_value - data.profit || 1)) *
             100 || 0,
-        estimate_change_rate: "0.00",
-        estimate_profit: 0,
+        estimate_change_rate: "-",
+        estimate_profit: null,
         daily_change_rate: "-",
         fsrq: "",
         one_month_rate: 0,
@@ -345,10 +345,17 @@ export function useHoldings() {
         if (data.type === "buy") {
           const newCurrentValue =
             existingHolding.current_value + (data.cost || 0);
+          // 估算涨幅为"-"时，今日收益也应为null
           const estimateChangeRate =
-            parseFloat(existingHolding.estimate_change_rate) || 0;
+            existingHolding.estimate_change_rate !== "-" &&
+            existingHolding.estimate_change_rate !== null &&
+            existingHolding.estimate_change_rate !== undefined
+              ? parseFloat(existingHolding.estimate_change_rate)
+              : null;
           const newEstimateProfit =
-            (estimateChangeRate * newCurrentValue) / 100;
+            estimateChangeRate !== null && estimateChangeRate !== 0
+              ? (estimateChangeRate * newCurrentValue) / 100
+              : existingHolding.estimate_profit;
 
           const updatedHolding = {
             ...existingHolding,
@@ -401,8 +408,8 @@ export function useHoldings() {
             current_value: data.cost || 0,
             profit_loss: 0,
             profit_loss_rate: 0,
-            estimate_change_rate: "0.00",
-            estimate_profit: 0,
+            estimate_change_rate: "-",
+            estimate_profit: null,
             daily_change_rate: "-",
             fsrq: "",
             one_month_rate: 0,

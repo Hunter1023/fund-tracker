@@ -89,7 +89,7 @@ export function useWatchlist() {
       // 尝试从缓存加载数据
       const cached = localStorage.getItem(CACHE_KEY);
       const expiry = localStorage.getItem(CACHE_EXPIRY_KEY);
-      
+
       if (cached && expiry) {
         const now = Date.now();
         if (now < parseInt(expiry)) {
@@ -98,29 +98,38 @@ export function useWatchlist() {
           return;
         }
       }
-      
+
       // 从 API 加载数据
       const response = await watchlistApi.get();
       const newFunds = response.data;
 
       if (funds.value.length > 0 && Array.isArray(newFunds)) {
         const mergedFunds = newFunds.map((newF) => {
-          const existing = funds.value.find((f) => f.fund_code === newF.fund_code);
+          const existing = funds.value.find(
+            (f) => f.fund_code === newF.fund_code,
+          );
           if (!existing) return newF;
 
           const merged = { ...newF };
 
-          const newFsrq = merged.fsrq || '';
-          const oldFsrq = existing.fsrq || '';
+          const newFsrq = merged.fsrq || "";
+          const oldFsrq = existing.fsrq || "";
 
           const preserveFields = [
-            'one_month_rate', 'three_month_rate', 'one_year_rate',
-            'daily_change_rate'
+            "one_month_rate",
+            "three_month_rate",
+            "one_year_rate",
+            "daily_change_rate",
           ];
           for (const field of preserveFields) {
             const newVal = merged[field];
             const oldVal = existing[field];
-            if ((!newVal || newVal === 0 || newVal === '-' || newVal === '0') && oldVal && oldVal !== 0 && oldVal !== '-') {
+            if (
+              (!newVal || newVal === 0 || newVal === "-" || newVal === "0") &&
+              oldVal &&
+              oldVal !== 0 &&
+              oldVal !== "-"
+            ) {
               merged[field] = oldVal;
             }
           }
@@ -134,10 +143,13 @@ export function useWatchlist() {
       } else {
         funds.value = newFunds;
       }
-      
+
       // 保存到缓存
       localStorage.setItem(CACHE_KEY, JSON.stringify(funds.value));
-      localStorage.setItem(CACHE_EXPIRY_KEY, String(Date.now() + CACHE_EXPIRY_MS));
+      localStorage.setItem(
+        CACHE_EXPIRY_KEY,
+        String(Date.now() + CACHE_EXPIRY_MS),
+      );
     } catch (error) {
       console.error("加载自选失败:", error);
     }
