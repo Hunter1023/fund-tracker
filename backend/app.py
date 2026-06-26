@@ -3005,7 +3005,11 @@ def manage_holding():
                                 if not estimate_is_today:
                                     estimate_change_rate = '-'
                         else:
-                            estimate_profit = 0
+                            estimate_profit = None
+
+                        # 估算涨幅为"-"时，今日收益也应为None（显示为"-"）
+                        if estimate_change_rate == '-':
+                            estimate_profit = None
 
                         holding_list.append({
                             'fund_code': holding.fund.fund_code,
@@ -3428,7 +3432,11 @@ def manage_holding():
                                 estimate_change_rate = '-'
                     else:
                         current_value = fund_holding.cost
-                        estimate_profit = 0
+                        estimate_profit = None
+
+                    # 估算涨幅为"-"时，今日收益也应为None
+                    if estimate_change_rate == '-':
+                        estimate_profit = None
 
                     # 实时计算持有收益和持仓金额
                     profit_loss = current_value - fund_holding.cost
@@ -3461,8 +3469,8 @@ def manage_holding():
                         'current_value': fund_holding.current_value or fund_holding.cost,
                         'profit_loss': fund_holding.profit_loss or 0,
                         'profit_loss_rate': fund_holding.profit_loss_rate or 0,
-                        'estimate_change_rate': '0.00',
-                        'estimate_profit': 0,
+                        'estimate_change_rate': '-',
+                        'estimate_profit': None,
                         'daily_change_rate': '-',
                         'fsrq': '',
                         'one_month_rate': 0,
