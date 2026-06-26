@@ -23,14 +23,15 @@ services:
   backend:
     build: ./backend
     restart: always  # 容器异常自动重启
+    network_mode: host  # 使用宿主机网络，避免WSL2 NAT导致的网络不稳定
     volumes:
       # 使用Docker命名卷持久化数据
       - app-data:/app/data
     environment:
-      # PostgreSQL数据库配置
+      # PostgreSQL数据库配置 - host网络模式下用127.0.0.1访问
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
-      - DB_HOST=postgres
+      - DB_HOST=127.0.0.1
       - DB_PORT=5432
       - DB_NAME=${POSTGRES_DB}
       # JWT密钥配置
@@ -44,13 +45,6 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_FROM=${SMTP_FROM}
-    networks:
-      - fund-network
-    ports:
-      - "5000:5000"  # 暴露后端API端口，便于本地访问
-    dns:
-      - 114.114.114.114
-      - 8.8.8.8
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,6 +55,8 @@ services:
     restart: always
     ports:
       - "8080:80"  # 本地8080端口映射到容器80端口，本地访问http://localhost:8080即可
+    extra_hosts:
+      - "backend:host-gateway"  # backend在host网络模式下，frontend通过宿主机网关访问
     depends_on:
       - backend  # 先启动后端再启动前端
     networks:
