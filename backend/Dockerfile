@@ -1,6 +1,12 @@
 # 基础镜像（轻量Python镜像）
 FROM python:3.9-slim
 
+# 安装系统时区数据，配合 TZ 环境变量让 datetime.now() 返回 CST 时间
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
+    ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
+    rm -rf /var/lib/apt/lists/*
+
 # 设置工作目录
 WORKDIR /app
 

@@ -938,6 +938,14 @@ def get_fund_realtime_rates_batch(db: Session, fund_codes: list, force_refresh=F
     if all_funds_for_rates:
         rates_data_dict = DataFetcher.get_fund_rates_batch(all_funds_for_rates, cache_key)
 
+    # 获取估值批量数据（FundEstimate 批量接口，作为 estimate_net_value/estimate_change_rate/estimate_time 的主数据源）
+    if all_funds_for_estimate:
+        try:
+            valuation_data_dict = DataFetcher.get_fund_valuation_batch(all_funds_for_estimate, cache_key)
+        except Exception as e:
+            print(f"获取估值批量数据失败: {e}")
+            valuation_data_dict = {}
+
     funds_need_fallback = []
     print(f"funds_to_refresh={funds_to_refresh}, funds_conditional_estimate={funds_conditional_estimate}, all_funds_for_rates={all_funds_for_rates}, rates_data_dict keys={list(rates_data_dict.keys())}")
     for fund_code in all_funds_to_process:

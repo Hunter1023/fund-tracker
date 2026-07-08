@@ -29,6 +29,7 @@ services:
       - ./data-dev:/app/data
       - ./backend:/app  # 挂载本地后端代码，支持热更新
     environment:
+      - TZ=Asia/Shanghai
       - DB_USER=fund_user
       - DB_PASSWORD=fund_password
       - DB_HOST=postgres-dev
