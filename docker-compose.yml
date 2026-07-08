@@ -28,6 +28,8 @@ services:
       # 使用Docker命名卷持久化数据
       - app-data:/app/data
     environment:
+      # 时区配置：确保 datetime.now() 与 now_cst_naive() 一致，避免 updated_at 比较出现8小时偏差
+      - TZ=Asia/Shanghai
       # PostgreSQL数据库配置 - host网络模式下用127.0.0.1访问
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
